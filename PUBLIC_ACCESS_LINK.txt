@@ -1,0 +1,17 @@
+================================================================================
+IGRID INNOVATION LAB - LIVE PUBLIC ACCESS LINKS
+================================================================================
+
+🌐 PERMANENT PUBLIC WORLDWIDE LINK (HTTPS):
+https://kabob-suspect-mandate.ngrok-free.dev
+(This link is fixed forever and will NEVER change)
+
+💻 LOCAL COMPUTER LINK:
+http://localhost:3000
+
+📡 LOCAL WI-FI / LAB NETWORK LINK:
+http://192.168.0.164:3000
+
+Status: Active & Synchronized
+Updated: 13/8/2026, 3:03:57 pm
+================================================================================
