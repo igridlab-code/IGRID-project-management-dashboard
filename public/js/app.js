@@ -700,9 +700,9 @@ async function openSpotlightPresentation(projectId) {
           <h2>${escapeHTML(project.title)}</h2>
           <p style="font-size:13px; color:var(--text-muted); line-height:1.6;">${escapeHTML(project.description || '')}</p>
 
-          <div style="background:rgba(245,158,11,0.1); border-left:4px solid #f59e0b; padding:12px; border-radius:0 6px 6px 0;">
-            <strong style="color:#fbbf24;">⚡ Critical Immediate Action Item / Blocker:</strong>
-            <p style="color:#fde68a; margin-top:2px;">${escapeHTML(project.immediate_action || 'No critical blockers reported.')}</p>
+          <div class="detail-action-box">
+            <strong>⚡ Critical Immediate Action Item / Blocker:</strong>
+            <p style="margin-top:2px;">${escapeHTML(project.immediate_action || 'No critical blockers reported.')}</p>
           </div>
 
           <div style="display:flex; flex-direction:column; gap:6px;">
