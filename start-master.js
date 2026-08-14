@@ -1,6 +1,6 @@
 /**
  * IGRID INNOVATION LAB - MASTER SUPERVISOR SCRIPT
- * Manages Backend Server + Permanent Static Ngrok Tunnel
+ * Manages Backend Server + Permanent Fixed Subdomain Tunnel (https://igrid-lab.loca.lt)
  */
 
 const { spawn, execSync } = require('child_process');
@@ -34,29 +34,16 @@ try {
   }
 } catch(e) {}
 
-// Load config
-let config = {
-  tunnel_mode: 'ngrok',
-  ngrok_domain: 'kabob-suspect-mandate.ngrok-free.dev',
-  ngrok_token: '3Hr56NkQmK7fScedP090Ry6c8ll_78W6QjADbCB92cWhD8ZpT',
-  custom_domain: 'https://kabob-suspect-mandate.ngrok-free.dev',
-  port: 3000
-};
-
-if (fs.existsSync(configFile)) {
-  try {
-    const loaded = JSON.parse(fs.readFileSync(configFile, 'utf8'));
-    config = { ...config, ...loaded };
-  } catch(e) {}
-}
+// Configuration
+const SUBDOMAIN = 'igrid-lab';
+const PERMANENT_PUBLIC_URL = `https://${SUBDOMAIN}.loca.lt`;
 
 log('======================================================');
 log('🚀 Starting IGRID Lab Master Supervisor Service');
-log(`🌐 Permanent Public Domain: https://${config.ngrok_domain}`);
+log(`🌐 Permanent Public URL: ${PERMANENT_PUBLIC_URL}`);
 log('======================================================');
 
-// Save permanent URL immediately
-savePublicUrl(`https://${config.ngrok_domain}`, true);
+savePublicUrl(PERMANENT_PUBLIC_URL, true);
 
 // 1. Start Express Server
 let serverProcess = null;
@@ -83,41 +70,49 @@ function startServer() {
   });
 }
 
-// 2. Start Ngrok Tunnel Process
+// 2. Start Localtunnel with fixed subdomain
 let tunnelProcess = null;
 function startTunnel() {
-  const ngrokExe = path.join(projectDir, 'ngrok.exe');
-  if (!fs.existsSync(ngrokExe)) {
-    log(`[Ngrok Error] ngrok.exe not found at ${ngrokExe}`);
-    return;
-  }
-
-  log(`Starting Ngrok on permanent domain: https://${config.ngrok_domain}...`);
+  log(`Starting Public Tunnel on ${PERMANENT_PUBLIC_URL}...`);
   
-  // Use modern ngrok --url syntax
-  tunnelProcess = spawn(ngrokExe, ['http', `--url=https://${config.ngrok_domain}`, '3000'], {
+  // Use npx localtunnel via shell
+  const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  tunnelProcess = spawn(cmd, ['-y', 'localtunnel', '--port', '3000', '--subdomain', SUBDOMAIN], {
     cwd: projectDir,
+    shell: true,
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
+  function processTunnelOutput(data) {
+    const text = data.toString();
+    if (text.includes('your url is:')) {
+      const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.loca\.lt/);
+      if (match && match[0]) {
+        savePublicUrl(match[0], true);
+      }
+    }
+  }
+
   tunnelProcess.stdout.on('data', (data) => {
     const text = data.toString().trim();
-    if (text) log(`[Ngrok] ${text}`);
+    if (text) log(`[Tunnel] ${text}`);
+    processTunnelOutput(data);
   });
+
   tunnelProcess.stderr.on('data', (data) => {
     const text = data.toString().trim();
-    if (text) log(`[Ngrok] ${text}`);
+    if (text) log(`[Tunnel] ${text}`);
   });
 
   tunnelProcess.on('exit', (code) => {
-    log(`[Ngrok] Exited with code ${code}. Restarting in 5s...`);
+    log(`[Tunnel] Exited with code ${code}. Restarting tunnel in 5s...`);
     setTimeout(startTunnel, 5000);
   });
 }
 
 function savePublicUrl(publicUrl, isPermanent) {
   log('------------------------------------------------------');
-  log(`🎉 LIVE PUBLIC URL (${isPermanent ? 'PERMANENT FIXED DOMAIN' : 'QUICK TUNNEL'}): ${publicUrl}`);
+  log(`🎉 LIVE PUBLIC URL (${isPermanent ? 'PERMANENT FIXED DOMAIN' : 'TUNNEL'}): ${publicUrl}`);
   log('------------------------------------------------------');
 
   const content = `================================================================================
@@ -126,7 +121,7 @@ IGRID INNOVATION LAB - LIVE PUBLIC ACCESS LINKS
 
 🌐 PERMANENT PUBLIC WORLDWIDE LINK (HTTPS):
 ${publicUrl}
-(This link is fixed forever and will NEVER change)
+(This link is fixed and will NEVER change across restarts)
 
 💻 LOCAL COMPUTER LINK:
 http://localhost:3000

@@ -8,7 +8,7 @@ echo ======================================================================
 echo.
 echo  Starting PM Server + Permanent Public Domain...
 echo.
-echo  🌐 Permanent Public URL: https://kabob-suspect-mandate.ngrok-free.dev
+echo  🌐 Permanent Public URL: https://igrid-lab.loca.lt
 echo  💻 Local PC URL:         http://localhost:3000
 echo  📡 Lab Wi-Fi URL:        http://192.168.0.164:3000
 echo.
