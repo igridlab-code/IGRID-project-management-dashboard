@@ -279,7 +279,7 @@ async function fetchNotifications() {
       html += `
         <div class="notif-item">
           <div style="font-weight:700; color:#fbbf24;">📦 BOM Approval Requisition</div>
-          <div>${b.project_code}: ${b.item_name} ($${Number(b.total_price).toFixed(2)})</div>
+          <div>${b.project_code}: ${b.item_name} (₹${Number(b.total_price).toLocaleString('en-IN')})</div>
           <div style="font-size:10px; color:var(--text-dim);">By ${b.submitted_by}</div>
         </div>
       `;
@@ -543,7 +543,7 @@ function renderExecutiveShowcase() {
 
   if (DOM.execAvgProgress) DOM.execAvgProgress.textContent = `${avgProgress}%`;
   if (DOM.execAvgProgressBar) DOM.execAvgProgressBar.style.width = `${avgProgress}%`;
-  if (DOM.execApprovedBudget) DOM.execApprovedBudget.textContent = `$${approvedBudget.toFixed(2)}`;
+  if (DOM.execApprovedBudget) DOM.execApprovedBudget.textContent = `₹${approvedBudget.toLocaleString('en-IN')}`;
   if (DOM.execPendingBomCount) DOM.execPendingBomCount.textContent = `${pendingBOMs.length} Items`;
   if (DOM.execStudentCount) DOM.execStudentCount.textContent = `${state.students.length} Engineers`;
 
@@ -685,7 +685,7 @@ async function openSpotlightPresentation(projectId) {
       <tr>
         <td><strong>${escapeHTML(b.item_name)}</strong><br><small style="color:var(--text-dim);">${b.part_number || ''}</small></td>
         <td>${b.quantity}</td>
-        <td style="color:#34d399; font-weight:700;">$${Number(b.total_price).toFixed(2)}</td>
+        <td style="color:#34d399; font-weight:700;">₹${Number(b.total_price).toLocaleString('en-IN')}</td>
         <td><span class="badge ${b.status === 'Approved' ? 'badge-normal' : 'badge-date'}">${b.status}</span></td>
       </tr>
     `).join('');
@@ -1027,7 +1027,7 @@ function renderBOM() {
   const approvedTotal = state.boms.filter(b => b.status === 'Approved').reduce((acc, b) => acc + (b.total_price || 0), 0);
 
   DOM.bomStatPending.textContent = pending.length;
-  DOM.bomStatApproved.textContent = `$${approvedTotal.toFixed(2)}`;
+  DOM.bomStatApproved.textContent = `₹${approvedTotal.toLocaleString('en-IN')}`;
   DOM.bomStatTotalItems.textContent = state.boms.length;
 
   if (state.boms.length === 0) {
@@ -1053,8 +1053,8 @@ function renderBOM() {
         <td><code style="color:#a5b4fc;">${b.part_number || '-'}</code></td>
         <td><span class="badge badge-date">${b.category || 'Component'}</span></td>
         <td><strong>${b.quantity}</strong></td>
-        <td>$${Number(b.unit_price).toFixed(2)}</td>
-        <td style="color:#34d399; font-weight:700;">$${Number(b.total_price).toFixed(2)}</td>
+        <td>₹${Number(b.unit_price).toLocaleString('en-IN')}</td>
+        <td style="color:#34d399; font-weight:700;">₹${Number(b.total_price).toLocaleString('en-IN')}</td>
         <td>${escapeHTML(b.submitted_by || 'Student')}</td>
         <td>${statusBadge}</td>
         <td>
@@ -1299,7 +1299,7 @@ async function openProjectDetail(projectId) {
                 <td><strong>${escapeHTML(b.item_name)}</strong></td>
                 <td><code>${b.part_number || '-'}</code></td>
                 <td>${b.quantity}</td>
-                <td style="color:#34d399;">$${Number(b.total_price).toFixed(2)}</td>
+                <td style="color:#34d399;">₹${Number(b.total_price).toLocaleString('en-IN')}</td>
                 <td><span class="badge ${b.status === 'Approved' ? 'badge-normal' : 'badge-date'}">${b.status}</span></td>
               </tr>
             `).join('')}
