@@ -15,22 +15,31 @@
     <!-- Top Navigation Bar -->
     <header class="top-nav">
       <div class="nav-left">
-        <div class="brand-badge">
-          <span class="pulse-indicator"></span>
-          <span class="brand-name">IGRID LAB</span>
+        <!-- Dual College & Lab Logos -->
+        <div class="brand-group">
+          <div class="college-logo-wrap" title="Indra Ganesan College of Engineering">
+            <img src="/img/indra_ganesan_logo.jpg" alt="Indra Ganesan College of Engineering" class="brand-college-logo">
+          </div>
+          <div class="brand-divider"></div>
+          <div class="brand-badge" title="IGRID Innovation Lab">
+            <img src="/img/igrid_logo.png" alt="IGRID Lab" class="brand-lab-logo">
+            <span class="pulse-indicator"></span>
+          </div>
         </div>
+
         <div class="breadcrumbs">
           <span class="crumb-icon">📁</span>
-          <span class="crumb-part">Project Management</span>
+          <span class="crumb-part">IGRID Lab</span>
           <span class="crumb-divider">/</span>
-          <span class="crumb-part">Project</span>
+          <span class="crumb-part">Indra Ganesan College</span>
           <span class="crumb-divider">/</span>
-          <span class="crumb-current" id="current-project-crumb">AI, Robotics & Drone Innovation</span>
+          <span class="crumb-current" id="current-project-crumb">Innovation Management</span>
         </div>
-        <!-- Live Public Cloudflare Share Pill -->
-        <div class="public-tunnel-badge" id="public-tunnel-badge" title="Live Public Cloudflare Tunnel Link">
+
+        <!-- Live Public Share Pill -->
+        <div class="public-tunnel-badge" id="public-tunnel-badge" title="Live Public Cloud Link">
           <span class="pulse-indicator"></span>
-          <span id="public-tunnel-text" class="tunnel-text">Connecting Tunnel...</span>
+          <span id="public-tunnel-text" class="tunnel-text">Connecting...</span>
           <button id="copy-public-link-btn" class="copy-tunnel-btn" title="Copy Public Share Link">📋 Copy</button>
         </div>
       </div>
@@ -41,13 +50,20 @@
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-          <input type="text" id="global-search" placeholder="Search projects, #hashtags, ID (e.g. IGRID-AI-01)..." autocomplete="off">
+          <input type="text" id="global-search" placeholder="Search projects, #tags, ID (e.g. IGRID-AI-01)..." autocomplete="off">
           <kbd class="search-shortcut">/</kbd>
           <button class="clear-search-btn" id="clear-search" title="Clear Search">&times;</button>
         </div>
       </div>
 
       <div class="nav-right">
+        <!-- Theme Switcher (Dark / Light) -->
+        <button class="theme-toggle-btn" id="theme-toggle-btn" title="Toggle Light / Dark Theme">
+          <span class="theme-icon-dark" id="theme-icon-dark">🌙</span>
+          <span class="theme-icon-light" id="theme-icon-light" style="display:none;">☀️</span>
+          <span class="theme-label" id="theme-label">Dark</span>
+        </button>
+
         <!-- Notification Center -->
         <div class="nav-action-wrapper">
           <button class="nav-icon-btn" id="notif-btn" title="Lab Notifications & BOM Alerts">

@@ -1,6 +1,6 @@
 /**
  * IGRID INNOVATION LAB - MASTER SUPERVISOR SCRIPT
- * Manages Backend Server + Permanent Fixed Subdomain Tunnel (https://igrid-lab.loca.lt)
+ * Uses official @ngrok/ngrok SDK for permanent domain https://kabob-suspect-mandate.ngrok-free.dev
  */
 
 const { spawn, execSync } = require('child_process');
@@ -35,12 +35,24 @@ try {
 } catch(e) {}
 
 // Configuration
-const SUBDOMAIN = 'igrid-lab';
-const PERMANENT_PUBLIC_URL = `https://${SUBDOMAIN}.loca.lt`;
+let config = {
+  ngrok_domain: 'kabob-suspect-mandate.ngrok-free.dev',
+  ngrok_token: '3Hr56NkQmK7fScedP090Ry6c8ll_78W6QjADbCB92cWhD8ZpT',
+  port: 3000
+};
+
+if (fs.existsSync(configFile)) {
+  try {
+    const loaded = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+    config = { ...config, ...loaded };
+  } catch(e) {}
+}
+
+const PERMANENT_PUBLIC_URL = `https://${config.ngrok_domain}`;
 
 log('======================================================');
 log('🚀 Starting IGRID Lab Master Supervisor Service');
-log(`🌐 Permanent Public URL: ${PERMANENT_PUBLIC_URL}`);
+log(`🌐 Permanent Public Domain: ${PERMANENT_PUBLIC_URL}`);
 log('======================================================');
 
 savePublicUrl(PERMANENT_PUBLIC_URL, true);
@@ -70,44 +82,29 @@ function startServer() {
   });
 }
 
-// 2. Start Localtunnel with fixed subdomain
-let tunnelProcess = null;
-function startTunnel() {
-  log(`Starting Public Tunnel on ${PERMANENT_PUBLIC_URL}...`);
-  
-  // Use npx localtunnel via shell
-  const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  tunnelProcess = spawn(cmd, ['-y', 'localtunnel', '--port', '3000', '--subdomain', SUBDOMAIN], {
-    cwd: projectDir,
-    shell: true,
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
+// 2. Start Ngrok via official SDK
+let ngrokListener = null;
+async function startNgrokSdk() {
+  try {
+    const ngrok = require('@ngrok/ngrok');
+    log(`Connecting to Ngrok cloud for domain ${config.ngrok_domain}...`);
+    
+    ngrokListener = await ngrok.connect({
+      addr: config.port || 3000,
+      authtoken: config.ngrok_token,
+      domain: config.ngrok_domain
+    });
 
-  function processTunnelOutput(data) {
-    const text = data.toString();
-    if (text.includes('your url is:')) {
-      const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.loca\.lt/);
-      if (match && match[0]) {
-        savePublicUrl(match[0], true);
-      }
+    const liveUrl = ngrokListener.url();
+    log(`🎉 NGROK CONNECTED SUCCESSFULLY! Live URL: ${liveUrl}`);
+    savePublicUrl(liveUrl, true);
+  } catch (err) {
+    log(`[Ngrok Error] ${err.message || err}`);
+    if (err.message && err.message.includes('already online')) {
+      log('Ngrok endpoint is already online and routing traffic.');
+      savePublicUrl(PERMANENT_PUBLIC_URL, true);
     }
   }
-
-  tunnelProcess.stdout.on('data', (data) => {
-    const text = data.toString().trim();
-    if (text) log(`[Tunnel] ${text}`);
-    processTunnelOutput(data);
-  });
-
-  tunnelProcess.stderr.on('data', (data) => {
-    const text = data.toString().trim();
-    if (text) log(`[Tunnel] ${text}`);
-  });
-
-  tunnelProcess.on('exit', (code) => {
-    log(`[Tunnel] Exited with code ${code}. Restarting tunnel in 5s...`);
-    setTimeout(startTunnel, 5000);
-  });
 }
 
 function savePublicUrl(publicUrl, isPermanent) {
@@ -121,7 +118,7 @@ IGRID INNOVATION LAB - LIVE PUBLIC ACCESS LINKS
 
 🌐 PERMANENT PUBLIC WORLDWIDE LINK (HTTPS):
 ${publicUrl}
-(This link is fixed and will NEVER change across restarts)
+(This link is fixed and will NEVER change)
 
 💻 LOCAL COMPUTER LINK:
 http://localhost:3000
@@ -145,17 +142,28 @@ Updated: ${new Date().toLocaleString()}
   fs.writeFileSync(tunnelJsonFile, JSON.stringify(tunnelInfo, null, 2), 'utf8');
 }
 
-// Start Server then Tunnel
+// Start Server and Ngrok
 startServer();
-setTimeout(startTunnel, 2000);
+setTimeout(startNgrokSdk, 2000);
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   if (serverProcess) serverProcess.kill();
-  if (tunnelProcess) tunnelProcess.kill();
+  if (ngrokListener) {
+    try {
+      const ngrok = require('@ngrok/ngrok');
+      await ngrok.disconnect();
+    } catch(e) {}
+  }
   process.exit(0);
 });
-process.on('SIGTERM', () => {
+
+process.on('SIGTERM', async () => {
   if (serverProcess) serverProcess.kill();
-  if (tunnelProcess) tunnelProcess.kill();
+  if (ngrokListener) {
+    try {
+      const ngrok = require('@ngrok/ngrok');
+      await ngrok.disconnect();
+    } catch(e) {}
+  }
   process.exit(0);
 });

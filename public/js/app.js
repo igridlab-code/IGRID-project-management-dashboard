@@ -135,17 +135,55 @@ const DOM = {
   // Public Tunnel Elements
   publicTunnelBadge: document.getElementById('public-tunnel-badge'),
   publicTunnelText: document.getElementById('public-tunnel-text'),
-  copyPublicLinkBtn: document.getElementById('copy-public-link-btn')
+  copyPublicLinkBtn: document.getElementById('copy-public-link-btn'),
+
+  // Theme Toggle Elements
+  themeToggleBtn: document.getElementById('theme-toggle-btn'),
+  themeIconDark: document.getElementById('theme-icon-dark'),
+  themeIconLight: document.getElementById('theme-icon-light'),
+  themeLabel: document.getElementById('theme-label')
 };
 
 // ----------------------------------------------------
 // INITIALIZATION
 // ----------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
+  initTheme();
   initEventListeners();
   await loadAllData();
   initTunnelPoller();
 });
+
+function initTheme() {
+  const savedTheme = localStorage.getItem('igrid_theme') || 'dark';
+  applyTheme(savedTheme);
+
+  if (DOM.themeToggleBtn) {
+    DOM.themeToggleBtn.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+      const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      applyTheme(nextTheme);
+      showToast(`Switched to ${nextTheme === 'dark' ? 'Dark' : 'Light'} Mode`, 'info');
+    });
+  }
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('igrid_theme', theme);
+
+  if (DOM.themeIconDark && DOM.themeIconLight && DOM.themeLabel) {
+    if (theme === 'light') {
+      DOM.themeIconDark.style.display = 'none';
+      DOM.themeIconLight.style.display = 'inline';
+      DOM.themeLabel.textContent = 'Light';
+    } else {
+      DOM.themeIconDark.style.display = 'inline';
+      DOM.themeIconLight.style.display = 'none';
+      DOM.themeLabel.textContent = 'Dark';
+    }
+  }
+}
 
 async function loadAllData() {
   try {

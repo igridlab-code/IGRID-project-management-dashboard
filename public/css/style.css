@@ -1,9 +1,9 @@
 /* ==========================================================================
-   IGRID INNOVATION LAB - DARK THEME DESIGN SYSTEM
-   Matches modern SaaS Dark Theme with glowing gradients & glass surfaces
+   IGRID INNOVATION LAB - DUAL THEME DESIGN SYSTEM (DARK & LIGHT)
+   Pixel-perfect glassmorphism & responsive layouts for desktop & mobile
    ========================================================================== */
 
-:root {
+:root, [data-theme="dark"] {
   --bg-main: #0b0f19;
   --bg-header: #101626;
   --bg-card: #151b2e;
@@ -59,6 +59,52 @@
   --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Light Theme Variables */
+[data-theme="light"] {
+  --bg-main: #f8fafc;
+  --bg-header: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --bg-card-sub: #f8fafc;
+  --bg-input: #ffffff;
+  --bg-dropdown: #ffffff;
+  --border-color: #e2e8f0;
+  --border-light: #cbd5e1;
+
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --text-dim: #64748b;
+
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-glow: rgba(79, 70, 229, 0.18);
+
+  --accent-purple: #7c3aed;
+  --accent-blue: #0284c7;
+  --accent-green: #059669;
+  --accent-red: #dc2626;
+  --accent-amber: #d97706;
+
+  --badge-green-bg: #ecfdf5;
+  --badge-green-text: #059669;
+  --badge-green-border: #a7f3d0;
+
+  --badge-red-bg: #fef2f2;
+  --badge-red-text: #dc2626;
+  --badge-red-border: #fecaca;
+
+  --badge-blue-bg: #f0f9ff;
+  --badge-blue-text: #0284c7;
+  --badge-blue-border: #bae6fd;
+
+  --badge-date-bg: #eef2ff;
+  --badge-date-text: #4338ca;
+  --badge-date-border: #c7d2fe;
+
+  --shadow-card: 0 4px 16px -2px rgba(0, 0, 0, 0.07), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+  --shadow-hover: 0 10px 25px -3px rgba(79, 70, 229, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -73,6 +119,7 @@ body {
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Custom Scrollbar */
@@ -95,38 +142,86 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 /* ==========================================================================
-   TOP NAVIGATION
+   TOP NAVIGATION & DUAL BRAND LOGOS
    ========================================================================== */
 .top-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 28px;
+  padding: 12px 24px;
   background-color: var(--bg-header);
   border-bottom: 1px solid var(--border-color);
   position: sticky;
   top: 0;
   z-index: 50;
   backdrop-filter: blur(12px);
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .nav-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* Brand Group: College + Lab Logos */
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-card-sub);
+  border: 1px solid var(--border-color);
+  padding: 4px 12px 4px 8px;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.college-logo-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #ffffff;
+  padding: 1px;
+}
+
+.brand-college-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.brand-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--border-color);
 }
 
 .brand-badge {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
+}
+
+.brand-lab-logo {
+  height: 22px;
+  width: auto;
+  max-width: 90px;
+  object-fit: contain;
+}
+
+[data-theme="dark"] .brand-lab-logo {
+  filter: brightness(1.2) contrast(1.1);
 }
 
 .pulse-indicator {
@@ -136,6 +231,7 @@ body {
   border-radius: 50%;
   box-shadow: 0 0 10px #10b981;
   animation: pulse-glow 2s infinite;
+  flex-shrink: 0;
 }
 
 @keyframes pulse-glow {
@@ -144,23 +240,41 @@ body {
   100% { transform: scale(0.95); opacity: 0.8; }
 }
 
-.brand-name {
-  font-weight: 800;
-  font-size: 13px;
-  letter-spacing: 1px;
-  color: #c7d2fe;
-}
-
 .breadcrumbs {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-muted);
+  flex-wrap: wrap;
 }
 
-.crumb-icon { font-size: 15px; }
-.crumb-part { color: var(--text-muted); }
+.crumb-icon { font-size: 14px; }
+.crumb-part { color: var(--text-muted); font-weight: 500; }
+.crumb-divider { color: var(--text-dim); }
+.crumb-current { color: var(--text-main); font-weight: 600; }
+
+/* Theme Toggle Button */
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 7px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.theme-toggle-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
 .crumb-divider { color: var(--text-dim); }
 .crumb-current { color: var(--text-main); font-weight: 600; }
 
@@ -2323,25 +2437,346 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ==========================================================================
-   RESPONSIVE DESIGN
+   MOBILE & RESPONSIVE DESIGN PERFECTION
+   Fixes framing issues, letter cuts, bleeding containers, and viewport scaling
    ========================================================================== */
-@media (max-width: 1200px) {
-  .kanban-container { grid-template-columns: repeat(2, 1fr); }
-  .exec-kpi-grid { grid-template-columns: repeat(2, 1fr); }
-  .exec-showcase-grid { grid-template-columns: 1fr; }
-  .list-header-row, .list-item-row { grid-template-columns: 90px 1.5fr 1fr 1fr 90px 70px; }
-  .col-bom, .col-actions { display: none; }
+
+/* Universal text clipping & word-wrap protection */
+h1, h2, h3, h4, h5, h6, p, span, a, label, .card-title, .card-desc, .action-item-box, .detail-title, .spotlight-title {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
 }
 
-@media (max-width: 768px) {
-  .top-nav { flex-direction: column; gap: 12px; padding: 12px; }
-  .nav-center { width: 100%; margin: 0; }
-  .page-header { flex-direction: column; align-items: flex-start; gap: 14px; padding: 16px; }
-  .view-toolbar { padding: 0 16px; overflow-x: auto; }
-  .filter-strip { padding: 10px 16px; }
-  .main-viewport { padding: 16px; }
-  .kanban-container { grid-template-columns: 1fr; }
-  .exec-kpi-grid { grid-template-columns: 1fr; }
-  .analytics-kpi-row, .analytics-charts-grid { grid-template-columns: 1fr; }
-  .spotlight-grid { grid-template-columns: 1fr; }
+/* Tablet Breakpoint (<= 1100px) */
+@media (max-width: 1100px) {
+  .top-nav {
+    padding: 12px 18px;
+    gap: 12px;
+  }
+  .nav-center {
+    max-width: 100%;
+    margin: 6px 0;
+    order: 3;
+    width: 100%;
+  }
+  .breadcrumbs {
+    display: none; /* Hide long breadcrumbs on smaller screens */
+  }
+  .kanban-container {
+    display: flex;
+    overflow-x: auto;
+    gap: 16px;
+    padding-bottom: 16px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .kanban-col {
+    min-width: 300px;
+    max-width: 320px;
+    flex-shrink: 0;
+    scroll-snap-align: start;
+  }
+  .exec-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .exec-showcase-grid {
+    grid-template-columns: 1fr;
+  }
+  .list-header-row, .list-item-row {
+    grid-template-columns: 90px 1.5fr 1fr 1fr 90px;
+  }
+  .col-bom, .col-actions {
+    display: none;
+  }
 }
+
+/* Mobile Breakpoint (<= 768px) */
+@media (max-width: 768px) {
+  .top-nav {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  
+  .nav-left {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .brand-group {
+    padding: 3px 8px;
+    gap: 6px;
+  }
+
+  .college-logo-wrap {
+    width: 26px;
+    height: 26px;
+  }
+
+  .brand-lab-logo {
+    height: 18px;
+    max-width: 70px;
+  }
+
+  .public-tunnel-badge {
+    margin-left: auto;
+    font-size: 10px;
+    padding: 2px 8px;
+    max-width: 150px;
+  }
+
+  .tunnel-text {
+    max-width: 80px;
+    font-size: 10px;
+  }
+
+  .nav-right {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .user-profile-pill .profile-info {
+    display: none; /* Icon only on mobile */
+  }
+
+  .theme-toggle-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
+  /* Page Header */
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .title-with-pill {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .title-with-pill h1 {
+    font-size: 20px;
+  }
+
+  .page-actions-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .page-actions-area .btn {
+    flex: 1;
+    min-width: 120px;
+    justify-content: center;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+
+  /* View Tabs Navigation */
+  .view-toolbar {
+    padding: 0 14px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .view-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    gap: 6px;
+  }
+
+  .tab-btn {
+    padding: 7px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .toolbar-controls {
+    display: none; /* Accessible in tab/filter bar */
+  }
+
+  /* Filters */
+  .filter-strip {
+    padding: 8px 14px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .domain-pills {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .domain-pill {
+    padding: 5px 12px;
+    font-size: 11px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .hashtag-cloud {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .hashtag-chip {
+    padding: 3px 9px;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  /* Viewport */
+  .main-viewport {
+    padding: 12px;
+  }
+
+  /* Executive Showcase */
+  .exec-kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .exec-showcase-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .exec-showcase-card {
+    border-radius: var(--radius-md);
+  }
+
+  .exec-card-hero {
+    height: 170px;
+  }
+
+  .exec-media-hub {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .exec-media-pill {
+    flex: 1;
+    min-width: 45%;
+    font-size: 11px;
+    padding: 6px 10px;
+    justify-content: center;
+  }
+
+  .exec-action-alert {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .exec-action-alert .btn {
+    width: 100%;
+  }
+
+  /* Modals on Mobile */
+  .modal-overlay {
+    padding: 8px;
+    align-items: flex-end; /* Sheet style on mobile */
+  }
+
+  .modal-card {
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
+    width: 100%;
+    margin: 0;
+  }
+
+  .modal-header {
+    padding: 14px 16px;
+  }
+
+  .modal-body {
+    padding: 14px 16px;
+    max-height: calc(92vh - 120px);
+  }
+
+  .modal-footer {
+    padding: 12px 16px;
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .modal-footer .btn, .modal-footer .footer-right .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .modal-footer .footer-right {
+    width: 100%;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .form-group.col-3, .form-group.col-4, .form-group.col-6, .form-group.col-8 {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+
+  /* Spotlight presentation */
+  .spotlight-hero-wrap {
+    height: 180px;
+  }
+
+  .spotlight-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .spotlight-header-badge {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Tables */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    border-radius: var(--radius-md);
+  }
+
+  .data-table {
+    min-width: 650px;
+  }
+
+  /* Analytics */
+  .analytics-kpi-row, .analytics-charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .students-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .showcase-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
