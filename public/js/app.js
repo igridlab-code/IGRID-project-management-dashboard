@@ -1210,7 +1210,9 @@ async function handleDrop(e, targetStatus) {
     else if (targetStatus === 'in_progress' && project.progress < 30) project.progress = 50;
     else if (targetStatus === 'testing' && project.progress < 70) project.progress = 85;
 
+    // Immediate optimistic update across all views
     renderAllViews();
+    updateStatsSummary();
 
     try {
       const res = await fetch(`/api/projects/${projectId}/status`, {
@@ -1220,6 +1222,10 @@ async function handleDrop(e, targetStatus) {
       });
       if (res.ok) {
         showToast(`Moved ${project.project_code} to ${formatStatus(targetStatus)}`);
+        // Re-fetch to ensure server state consistency across views
+        await Promise.all([fetchProjects(), fetchNotifications()]);
+        renderAllViews();
+        updateStatsSummary();
       }
     } catch (err) {
       console.error(err);
@@ -1444,8 +1450,9 @@ async function handleProjectFormSubmit(e) {
     if (res.ok) {
       closeModal(DOM.projectModal);
       showToast(id ? 'Project updated successfully' : 'New project created successfully');
-      await fetchProjects();
+      await Promise.all([fetchProjects(), fetchNotifications()]);
       renderAllViews();
+      updateStatsSummary();
     } else {
       const err = await res.json();
       showToast(err.error || 'Operation failed', 'error');
@@ -1460,8 +1467,9 @@ async function deleteProject(id) {
     const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
     if (res.ok) {
       showToast('Project deleted');
-      await fetchProjects();
+      await Promise.all([fetchProjects(), fetchNotifications()]);
       renderAllViews();
+      updateStatsSummary();
     }
   } catch (err) {
     showToast('Failed to delete project', 'error');
