@@ -1909,11 +1909,20 @@ function renderRecentActivityFeed() {
 // UTILITIES & HELPERS
 // ----------------------------------------------------
 function openModal(modal) {
-  if (modal) modal.classList.add('active');
+  if (modal) {
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
 }
 
 function closeModal(modal) {
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.classList.remove('active');
+    const activeModals = document.querySelectorAll('.modal-overlay.active');
+    if (activeModals.length === 0) {
+      document.body.style.overflow = '';
+    }
+  }
 }
 
 function showToast(msg, type = 'success') {
