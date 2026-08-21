@@ -724,24 +724,85 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         bom_status: p.bom_status
       }));
 
-      const contextSummary = {
-        role: isAdmin ? 'Lab Administrator (Lab-Wide Access)' : `Student / Team Member (${req.user.team_code || req.user.email})`,
-        visible_projects_count: projectList.length,
-        projects: projectList,
-        boms_summary: bomData.map(b => ({ item: b.item_name, project: b.project_code, status: b.status, qty: b.quantity, price: b.total_price }))
-      };
+      // 1. Fuzzy Project / Team Name Token Detection
+      const q = message.toLowerCase();
+      const tokens = q.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !['tell', 'about', 'what', 'whats', 'is', 'the', 'deadline', 'status', 'progress', 'team', 'project', 'our', 'my', 'give', 'show', 'for', 'detail', 'details', 'current'].includes(w));
 
-      const systemPrompt = `You are iGrid Assistant, a project data assistant. Rules for every response:
-- Answer in 1-2 short sentences maximum. No long explanations, no extra context unless specifically asked.
-- Give ONLY the exact value asked for (exact date, exact percentage, exact status text, exact name) — pulled directly from the provided project data JSON below. Do not paraphrase or add filler.
-- Do NOT use conversational filler like 'Sure!', 'I'd be happy to help', 'Great question', 'Let me check that for you' — go straight to the answer.
-- Do NOT explain your reasoning or process. Just state the fact.
-- Do NOT sound like a generic AI chatbot — no over-politeness, no repeating the user's question back to them.
-- If the data isn't available, respond in one short line: 'Not available in your project data.'
-- Never mention you are an AI, a language model, or reference any other chatbot/company by name.
+      let matchedProject = null;
+      if (projects && projects.length > 0) {
+        for (const p of projects) {
+          const pCode = (p.project_code || '').toLowerCase();
+          const pTitle = (p.title || '').toLowerCase();
+          const pTeam = (p.team_name || '').toLowerCase();
+          const pLead = (p.team_lead || '').toLowerCase();
 
-User Role: ${contextSummary.role}
-DATA: ${JSON.stringify(contextSummary, null, 2)}`;
+          const isMatch = tokens.some(t =>
+            pCode.includes(t) ||
+            pTitle.includes(t) ||
+            pTeam.includes(t) ||
+            pLead.includes(t) ||
+            (pTeam.replace('team', '').trim().length > 2 && t.includes(pTeam.replace('team', '').trim())) ||
+            (pTitle.split(/[^a-z0-9]/).some(w => w.length >= 3 && t.includes(w)))
+          );
+
+          if (isMatch) {
+            matchedProject = p;
+            break;
+          }
+        }
+      }
+
+      // Check for explicitly non-existent project query (e.g., "Team Unicorn")
+      const isNamedQuery = (q.includes('team') || q.includes('project') || q.includes('about')) && tokens.length > 0;
+      if (isNamedQuery && !matchedProject) {
+        const notFoundTerm = tokens.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' ');
+        return res.json({ reply: `Couldn't find "${notFoundTerm}" in your project data. Please check the project or team name.` });
+      }
+
+      // Fetch Full Record if matched
+      let matchedFullRecord = null;
+      if (matchedProject) {
+        const projBoms = (bomData || []).filter(b => b.project_code === matchedProject.project_code);
+        matchedFullRecord = {
+          code: matchedProject.project_code,
+          title: matchedProject.title,
+          description: matchedProject.description || '',
+          domain: matchedProject.domain,
+          status: matchedProject.status,
+          priority: matchedProject.priority,
+          progress: matchedProject.progress,
+          due_date: matchedProject.due_date,
+          immediate_action: matchedProject.immediate_action,
+          github_repo: matchedProject.github_repo,
+          doc_url: matchedProject.doc_url,
+          team_name: matchedProject.team_name,
+          team_lead: matchedProject.team_lead,
+          team_members: matchedProject.team_members,
+          bom_status: matchedProject.bom_status,
+          boms: projBoms.map(b => ({ item: b.item_name, qty: b.quantity, price: b.total_price, status: b.status }))
+        };
+      }
+
+      const allNames = (projects || []).map(p => ({ code: p.project_code, title: p.title, team: p.team_name }));
+
+      const systemPrompt = `You are iGrid Assistant, a knowledgeable project coordinator who knows every team's details well — like a helpful senior team member, not a robotic bot.
+
+When a user mentions a project or team name, retrieve and present that project's full details in a natural, human, conversational way — organized clearly (like a quick briefing), not a wall of raw JSON and not a dry bullet dump either. Example tone: 'Team Falcon is at 65% progress, on track for the March 15 deadline. Current status: in development. Last review note: needs UI testing before submission.'
+
+Rules:
+- Use ONLY the data provided below — never invent or guess details.
+- Speak naturally and confidently, like someone who actually knows the project, not like you're reading a database.
+- If asked a broad question ('tell me about Team Falcon'), give a full natural summary covering deadline, status, progress, and recent comments.
+- If asked a specific question ('what's Team Falcon's deadline'), answer that specifically and briefly, still in natural phrasing — not just the bare value.
+- If the project/team name isn't found in the data, say so clearly and ask them to check the name, rather than guessing.
+- Don't mention being an AI, a language model, or any other chatbot/company by name.
+- Keep responses conversational but not padded — natural sentences, no unnecessary filler phrases like 'Great question!' or 'I'd be happy to help.'
+
+User Role: ${isAdmin ? 'Lab Administrator' : 'Team Member'}
+DATA: ${JSON.stringify({
+  matchedProject: matchedFullRecord || null,
+  allProjectNames: allNames
+}, null, 2)}`;
 
       // Construct Multi-Turn Messages Payload
       const messageHistory = Array.isArray(history) ? history.map(h => ({
@@ -763,7 +824,7 @@ DATA: ${JSON.stringify(contextSummary, null, 2)}`;
             },
             body: JSON.stringify({
               model: 'claude-3-5-sonnet-20241022',
-              max_tokens: 80,
+              max_tokens: matchedFullRecord ? 350 : 80,
               system: systemPrompt,
               messages: messageHistory
             })
@@ -778,11 +839,20 @@ DATA: ${JSON.stringify(contextSummary, null, 2)}`;
         }
       }
 
-      // Direct Exact Fallback Reasoning Engine
-      const q = message.toLowerCase();
+      // Direct Natural Fallback Reasoning Engine
       let reply = '';
-
-      if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
+      if (matchedFullRecord) {
+        const p = matchedFullRecord;
+        if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
+          reply = `${p.title} (${p.code}) is due on ${p.due_date || 'TBD'}.`;
+        } else if (q.includes('progress') || q.includes('percent')) {
+          reply = `${p.title} (${p.code}) is currently at ${p.progress}% completion.`;
+        } else if (q.includes('status')) {
+          reply = `${p.title} (${p.code}) status is ${p.status.toUpperCase()}.`;
+        } else {
+          reply = `${p.team_name || p.title} (${p.code}) is at ${p.progress}% progress, due ${p.due_date || 'TBD'}. Current status: ${p.status}. Immediate action: ${p.immediate_action || 'None logged'}.`;
+        }
+      } else if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
         const topProjects = projectList.slice(0, 3);
         reply = topProjects.length > 0 ? topProjects.map(p => `${p.code} (${p.title}): Due ${p.due_date || 'TBD'}`).join('. ') + '.' : 'Not available in your project data.';
       } else if (q.includes('progress') || q.includes('percent')) {
@@ -791,15 +861,6 @@ DATA: ${JSON.stringify(contextSummary, null, 2)}`;
       } else if (q.includes('status')) {
         const topProjects = projectList.slice(0, 3);
         reply = topProjects.length > 0 ? topProjects.map(p => `${p.code} status: ${p.status}`).join('. ') + '.' : 'Not available in your project data.';
-      } else if (q.includes('bom') || q.includes('hardware') || q.includes('component')) {
-        const topBoms = bomData.slice(0, 3);
-        reply = topBoms.length > 0 ? topBoms.map(b => `${b.item_name} (${b.project_code}): ${b.status}`).join('. ') + '.' : 'Not available in your project data.';
-      } else if (q.includes('action') || q.includes('blocker') || q.includes('next')) {
-        const topProjects = projectList.slice(0, 3);
-        reply = topProjects.length > 0 ? topProjects.map(p => `${p.code} action: ${p.immediate_action || 'None'}`).join('. ') + '.' : 'Not available in your project data.';
-      } else if (q.includes('team') || q.includes('lead') || q.includes('member')) {
-        const topProjects = projectList.slice(0, 3);
-        reply = topProjects.length > 0 ? topProjects.map(p => `${p.code} team: ${p.team_name || 'Team'} (${p.team_lead || 'Lead'})`).join('. ') + '.' : 'Not available in your project data.';
       } else {
         reply = 'Not available in your project data.';
       }

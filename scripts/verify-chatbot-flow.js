@@ -23,10 +23,10 @@ function makeRequest(path, options = {}, body = null) {
 }
 
 async function runTests() {
-  console.log('🧪 Starting iGrid Assistant Short & Exact Response Verification Tests...\n');
+  console.log('🧪 Starting iGrid Assistant Full Project Lookup & Human Teammate Verification Tests...\n');
 
   // Create User Token
-  const studentEmail = `igrid_assistant_user_${Date.now()}@gmail.com`;
+  const studentEmail = `igrid_coordinator_${Date.now()}@gmail.com`;
   const signupRes = await makeRequest('/api/auth/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
@@ -38,63 +38,68 @@ async function runTests() {
     return;
   }
 
-  // 1️⃣ Test "what's my deadline"
-  console.log('1️⃣ Query: "what\'s my deadline"...');
-  const deadlineRes = await makeRequest('/api/chat', {
+  // 1️⃣ Test Full Project Summary ("Tell me about Enviora")
+  console.log('1️⃣ Query: "Tell me about Enviora"...');
+  const fullSummaryRes = await makeRequest('/api/chat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     }
-  }, { message: "what's my deadline" });
+  }, { message: "Tell me about Enviora" });
 
-  if (deadlineRes.statusCode === 200 && deadlineRes.json && deadlineRes.json.reply) {
-    const reply = deadlineRes.json.reply;
+  if (fullSummaryRes.statusCode === 200 && fullSummaryRes.json && fullSummaryRes.json.reply) {
+    const reply = fullSummaryRes.json.reply;
     console.log(`   Reply: "${reply}"`);
-    if (!reply.toLowerCase().includes('sure') && !reply.toLowerCase().includes('happy to help') && reply.length < 250) {
-      console.log('✅ PASS: Response is short, exact, and free of conversational filler!');
+    if (reply.includes('Enviora') || reply.includes('IGRID-AI-04') || reply.includes('95%') || reply.includes('completed')) {
+      console.log('✅ PASS: Full project summary retrieved and formatted naturally!');
     } else {
-      console.error('❌ FAIL: Response contains conversational filler or exceeds short sentence limit.');
+      console.error('❌ FAIL: Full summary missing expected project details.');
     }
   } else {
-    console.error(`❌ FAIL: Deadline query failed with status ${deadlineRes.statusCode}`);
+    console.error(`❌ FAIL: Full summary query failed with status ${fullSummaryRes.statusCode}`);
   }
 
-  // 2️⃣ Test "what's our progress"
-  console.log('\n2️⃣ Query: "what\'s our progress"...');
-  const progressRes = await makeRequest('/api/chat', {
+  // 2️⃣ Test Specific Question ("Enviora deadline")
+  console.log('\n2️⃣ Query: "Enviora deadline"...');
+  const specificRes = await makeRequest('/api/chat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     }
-  }, { message: "what's our progress" });
+  }, { message: "Enviora deadline" });
 
-  if (progressRes.statusCode === 200 && progressRes.json && progressRes.json.reply) {
-    console.log(`   Reply: "${progressRes.json.reply}"`);
-    console.log('✅ PASS: Progress query returned concise exact value!');
+  if (specificRes.statusCode === 200 && specificRes.json && specificRes.json.reply) {
+    console.log(`   Reply: "${specificRes.json.reply}"`);
+    console.log('✅ PASS: Specific deadline question returned concise natural phrasing!');
   } else {
-    console.error(`❌ FAIL: Progress query failed.`);
+    console.error(`❌ FAIL: Specific question query failed.`);
   }
 
-  // 3️⃣ Test "what's the current status"
-  console.log('\n3️⃣ Query: "what\'s the current status"...');
-  const statusRes = await makeRequest('/api/chat', {
+  // 3️⃣ Test Non-Existent Project ("Team Unicorn")
+  console.log('\n3️⃣ Query: "Tell me about Team Unicorn" (doesn\'t exist)...');
+  const notFoundRes = await makeRequest('/api/chat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     }
-  }, { message: "what's the current status" });
+  }, { message: "Tell me about Team Unicorn" });
 
-  if (statusRes.statusCode === 200 && statusRes.json && statusRes.json.reply) {
-    console.log(`   Reply: "${statusRes.json.reply}"`);
-    console.log('✅ PASS: Status query returned concise exact status!');
+  if (notFoundRes.statusCode === 200 && notFoundRes.json && notFoundRes.json.reply) {
+    const reply = notFoundRes.json.reply;
+    console.log(`   Reply: "${reply}"`);
+    if (reply.includes("Couldn't find") || reply.includes("Team Unicorn")) {
+      console.log('✅ PASS: Clear non-found message returned without guessing!');
+    } else {
+      console.error('❌ FAIL: Expected clear non-found message.');
+    }
   } else {
-    console.error(`❌ FAIL: Status query failed.`);
+    console.error(`❌ FAIL: Non-existent project query failed.`);
   }
 
-  console.log('\n🎉 ALL IGRID ASSISTANT SHORT & EXACT RESPONSE TESTS PASSED SUCCESSFULLY!');
+  console.log('\n🎉 ALL IGRID ASSISTANT PROJECT LOOKUP TESTS PASSED SUCCESSFULLY!');
 }
 
 runTests().catch(console.error);
