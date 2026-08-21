@@ -4,9 +4,9 @@
    ========================================================================== */
 
 :root, [data-theme="dark"] {
-  /* Dark Theme: Midnight Navy Canvas #0B132B */
+  /* Dark Theme: Midnight Navy Canvas #0B132B + Crisp White + Golden Yellow + Electric Blue AI Accent */
   --bg-main: #0B132B;
-  --bg-header: #0f172a;
+  --bg-header: #111D4A;
   --bg-card: #131d33;
   --bg-card-hover: #1a2642;
   --bg-card-sub: #0d1527;
@@ -131,26 +131,15 @@
   box-sizing: border-box;
 }
 
-html, body {
-  background-color: #0B132B !important;
-  color: var(--text-main);
+body {
   font-family: var(--font-sans);
+  background-color: var(--bg-main);
+  color: var(--text-main);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   overflow-x: hidden;
-  position: relative;
   transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-#sparks-canvas {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 0;
-  pointer-events: none;
 }
 
 /* Custom Scrollbar */
@@ -175,9 +164,6 @@ html, body {
   min-height: 100vh;
   width: 100%;
   overflow-x: hidden;
-  background-color: #0B132B !important;
-  position: relative;
-  z-index: 1;
 }
 
 /* ==========================================================================
