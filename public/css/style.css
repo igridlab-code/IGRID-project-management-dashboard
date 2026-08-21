@@ -4,30 +4,31 @@
    ========================================================================== */
 
 :root, [data-theme="dark"] {
-  /* Dark Theme: Midnight Navy Canvas + Crisp White + Golden Yellow + Slate Gray */
-  --bg-main: #0b1120;
-  --bg-header: #0f172a;
-  --bg-card: #131d33;
-  --bg-card-hover: #1a2642;
-  --bg-card-sub: #0d1527;
-  --bg-input: #0f182b;
-  --bg-dropdown: #131d33;
-  --border-color: #24324f;
-  --border-light: #33456c;
+  /* Deep Navy Blue Theme System (#0A1128 / #0B132B) */
+  --bg-main: #0a1128;
+  --bg-header: #0f1836;
+  --bg-card: #152244;
+  --bg-card-hover: #1c2d58;
+  --bg-card-sub: #101a38;
+  --bg-input: #0e1730;
+  --bg-dropdown: #152244;
+  --border-color: #243763;
+  --border-light: #324a82;
 
   --text-main: #f8fafc;
   --text-muted: #cbd5e1;
   --text-dim: #94a3b8;
 
-  /* Signature Innovation Yellow */
-  --primary: #facc15;
-  --primary-hover: #eab308;
-  --primary-text: #0f172a;
-  --primary-glow: rgba(250, 204, 21, 0.35);
+  /* Signature Innovation Gold & Electric Cyan Accents */
+  --primary: #f59e0b;
+  --primary-hover: #d97706;
+  --primary-text: #0b1120;
+  --primary-glow: rgba(245, 158, 11, 0.35);
   
-  --accent-yellow: #facc15;
+  --accent-yellow: #f59e0b;
   --accent-navy: #3b82f6;
   --accent-blue: #38bdf8;
+  --accent-cyan: #4cc9f0;
   --accent-green: #10b981;
   --accent-red: #ef4444;
   --accent-amber: #f59e0b;
