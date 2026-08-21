@@ -1435,10 +1435,11 @@ async function openProjectDetail(projectId) {
     // Media Buttons
     const mediaBar = document.getElementById('detail-media-bar');
     const mediaList = [];
-    if (project.github_repo) mediaList.push(`<a href="${project.github_repo}" target="_blank" class="btn-media btn-media-github">🐙 GitHub Repo</a>`);
-    if (project.youtube_url) mediaList.push(`<a href="${project.youtube_url}" target="_blank" class="btn-media btn-media-youtube">🎥 Video Demo</a>`);
-    if (project.linkedin_url) mediaList.push(`<a href="${project.linkedin_url}" target="_blank" class="btn-media btn-media-linkedin">💼 LinkedIn Post</a>`);
-    if (project.doc_url) mediaList.push(`<a href="${project.doc_url}" target="_blank" class="btn-media btn-media-doc">📄 Technical Doc</a>`);
+    if (project.github_repo) mediaList.push(`<a href="${project.github_repo}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github">🐙 GitHub Repo</a>`);
+    if (project.youtube_url) mediaList.push(`<a href="${project.youtube_url}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube">🎥 Video Demo</a>`);
+    if (project.linkedin_url) mediaList.push(`<a href="${project.linkedin_url}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin">💼 LinkedIn Post</a>`);
+    if (project.doc_url) mediaList.push(`<a href="${project.doc_url}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc">📄 View Technical Report</a>`);
+    else mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.6; cursor: not-allowed;" title="No technical report link added yet">📄 No report uploaded yet</span>`);
     mediaBar.innerHTML = mediaList.join('');
 
     const deliverablesWrap = document.getElementById('detail-deliverables-wrapper');
@@ -1558,6 +1559,7 @@ function openProjectModalForEdit(project) {
   document.getElementById('form-action-item').value = project.immediate_action || '';
   document.getElementById('form-github').value = project.github_repo || '';
   document.getElementById('form-youtube').value = project.youtube_url || '';
+  document.getElementById('form-doc-url').value = project.doc_url || '';
   document.getElementById('form-linkedin').value = project.linkedin_url || '';
   document.getElementById('form-image-url').value = project.image_url || '';
   document.getElementById('form-team-name').value = project.team_name || '';
@@ -1572,6 +1574,18 @@ async function handleProjectFormSubmit(e) {
   e.preventDefault();
   const id = document.getElementById('form-project-id').value;
 
+  const docUrl = document.getElementById('form-doc-url').value.trim();
+
+  // Validate Google Drive URL if provided
+  if (docUrl) {
+    const isDriveLink = (docUrl.startsWith('http://') || docUrl.startsWith('https://')) &&
+                        (docUrl.includes('drive.google.com') || docUrl.includes('docs.google.com'));
+    if (!isDriveLink) {
+      showToast('Please paste a valid Google Drive link (e.g. drive.google.com or docs.google.com)', 'error');
+      return;
+    }
+  }
+
   const payload = {
     project_code: document.getElementById('form-code').value.trim(),
     title: document.getElementById('form-title').value.trim(),
@@ -1585,6 +1599,7 @@ async function handleProjectFormSubmit(e) {
     immediate_action: document.getElementById('form-action-item').value.trim(),
     github_repo: document.getElementById('form-github').value.trim(),
     youtube_url: document.getElementById('form-youtube').value.trim(),
+    doc_url: docUrl,
     linkedin_url: document.getElementById('form-linkedin').value.trim(),
     image_url: document.getElementById('form-image-url').value.trim(),
     team_name: document.getElementById('form-team-name').value.trim(),

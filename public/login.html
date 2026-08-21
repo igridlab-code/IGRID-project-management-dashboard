@@ -8,8 +8,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <!-- Google OAuth Identity Services SDK -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body {
       margin: 0;
@@ -242,15 +240,6 @@
 
       <!-- 1. SIGN IN FORM -->
       <form id="form-login">
-        <!-- Gmail Google OAuth Sign-in Button Container (Dynamically Initialized) -->
-        <div id="google-btn-container" style="display:flex; justify-content:center; margin-bottom:14px;"></div>
-
-        <div style="display:flex; align-items:center; text-align:center; margin:16px 0; color:var(--text-dim,#64748b); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">
-          <span style="flex:1; border-bottom:1px solid rgba(255,255,255,0.1);"></span>
-          <span style="padding:0 10px;">Or Sign In with Email</span>
-          <span style="flex:1; border-bottom:1px solid rgba(255,255,255,0.1);"></span>
-        </div>
-
         <div class="form-group">
           <label>Gmail / Email Address</label>
           <input type="email" id="login-email" placeholder="name@gmail.com" required autocomplete="email">
@@ -343,62 +332,9 @@
       formLogin.style.display = 'none'; formSignup.style.display = 'none'; formForgot.style.display = 'block';
     };
 
-    // Google Sign-In Callback Handler
-    window.handleGoogleSignIn = async function(response) {
-      try {
-        const payload = JSON.parse(atob(response.credential.split('.')[1]));
-        const res = await fetch('/api/auth/google', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: payload.email, google_id: payload.sub, credential: response.credential })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          localStorage.setItem('igrid_session', data.token);
-          showToast('Google Sign-in Successful! Redirecting...');
-          setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 800);
-        } else {
-          showToast(data.error || 'Google Sign-in failed', true);
-        }
-      } catch (err) {
-        showToast('Google Sign-in failed', true);
-      }
+    linkBackToLogin.onclick = () => {
+      tabLogin.click();
     };
-
-    // Dynamic Google OAuth Button Initializer
-    async function initGoogleOAuth() {
-      const container = document.getElementById('google-btn-container');
-      if (!container) return;
-
-      try {
-        const res = await fetch('/api/auth/google/config');
-        const config = await res.json();
-
-        if (config.is_configured && window.google && window.google.accounts) {
-          google.accounts.id.initialize({
-            client_id: config.client_id,
-            callback: window.handleGoogleSignIn
-          });
-          google.accounts.id.renderButton(container, {
-            type: 'standard',
-            shape: 'rectangular',
-            theme: 'filled_dark',
-            text: 'signin_with',
-            size: 'large',
-            logo_alignment: 'left',
-            width: 360
-          });
-        } else {
-          container.innerHTML = `
-            <div style="font-size:11px; color:#94a3b8; background:rgba(255,255,255,0.05); border:1px dashed rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; width:100%; text-align:center;">
-              🔑 Google OAuth Client ID Not Configured in Env (${config.masked_client_id})<br>Sign in directly using your Email / Gmail & Password below.
-            </div>
-          `;
-        }
-      } catch(e) {}
-    }
-
-    window.addEventListener('load', initGoogleOAuth);
 
     // Form Submissions
     formLogin.onsubmit = async (e) => {

@@ -21,9 +21,6 @@ data/igrid.db-journal
 data/igrid.db-wal
 data/igrid.db-shm
 
-# Secrets & Local Config
-config.json
-
 # IDE & Editor
 .vscode/
 .idea/

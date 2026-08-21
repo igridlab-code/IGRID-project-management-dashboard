@@ -7,26 +7,8 @@ const jwt = require('jsonwebtoken');
 const { db, initDb } = require('./database');
 
 const app = express();
-const fs = require('fs');
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'igrid_lab_dashboard_session_secret_2026_auth';
-
-// Load Config file if present
-let localConfig = {};
-try {
-  localConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
-} catch (e) {}
-
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || localConfig.google_client_id || '';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || localConfig.google_client_secret || '';
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || localConfig.google_redirect_uri || 'https://kabob-suspect-mandate.ngrok-free.dev/api/auth/google/callback';
-
-function getMaskedClientId(id) {
-  if (!id || id.trim().length === 0) return '⚠️ UNDEFINED / NOT CONFIGURED';
-  const clean = id.trim();
-  if (clean.length <= 12) return '****' + clean.substring(clean.length - 4);
-  return clean.substring(0, 6) + '****' + clean.substring(clean.length - 12);
-}
 
 // Initialize Database
 initDb();
@@ -36,17 +18,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
-
-// Public Google OAuth Configuration Endpoint
-app.get('/api/auth/google/config', (req, res) => {
-  res.json({
-    client_id: GOOGLE_CLIENT_ID,
-    masked_client_id: getMaskedClientId(GOOGLE_CLIENT_ID),
-    redirect_uri: GOOGLE_REDIRECT_URI,
-    client_secret_configured: !!GOOGLE_CLIENT_SECRET,
-    is_configured: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID.includes('.apps.googleusercontent.com'))
-  });
-});
 
 // ----------------------------------------------------
 // AUTHENTICATION MIDDLEWARE & GATING
@@ -157,51 +128,7 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
-// 3. GMAIL / GOOGLE OAUTH SIGN-IN
-app.post('/api/auth/google', (req, res) => {
-  const { email, google_id } = req.body;
-
-  if (!email) {
-    return res.status(400).json({ error: 'Google authentication payload invalid. Email required.' });
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-  const gid = google_id || `google_${Date.now()}`;
-
-  db.get('SELECT * FROM auth_users WHERE email = ?', [cleanEmail], (err, user) => {
-    if (err) return res.status(500).json({ error: err.message });
-
-    if (user) {
-      db.run('UPDATE auth_users SET google_id = ? WHERE id = ?', [gid, user.id]);
-      const token = jwt.sign({ id: user.id, email: user.email, auth_provider: 'google' }, JWT_SECRET, { expiresIn: '7d' });
-      return res.json({
-        message: 'Google sign-in successful',
-        token,
-        user: { id: user.id, email: user.email, auth_provider: 'google' }
-      });
-    }
-
-    const sql = `
-      INSERT INTO auth_users (email, google_id, auth_provider)
-      VALUES (?, ?, 'google')
-    `;
-
-    db.run(sql, [cleanEmail, gid], function(err2) {
-      if (err2) return res.status(500).json({ error: err2.message });
-
-      const userId = this.lastID;
-      const token = jwt.sign({ id: userId, email: cleanEmail, auth_provider: 'google' }, JWT_SECRET, { expiresIn: '7d' });
-
-      res.status(201).json({
-        message: 'Google account registered successfully',
-        token,
-        user: { id: userId, email: cleanEmail, auth_provider: 'google' }
-      });
-    });
-  });
-});
-
-// 4. FORGOT PASSWORD (Generate email reset token)
+// 3. FORGOT PASSWORD (Generate email reset token)
 app.post('/api/auth/forgot-password', (req, res) => {
   const { email } = req.body;
 
@@ -876,8 +803,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 IGRID Innovation Lab PM Dashboard is running!`);
   console.log(`🌐 Local Access:   http://localhost:${PORT}`);
   console.log(`📡 Network/Docker: http://0.0.0.0:${PORT}`);
-  console.log(`🔑 Google Client ID: ${getMaskedClientId(GOOGLE_CLIENT_ID)}`);
-  console.log(`🔐 Google Client Secret: ${GOOGLE_CLIENT_SECRET ? '✅ DEFINED / CONFIGURED' : '⚠️ UNDEFINED'}`);
-  console.log(`🔗 Google Redirect URI:  ${GOOGLE_REDIRECT_URI}`);
   console.log(`====================================================`);
 });
