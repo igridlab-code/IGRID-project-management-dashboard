@@ -601,6 +601,7 @@ function initEventListeners() {
   DOM.closeProjectModal.addEventListener('click', () => closeModal(DOM.projectModal));
   DOM.cancelProjectBtn.addEventListener('click', () => closeModal(DOM.projectModal));
   DOM.projectForm.addEventListener('submit', handleProjectFormSubmit);
+  initEditFormLinkProtection();
 
   // Column quick add buttons
   document.querySelectorAll('.col-more-btn').forEach(btn => {
@@ -1531,6 +1532,34 @@ async function handleCommentSubmit(e) {
 // ----------------------------------------------------
 // PROJECT FORM CREATE / EDIT
 // ----------------------------------------------------
+function updateLinkPreviewIcon(elementId, url) {
+  const icon = document.getElementById(elementId);
+  if (!icon) return;
+  if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/'))) {
+    icon.href = url;
+    icon.style.display = 'inline';
+  } else {
+    icon.style.display = 'none';
+  }
+}
+
+function initEditFormLinkProtection() {
+  const linkIds = ['form-image-url', 'form-github', 'form-youtube', 'form-doc-url', 'form-linkedin'];
+  linkIds.forEach(id => {
+    const input = document.getElementById(id);
+    if (input) {
+      input.addEventListener('click', (e) => {
+        e.stopPropagation();
+        input.focus();
+      });
+      input.addEventListener('input', () => {
+        const previewId = id.replace('form-', 'preview-');
+        updateLinkPreviewIcon(previewId, input.value.trim());
+      });
+    }
+  });
+}
+
 function openProjectModalForCreate(defaultStatus = 'in_progress') {
   DOM.modalProjectTitle.textContent = '🚀 Create Innovation Project / Task';
   DOM.projectForm.reset();
@@ -1540,6 +1569,10 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   const nextMonth = new Date();
   nextMonth.setDate(nextMonth.getDate() + 30);
   document.getElementById('form-due-date').value = nextMonth.toISOString().split('T')[0];
+
+  ['preview-image-url', 'preview-github', 'preview-youtube', 'preview-doc-url', 'preview-linkedin'].forEach(id => {
+    updateLinkPreviewIcon(id, '');
+  });
 
   openModal(DOM.projectModal);
 }
@@ -1566,6 +1599,12 @@ function openProjectModalForEdit(project) {
   document.getElementById('form-team-lead').value = project.team_lead || '';
   document.getElementById('form-team-lead-photo').value = project.team_lead_photo || '';
   document.getElementById('form-deliverables').value = project.deliverables || '';
+
+  updateLinkPreviewIcon('preview-image-url', project.image_url);
+  updateLinkPreviewIcon('preview-github', project.github_repo);
+  updateLinkPreviewIcon('preview-youtube', project.youtube_url);
+  updateLinkPreviewIcon('preview-doc-url', project.doc_url);
+  updateLinkPreviewIcon('preview-linkedin', project.linkedin_url);
 
   openModal(DOM.projectModal);
 }
