@@ -731,13 +731,17 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         boms_summary: bomData.map(b => ({ item: b.item_name, project: b.project_code, status: b.status, qty: b.quantity, price: b.total_price }))
       };
 
-      const systemPrompt = `You are the IGRID Innovation Lab AI Assistant, an intelligent conversational AI like ChatGPT.
-You assist student innovators and lab coordinators with project tracking, hardware engineering, coding (ROS2, Python, C++, OpenCV, IoT, Embedded, AI), and lab workflows.
-Use the provided role-scoped project context when relevant, but also answer general technical, coding, and engineering questions helpfully and accurately.
+      const systemPrompt = `You are iGrid Assistant, a project data assistant. Rules for every response:
+- Answer in 1-2 short sentences maximum. No long explanations, no extra context unless specifically asked.
+- Give ONLY the exact value asked for (exact date, exact percentage, exact status text, exact name) — pulled directly from the provided project data JSON below. Do not paraphrase or add filler.
+- Do NOT use conversational filler like 'Sure!', 'I'd be happy to help', 'Great question', 'Let me check that for you' — go straight to the answer.
+- Do NOT explain your reasoning or process. Just state the fact.
+- Do NOT sound like a generic AI chatbot — no over-politeness, no repeating the user's question back to them.
+- If the data isn't available, respond in one short line: 'Not available in your project data.'
+- Never mention you are an AI, a language model, or reference any other chatbot/company by name.
 
 User Role: ${contextSummary.role}
-Visible Project Context:
-${JSON.stringify(contextSummary, null, 2)}`;
+DATA: ${JSON.stringify(contextSummary, null, 2)}`;
 
       // Construct Multi-Turn Messages Payload
       const messageHistory = Array.isArray(history) ? history.map(h => ({
@@ -759,7 +763,7 @@ ${JSON.stringify(contextSummary, null, 2)}`;
             },
             body: JSON.stringify({
               model: 'claude-3-5-sonnet-20241022',
-              max_tokens: 1200,
+              max_tokens: 80,
               system: systemPrompt,
               messages: messageHistory
             })
@@ -767,29 +771,37 @@ ${JSON.stringify(contextSummary, null, 2)}`;
 
           const data = await response.json();
           if (data.content && data.content[0] && data.content[0].text) {
-            return res.json({ reply: data.content[0].text });
+            return res.json({ reply: data.content[0].text.trim() });
           }
         } catch (apiErr) {
           console.error('Claude API call error:', apiErr);
         }
       }
 
-      // Conversational Fallback Engine (ChatGPT-Style Multi-Turn Reasoning)
+      // Direct Exact Fallback Reasoning Engine
       const q = message.toLowerCase();
       let reply = '';
 
-      if (q.includes('ros2') || q.includes('node') || q.includes('publisher') || q.includes('subscriber')) {
-        reply = `🧠 **ROS2 Engineering Guide:**\nIn ROS 2 (Robot Operating System), nodes communicate via Publishers and Subscribers:\n\`\`\`python\nimport rclpy\nfrom rclpy.node import Node\nfrom std_msgs.msg import String\n\nclass LabSensorNode(Node):\n    def __init__(self):\n        super().__init__('lab_sensor_node')\n        self.pub = self.create_publisher(String, 'sensor_data', 10)\n\`\`\`\nNeed assistance implementing this in your team's ROS2 project? Let me know!`;
-      } else if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
-        reply = `📅 **Project Deadlines (${contextSummary.role}):**\n` + projectList.map(p => `• **${p.code}** (${p.title}): Due **${p.due_date || 'TBD'}** [Status: ${p.status}]`).join('\n');
-      } else if (q.includes('progress') || q.includes('status') || q.includes('completed')) {
-        reply = `📊 **Completion Status (${contextSummary.role}):**\n` + projectList.map(p => `• **${p.code}**: ${p.progress}% completed (Status: ${p.status.toUpperCase()})`).join('\n');
-      } else if (q.includes('bom') || q.includes('hardware') || q.includes('price') || q.includes('component')) {
-        reply = `🛒 **BOM Hardware Requisitions (${contextSummary.role}):**\n` + (bomData.length > 0 ? bomData.map(b => `• **${b.item_name}** (${b.project_code}): Qty ${b.quantity} - ₹${b.total_price} [Status: ${b.status}]`).join('\n') : 'No active BOM requisitions found.');
+      if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
+        const topProjects = projectList.slice(0, 3);
+        reply = topProjects.length > 0 ? topProjects.map(p => `${p.code} (${p.title}): Due ${p.due_date || 'TBD'}`).join('. ') + '.' : 'Not available in your project data.';
+      } else if (q.includes('progress') || q.includes('percent')) {
+        const topProjects = projectList.slice(0, 3);
+        reply = topProjects.length > 0 ? topProjects.map(p => `${p.code}: ${p.progress}% completed`).join('. ') + '.' : 'Not available in your project data.';
+      } else if (q.includes('status')) {
+        const topProjects = projectList.slice(0, 3);
+        reply = topProjects.length > 0 ? topProjects.map(p => `${p.code} status: ${p.status}`).join('. ') + '.' : 'Not available in your project data.';
+      } else if (q.includes('bom') || q.includes('hardware') || q.includes('component')) {
+        const topBoms = bomData.slice(0, 3);
+        reply = topBoms.length > 0 ? topBoms.map(b => `${b.item_name} (${b.project_code}): ${b.status}`).join('. ') + '.' : 'Not available in your project data.';
       } else if (q.includes('action') || q.includes('blocker') || q.includes('next')) {
-        reply = `⚡ **Immediate Action Items:**\n` + projectList.map(p => `• **${p.code}**: ${p.immediate_action || 'No immediate action logged.'}`).join('\n');
+        const topProjects = projectList.slice(0, 3);
+        reply = topProjects.length > 0 ? topProjects.map(p => `${p.code} action: ${p.immediate_action || 'None'}`).join('. ') + '.' : 'Not available in your project data.';
+      } else if (q.includes('team') || q.includes('lead') || q.includes('member')) {
+        const topProjects = projectList.slice(0, 3);
+        reply = topProjects.length > 0 ? topProjects.map(p => `${p.code} team: ${p.team_name || 'Team'} (${p.team_lead || 'Lead'})`).join('. ') + '.' : 'Not available in your project data.';
       } else {
-        reply = `🤖 **IGRID Lab AI Assistant (${contextSummary.role}):**\nI'm ready to help you like ChatGPT with both your lab projects and technical questions!\n\n• **Visible Projects (${projectList.length})**: ${projectList.map(p => p.code).join(', ')}\n• **Capabilities**: Project deadline tracking, BOM requisitions, ROS2 coding, Python/C++, Microcontroller circuit design, and AI debugging.\n\nWhat would you like to build or troubleshoot today?`;
+        reply = 'Not available in your project data.';
       }
 
       res.json({ reply });

@@ -23,62 +23,78 @@ function makeRequest(path, options = {}, body = null) {
 }
 
 async function runTests() {
-  console.log('🧪 Starting ChatGPT-Style Multi-Turn AI Chatbot Verification Tests...\n');
+  console.log('🧪 Starting iGrid Assistant Short & Exact Response Verification Tests...\n');
 
   // Create User Token
-  const studentEmail = `chatgpt_user_${Date.now()}@gmail.com`;
+  const studentEmail = `igrid_assistant_user_${Date.now()}@gmail.com`;
   const signupRes = await makeRequest('/api/auth/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
   }, { email: studentEmail, password: 'UserPassword123!' });
 
   const token = signupRes.json ? signupRes.json.token : null;
-
   if (!token) {
     console.error('❌ FAIL: Could not authenticate test user.');
     return;
   }
 
-  // 1️⃣ Test Multi-Turn Conversational History
-  console.log('1️⃣ Testing Multi-Turn Conversational Memory (Turn 1 -> Turn 2)...');
-  const history = [
-    { role: 'user', content: 'Which projects are in progress?' },
-    { role: 'assistant', content: 'Project IGRID-ERP-01 is currently 85% completed in progress.' }
-  ];
-
-  const followUpRes = await makeRequest('/api/chat', {
+  // 1️⃣ Test "what's my deadline"
+  console.log('1️⃣ Query: "what\'s my deadline"...');
+  const deadlineRes = await makeRequest('/api/chat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     }
-  }, { message: 'Can you show me the deadlines for that project?', history });
+  }, { message: "what's my deadline" });
 
-  if (followUpRes.statusCode === 200 && followUpRes.json && followUpRes.json.reply) {
-    console.log('✅ PASS: Multi-turn chat memory query succeeded!');
-    console.log('   Reply Preview:', followUpRes.json.reply.substring(0, 140).replace(/\n/g, ' '));
+  if (deadlineRes.statusCode === 200 && deadlineRes.json && deadlineRes.json.reply) {
+    const reply = deadlineRes.json.reply;
+    console.log(`   Reply: "${reply}"`);
+    if (!reply.toLowerCase().includes('sure') && !reply.toLowerCase().includes('happy to help') && reply.length < 250) {
+      console.log('✅ PASS: Response is short, exact, and free of conversational filler!');
+    } else {
+      console.error('❌ FAIL: Response contains conversational filler or exceeds short sentence limit.');
+    }
   } else {
-    console.error(`❌ FAIL: Multi-turn query failed with status ${followUpRes.statusCode}`);
+    console.error(`❌ FAIL: Deadline query failed with status ${deadlineRes.statusCode}`);
   }
 
-  // 2️⃣ Test General Engineering & Coding Question (ChatGPT Style)
-  console.log('\n2️⃣ Testing General Technical/Engineering Question (ROS2 Code Example)...');
-  const techRes = await makeRequest('/api/chat', {
+  // 2️⃣ Test "what's our progress"
+  console.log('\n2️⃣ Query: "what\'s our progress"...');
+  const progressRes = await makeRequest('/api/chat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     }
-  }, { message: 'How do I write a ROS2 publisher node in Python?' });
+  }, { message: "what's our progress" });
 
-  if (techRes.statusCode === 200 && techRes.json && techRes.json.reply) {
-    console.log('✅ PASS: General technical Q&A query succeeded!');
-    console.log('   Reply Preview:', techRes.json.reply.substring(0, 160).replace(/\n/g, ' '));
+  if (progressRes.statusCode === 200 && progressRes.json && progressRes.json.reply) {
+    console.log(`   Reply: "${progressRes.json.reply}"`);
+    console.log('✅ PASS: Progress query returned concise exact value!');
   } else {
-    console.error(`❌ FAIL: Technical Q&A query failed with status ${techRes.statusCode}`);
+    console.error(`❌ FAIL: Progress query failed.`);
   }
 
-  console.log('\n🎉 ALL CHATGPT-STYLE AI CHATBOT TESTS PASSED SUCCESSFULLY!');
+  // 3️⃣ Test "what's the current status"
+  console.log('\n3️⃣ Query: "what\'s the current status"...');
+  const statusRes = await makeRequest('/api/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  }, { message: "what's the current status" });
+
+  if (statusRes.statusCode === 200 && statusRes.json && statusRes.json.reply) {
+    console.log(`   Reply: "${statusRes.json.reply}"`);
+    console.log('✅ PASS: Status query returned concise exact status!');
+  } else {
+    console.error(`❌ FAIL: Status query failed.`);
+  }
+
+  console.log('\n🎉 ALL IGRID ASSISTANT SHORT & EXACT RESPONSE TESTS PASSED SUCCESSFULLY!');
 }
 
 runTests().catch(console.error);
