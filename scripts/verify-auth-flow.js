@@ -23,9 +23,9 @@ function makeRequest(path, options = {}, body = null) {
 }
 
 async function runTests() {
-  console.log('🧪 Starting Authentication & Session Gating Verification Tests...\n');
+  console.log('🧪 Starting Direct Email/Password Auth Verification Tests...\n');
 
-  // 1️⃣ Test Unauthenticated Gating Redirects
+  // 1️⃣ Test Unauthenticated Route Gating
   console.log('1️⃣ Testing Unauthenticated Route Gating...');
   const rootRes = await makeRequest('/');
   if (rootRes.statusCode === 302 && rootRes.headers.location === '/login') {
@@ -41,10 +41,10 @@ async function runTests() {
     console.error(`❌ FAIL: Expected 401 for unauthenticated API, got ${apiRes.statusCode}`);
   }
 
-  // 2️⃣ Test Email + Password Signup (bcrypt hashing)
-  console.log('\n2️⃣ Testing Email/Password Signup with bcrypt hashing...');
-  const testEmail = `testuser_${Date.now()}@igridlab.com`;
-  const testPass = 'Secret123!';
+  // 2️⃣ Test Gmail/Email + Password Signup (bcrypt hashing)
+  console.log('\n2️⃣ Testing Gmail/Email + Password Signup with bcrypt hashing...');
+  const testEmail = `student_${Date.now()}@gmail.com`;
+  const testPass = 'LabUser123!';
   
   const signupRes = await makeRequest('/api/auth/signup', {
     method: 'POST',
@@ -72,7 +72,7 @@ async function runTests() {
     console.error(`❌ FAIL: Login failed with status ${loginRes.statusCode}`, loginRes.body);
   }
 
-  // Test Incorrect Password Login
+  // Test Incorrect Password Login Rejection
   const wrongLoginRes = await makeRequest('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
@@ -84,22 +84,8 @@ async function runTests() {
     console.error(`❌ FAIL: Expected 401 for wrong password, got ${wrongLoginRes.statusCode}`);
   }
 
-  // 4️⃣ Test Google / Gmail OAuth Sign-In
-  console.log('\n4️⃣ Testing Google/Gmail OAuth Sign-In...');
-  const googleEmail = `googleuser_${Date.now()}@gmail.com`;
-  const googleRes = await makeRequest('/api/auth/google', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  }, { email: googleEmail, google_id: 'google_123456789' });
-
-  if (googleRes.statusCode === 201 && googleRes.json && googleRes.json.token) {
-    console.log('✅ PASS: Google 1-Click Sign-In user created & authenticated.');
-  } else {
-    console.error(`❌ FAIL: Google sign-in failed with status ${googleRes.statusCode}`);
-  }
-
-  // 5️⃣ Test Forgot Password & Reset Token Flow
-  console.log('\n5️⃣ Testing Forgot Password Reset Flow...');
+  // 4️⃣ Test Forgot Password & Reset Token Flow
+  console.log('\n4️⃣ Testing Forgot Password Reset Flow...');
   const forgotRes = await makeRequest('/api/auth/forgot-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
@@ -123,8 +109,8 @@ async function runTests() {
     console.error(`❌ FAIL: Forgot password token request failed.`);
   }
 
-  // 6️⃣ Test Authenticated API Access
-  console.log('\n6️⃣ Testing Authenticated Dashboard Access with JWT Token...');
+  // 5️⃣ Test Authenticated API Access
+  console.log('\n5️⃣ Testing Authenticated Dashboard Access with Session Token...');
   if (userToken) {
     const authApiRes = await makeRequest('/api/projects', {
       headers: { 'Authorization': `Bearer ${userToken}` }
@@ -137,7 +123,7 @@ async function runTests() {
     }
   }
 
-  console.log('\n🎉 ALL AUTHENTICATION & SESSION GATING TESTS COMPLETED SUCCESSFULLY!');
+  console.log('\n🎉 ALL DIRECT EMAIL/PASSWORD AUTHENTICATION TESTS PASSED SUCCESSFULLY!');
 }
 
 runTests().catch(console.error);

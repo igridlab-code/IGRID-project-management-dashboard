@@ -8,8 +8,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <!-- Google OAuth Identity Services SDK -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body {
       margin: 0;
@@ -172,40 +170,12 @@
       font-weight: 800;
       cursor: pointer;
       transition: transform 0.15s ease, background-color 0.2s ease;
+      margin-top: 6px;
     }
 
     .btn-submit:hover {
       transform: translateY(-1px);
       background: #d97706;
-    }
-
-    .divider {
-      display: flex;
-      align-items: center;
-      text-align: center;
-      margin: 22px 0;
-      color: var(--text-dim, #64748b);
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-
-    .divider::before, .divider::after {
-      content: '';
-      flex: 1;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .divider span {
-      padding: 0 12px;
-    }
-
-    /* Google Button Wrapper */
-    .google-btn-wrapper {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 12px;
     }
 
     .forgot-link-wrap {
@@ -270,31 +240,9 @@
 
       <!-- 1. SIGN IN FORM -->
       <form id="form-login">
-        <!-- Gmail Google OAuth Sign-in Button -->
-        <div class="google-btn-wrapper">
-          <div id="g_id_onload"
-               data-client_id="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
-               data-context="signin"
-               data-ux_mode="popup"
-               data-callback="handleGoogleSignIn"
-               data-auto_prompt="false">
-          </div>
-          <div class="g_id_signin"
-               data-type="standard"
-               data-shape="rectangular"
-               data-theme="filled_dark"
-               data-text="signin_with"
-               data-size="large"
-               data-logo_alignment="left"
-               data-width="360">
-          </div>
-        </div>
-
-        <div class="divider"><span>Or Sign In with Email</span></div>
-
         <div class="form-group">
           <label>Gmail / Email Address</label>
-          <input type="email" id="login-email" placeholder="name@domain.com" required autocomplete="email">
+          <input type="email" id="login-email" placeholder="name@gmail.com" required autocomplete="email">
         </div>
 
         <div class="form-group">
@@ -312,11 +260,11 @@
       <form id="form-signup" style="display: none;">
         <div class="form-group">
           <label>Gmail / Email Address</label>
-          <input type="email" id="signup-email" placeholder="student@domain.com" required autocomplete="email">
+          <input type="email" id="signup-email" placeholder="student@gmail.com" required autocomplete="email">
         </div>
 
         <div class="form-group">
-          <label>Create Password (bcrypt encrypted)</label>
+          <label>Create Password (encrypted)</label>
           <input type="password" id="signup-password" placeholder="At least 6 characters" minlength="6" required autocomplete="new-password">
         </div>
 
@@ -337,7 +285,7 @@
 
         <div class="form-group">
           <label>Email Address</label>
-          <input type="email" id="forgot-email" placeholder="name@domain.com" required autocomplete="email">
+          <input type="email" id="forgot-email" placeholder="name@gmail.com" required autocomplete="email">
         </div>
 
         <button type="submit" class="btn-submit" id="btn-forgot-submit">Send Reset Link</button>
@@ -388,29 +336,6 @@
       tabLogin.click();
     };
 
-    // Google Sign-In Callback Handler
-    window.handleGoogleSignIn = async function(response) {
-      try {
-        // Decode JWT token payload from Google
-        const payload = JSON.parse(atob(response.credential.split('.')[1]));
-        const res = await fetch('/api/auth/google', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: payload.email, google_id: payload.sub, credential: response.credential })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          localStorage.setItem('igrid_session', data.token);
-          showToast('Google Sign-in Successful! Redirecting...');
-          setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 1000);
-        } else {
-          showToast(data.error || 'Google Sign-in failed', true);
-        }
-      } catch (err) {
-        showToast('Google Sign-in failed', true);
-      }
-    };
-
     // Form Submissions
     formLogin.onsubmit = async (e) => {
       e.preventDefault();
@@ -427,7 +352,7 @@
         if (res.ok) {
           localStorage.setItem('igrid_session', data.token);
           showToast('Welcome back! Redirecting to dashboard...');
-          setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 800);
+          setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 600);
         } else {
           showToast(data.error || 'Login failed', true);
         }
@@ -457,7 +382,7 @@
         if (res.ok) {
           localStorage.setItem('igrid_session', data.token);
           showToast('Account registered! Redirecting to dashboard...');
-          setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 800);
+          setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 600);
         } else {
           showToast(data.error || 'Registration failed', true);
         }

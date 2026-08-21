@@ -209,7 +209,7 @@ function updateUserNavbarUI() {
   const userNameText = document.getElementById('user-display-name');
   if (state.currentUser) {
     if (userNameText) userNameText.textContent = state.currentUser.email.split('@')[0];
-    if (userRoleBadge) userRoleBadge.textContent = state.currentUser.auth_provider === 'google' ? 'Google Auth' : 'Verified User';
+    if (userRoleBadge) userRoleBadge.textContent = 'Authenticated User';
   }
 }
 

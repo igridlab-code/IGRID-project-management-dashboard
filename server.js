@@ -128,53 +128,7 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
-// 3. GMAIL / GOOGLE OAUTH SIGN-IN
-app.post('/api/auth/google', (req, res) => {
-  const { email, google_id, credential } = req.body;
-
-  if (!email) {
-    return res.status(400).json({ error: 'Google authentication payload invalid. Email required.' });
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-  const gid = google_id || `google_${Date.now()}`;
-
-  db.get('SELECT * FROM auth_users WHERE email = ?', [cleanEmail], (err, user) => {
-    if (err) return res.status(500).json({ error: err.message });
-
-    if (user) {
-      // User exists, update google_id if needed
-      db.run('UPDATE auth_users SET google_id = ? WHERE id = ?', [gid, user.id]);
-      const token = jwt.sign({ id: user.id, email: user.email, auth_provider: 'google' }, JWT_SECRET, { expiresIn: '7d' });
-      return res.json({
-        message: 'Google sign-in successful',
-        token,
-        user: { id: user.id, email: user.email, auth_provider: 'google' }
-      });
-    }
-
-    // User does not exist, create new Google user
-    const sql = `
-      INSERT INTO auth_users (email, google_id, auth_provider)
-      VALUES (?, ?, 'google')
-    `;
-
-    db.run(sql, [cleanEmail, gid], function(err2) {
-      if (err2) return res.status(500).json({ error: err2.message });
-
-      const userId = this.lastID;
-      const token = jwt.sign({ id: userId, email: cleanEmail, auth_provider: 'google' }, JWT_SECRET, { expiresIn: '7d' });
-
-      res.status(201).json({
-        message: 'Google account registered successfully',
-        token,
-        user: { id: userId, email: cleanEmail, auth_provider: 'google' }
-      });
-    });
-  });
-});
-
-// 4. FORGOT PASSWORD (Generate email reset token)
+// 3. FORGOT PASSWORD (Generate email reset token)
 app.post('/api/auth/forgot-password', (req, res) => {
   const { email } = req.body;
 
