@@ -687,8 +687,34 @@ app.get('*', (req, res) => {
   });
 });
 
+// Levenshtein distance helper for fuzzy project name matching
+function levenshteinDistance(a, b) {
+  if (!a || !b) return (a || b || '').length;
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+function normalizeStr(str) {
+  return (str || '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 // ----------------------------------------------------
-// AI CHATBOT ASSISTANT ENDPOINT (CLAUDE API & MULTI-TURN CHATGPT STYLE)
+// AI CHATBOT ASSISTANT ENDPOINT (FUZZY RETRIEVAL & CONVERSATIONAL MEMORY)
 // ----------------------------------------------------
 app.post('/api/chat', requireAuth, async (req, res) => {
   const { message, history } = req.body;
@@ -698,71 +724,170 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
   const isAdmin = req.user.email === 'kaviyaarumugam541@gmail.com' || req.user.role === 'admin';
 
-  // Build Role-Scoped Context
-  let sql = 'SELECT * FROM projects';
-  let params = [];
-  if (!isAdmin && req.user.team_code) {
-    sql += ' WHERE project_code = ? OR team_name LIKE ?';
-    params.push(req.user.team_code, `%${req.user.team_code}%`);
-  }
-
-  db.all(sql, params, async (err, projects) => {
+  // 1. ALWAYS query ALL projects from database for project index lookup
+  db.all('SELECT * FROM projects', [], async (err, projects) => {
     if (err) return res.status(500).json({ error: err.message });
 
     db.all('SELECT * FROM bom_items', [], async (err2, boms) => {
+      const allProjects = projects || [];
       const bomData = boms || [];
-      const projectList = (projects || []).map(p => ({
-        code: p.project_code,
-        title: p.title,
-        status: p.status,
-        progress: p.progress,
-        due_date: p.due_date,
-        priority: p.priority,
-        immediate_action: p.immediate_action,
-        team_name: p.team_name,
-        team_lead: p.team_lead,
-        bom_status: p.bom_status
-      }));
 
-      // 1. Fuzzy Project / Team Name Token Detection
+      const rawQ = message;
       const q = message.toLowerCase();
-      const tokens = q.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !['tell', 'about', 'what', 'whats', 'is', 'the', 'deadline', 'status', 'progress', 'team', 'project', 'our', 'my', 'give', 'show', 'for', 'detail', 'details', 'current'].includes(w));
+      const normQ = normalizeStr(message);
 
-      let matchedProject = null;
-      if (projects && projects.length > 0) {
-        for (const p of projects) {
-          const pCode = (p.project_code || '').toLowerCase();
-          const pTitle = (p.title || '').toLowerCase();
-          const pTeam = (p.team_name || '').toLowerCase();
-          const pLead = (p.team_lead || '').toLowerCase();
+      // Handle Greetings
+      const greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'greetings'];
+      if (greetings.includes(normQ)) {
+        return res.json({
+          reply: "Hello! I'm iGrid Assistant. I know every team's project details across the lab. Ask me about deadlines, status, progress, or team info for any project!"
+        });
+      }
 
-          const isMatch = tokens.some(t =>
-            pCode.includes(t) ||
-            pTitle.includes(t) ||
-            pTeam.includes(t) ||
-            pLead.includes(t) ||
-            (pTeam.replace('team', '').trim().length > 2 && t.includes(pTeam.replace('team', '').trim())) ||
-            (pTitle.split(/[^a-z0-9]/).some(w => w.length >= 3 && t.includes(w)))
-          );
+      // Extract tokens for named matching
+      const stopWords = ['tell', 'about', 'what', 'whats', 'is', 'are', 'the', 'deadline', 'status', 'progress', 'team', 'project', 'our', 'my', 'give', 'show', 'for', 'detail', 'details', 'current', 'which', 'higher', 'lower', 'more', 'less', 'their', 'this', 'that'];
+      const tokens = normQ.split(' ').filter(w => w.length >= 3 && !stopWords.includes(w));
 
-          if (isMatch) {
-            matchedProject = p;
-            break;
+      // 2. Conversational Memory: Scan history for recently discussed project
+      let memoryProject = null;
+      if (Array.isArray(history) && history.length > 0) {
+        for (let i = history.length - 1; i >= 0; i--) {
+          const h = history[i];
+          const hText = (h.content || '').toLowerCase();
+          for (const p of allProjects) {
+            if (hText.includes(p.project_code.toLowerCase()) || hText.includes((p.title || '').toLowerCase())) {
+              memoryProject = p;
+              break;
+            }
           }
+          if (memoryProject) break;
         }
       }
 
-      // Check for explicitly non-existent project query (e.g., "Team Unicorn")
-      const isNamedQuery = (q.includes('team') || q.includes('project') || q.includes('about')) && tokens.length > 0;
-      if (isNamedQuery && !matchedProject) {
-        const notFoundTerm = tokens.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' ');
-        return res.json({ reply: `Couldn't find "${notFoundTerm}" in your project data. Please check the project or team name.` });
+      // 3. Scoring projects for matching
+      const scoredProjects = [];
+      for (const p of allProjects) {
+        const pCode = (p.project_code || '').toLowerCase();
+        const pCodeNorm = normalizeStr(p.project_code);
+        const pTitle = (p.title || '').toLowerCase();
+        const pTitleNorm = normalizeStr(p.title);
+        const pTeam = (p.team_name || '').toLowerCase();
+        const pTeamNorm = normalizeStr(p.team_name);
+        const pLead = (p.team_lead || '').toLowerCase();
+
+        let score = 0;
+
+        // Exact code match
+        if (normQ.includes(pCodeNorm) || q.includes(pCode)) {
+          score += 100;
+        }
+
+        // Title match
+        if (pTitleNorm && (pTitleNorm.includes(normQ) || normQ.includes(pTitleNorm))) {
+          score += 95;
+        } else if (pTitleNorm) {
+          for (const t of tokens) {
+            if (pTitleNorm.includes(t)) {
+              score += 60;
+            }
+          }
+        }
+
+        // Team name match
+        if (pTeamNorm && normQ.includes(pTeamNorm)) {
+          score += 85;
+        } else if (pTeamNorm) {
+          const teamCore = pTeamNorm.replace('team', '').trim();
+          if (teamCore.length >= 3 && normQ.includes(teamCore)) {
+            score += 75;
+          }
+        }
+
+        // Team lead match
+        if (pLead && normQ.includes(normalizeStr(pLead))) {
+          score += 70;
+        }
+
+        // Typo / Levenshtein fuzzy match
+        for (const t of tokens) {
+          if (t.length >= 4) {
+            const titleWords = pTitleNorm.split(' ').concat(pTeamNorm.split(' '));
+            for (const tw of titleWords) {
+              if (tw.length >= 4 && Math.abs(tw.length - t.length) <= 2) {
+                const dist = levenshteinDistance(t, tw);
+                if (dist === 1) score += 65;
+                else if (dist === 2) score += 45;
+              }
+            }
+          }
+        }
+
+        if (score >= 40) {
+          scoredProjects.push({ project: p, score });
+        }
       }
 
-      // Fetch Full Record if matched
+      // Sort scored projects descending
+      scoredProjects.sort((a, b) => b.score - a.score);
+
+      // Check for Disambiguation (Multiple close matches)
+      if (scoredProjects.length >= 2) {
+        const top1 = scoredProjects[0];
+        const top2 = scoredProjects[1];
+        if (top1.score >= 60 && Math.abs(top1.score - top2.score) <= 5 && top1.project.id !== top2.project.id) {
+          return res.json({
+            reply: `Did you mean **${top1.project.title}** (${top1.project.project_code}) or **${top2.project.title}** (${top2.project.project_code})?`
+          });
+        }
+      }
+
+      let matchedProject = null;
+      if (scoredProjects.length > 0 && scoredProjects[0].score >= 50) {
+        matchedProject = scoredProjects[0].project;
+        console.log(`🎯 Chatbot Matched Project: ${matchedProject.project_code} - ${matchedProject.title} (Score: ${scoredProjects[0].score})`);
+      }
+
+      // Handle Follow-up queries using Conversational Memory
+      const isFollowUp = (q.includes('their') || q.includes('it') || q.includes('this project') || q.includes('the deadline') || q.includes('the status') || q.includes('the progress')) && !matchedProject;
+      if (isFollowUp && memoryProject) {
+        matchedProject = memoryProject;
+        console.log(`🔄 Chatbot Resolved Memory Project: ${matchedProject.project_code} - ${matchedProject.title}`);
+      }
+
+      // Handle Non-Existent Project Named Queries ("Team Unicorn")
+      const isNamedQuery = (q.includes('team') || q.includes('project') || q.includes('about')) && tokens.length > 0;
+      if (isNamedQuery && !matchedProject) {
+        // Look for close name suggestion
+        let suggestion = null;
+        for (const p of allProjects) {
+          const pTeamCore = normalizeStr(p.team_name).replace('team', '').trim();
+          const pTitleCore = normalizeStr(p.title);
+          for (const t of tokens) {
+            if (levenshteinDistance(t, pTeamCore) <= 2 || levenshteinDistance(t, pTitleCore) <= 2) {
+              suggestion = p;
+              break;
+            }
+          }
+          if (suggestion) break;
+        }
+
+        const notFoundName = tokens.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' ');
+        if (suggestion) {
+          return res.json({ reply: `Couldn't find "${notFoundName}" in your project data. Did you mean **${suggestion.title}** (${suggestion.team_name || suggestion.project_code})?` });
+        } else {
+          return res.json({ reply: `Couldn't find "${notFoundName}" in your project data. Please check the project or team name.` });
+        }
+      }
+
+      // Default to User's Team if query refers to "my project", "our team", or no project specified for narrow question
+      if (!matchedProject && (q.includes('my') || q.includes('our') || q.includes('my team') || q.includes('my project'))) {
+        matchedProject = allProjects.find(p => p.project_code === req.user.team_code || (p.team_name && p.team_name.includes(req.user.team_code))) || allProjects[0];
+      }
+
+      // Construct Full Record for Matched Project
       let matchedFullRecord = null;
       if (matchedProject) {
-        const projBoms = (bomData || []).filter(b => b.project_code === matchedProject.project_code);
+        const projBoms = bomData.filter(b => b.project_code === matchedProject.project_code);
         matchedFullRecord = {
           code: matchedProject.project_code,
           title: matchedProject.title,
@@ -783,25 +908,48 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         };
       }
 
-      const allNames = (projects || []).map(p => ({ code: p.project_code, title: p.title, team: p.team_name }));
+      // Multi-Team Intents: Comparison Query Detection
+      let comparisonProjects = [];
+      if (q.includes('compare') || q.includes('versus') || q.includes('vs') || (q.includes('higher progress') || q.includes('lower progress') || q.includes('between'))) {
+        if (scoredProjects.length >= 2 && scoredProjects[0].score >= 40 && scoredProjects[1].score >= 40) {
+          comparisonProjects = [scoredProjects[0].project, scoredProjects[1].project];
+        }
+      }
+
+      // Status / Filter Queries
+      let statusFilterResult = null;
+      if (q.includes('which team') || q.includes('which project') || q.includes('show all') || q.includes('list all')) {
+        if (q.includes('completed')) {
+          statusFilterResult = allProjects.filter(p => p.status === 'completed');
+        } else if (q.includes('progress') || q.includes('prototyping')) {
+          statusFilterResult = allProjects.filter(p => p.status === 'in_progress');
+        } else if (q.includes('testing')) {
+          statusFilterResult = allProjects.filter(p => p.status === 'testing');
+        } else if (q.includes('queue') || q.includes('not started') || q.includes('delayed')) {
+          statusFilterResult = allProjects.filter(p => p.status === 'in_queue' || (p.progress < 50 && p.status !== 'completed'));
+        }
+      }
 
       const systemPrompt = `You are iGrid Assistant, a knowledgeable project coordinator who knows every team's details well — like a helpful senior team member, not a robotic bot.
 
-When a user mentions a project or team name, retrieve and present that project's full details in a natural, human, conversational way — organized clearly (like a quick briefing), not a wall of raw JSON and not a dry bullet dump either. Example tone: 'Team Falcon is at 65% progress, on track for the March 15 deadline. Current status: in development. Last review note: needs UI testing before submission.'
+When a user mentions a project or team name, retrieve and present that project's full details in a natural, human, conversational way — organized clearly (like a quick briefing), not a wall of raw JSON and not a dry bullet dump.
 
 Rules:
 - Use ONLY the data provided below — never invent or guess details.
-- Speak naturally and confidently, like someone who actually knows the project, not like you're reading a database.
-- If asked a broad question ('tell me about Team Falcon'), give a full natural summary covering deadline, status, progress, and recent comments.
-- If asked a specific question ('what's Team Falcon's deadline'), answer that specifically and briefly, still in natural phrasing — not just the bare value.
-- If the project/team name isn't found in the data, say so clearly and ask them to check the name, rather than guessing.
+- Speak naturally and confidently, like someone who actually knows the project.
+- If asked a broad question ('tell me about Enviora'), give a full natural summary covering deadline, status, progress, and recent comments.
+- If asked a specific question ('what's Enviora's deadline'), answer that specifically and briefly in natural phrasing.
+- If comparing projects, highlight progress % and status differences clearly.
+- If the project/team name isn't found in the data, say so clearly and ask them to check the name.
 - Don't mention being an AI, a language model, or any other chatbot/company by name.
-- Keep responses conversational but not padded — natural sentences, no unnecessary filler phrases like 'Great question!' or 'I'd be happy to help.'
+- Keep responses conversational but direct.
 
 User Role: ${isAdmin ? 'Lab Administrator' : 'Team Member'}
 DATA: ${JSON.stringify({
   matchedProject: matchedFullRecord || null,
-  allProjectNames: allNames
+  comparisonProjects: comparisonProjects.map(p => ({ code: p.project_code, title: p.title, team: p.team_name, status: p.status, progress: p.progress, due: p.due_date })),
+  filteredProjects: statusFilterResult ? statusFilterResult.map(p => ({ code: p.project_code, title: p.title, team: p.team_name, status: p.status, progress: p.progress })) : null,
+  allProjectNames: allProjects.map(p => ({ code: p.project_code, title: p.title, team: p.team_name }))
 }, null, 2)}`;
 
       // Construct Multi-Turn Messages Payload
@@ -824,7 +972,7 @@ DATA: ${JSON.stringify({
             },
             body: JSON.stringify({
               model: 'claude-3-5-sonnet-20241022',
-              max_tokens: matchedFullRecord ? 350 : 80,
+              max_tokens: 350,
               system: systemPrompt,
               messages: messageHistory
             })
@@ -841,7 +989,13 @@ DATA: ${JSON.stringify({
 
       // Direct Natural Fallback Reasoning Engine
       let reply = '';
-      if (matchedFullRecord) {
+      if (comparisonProjects.length >= 2) {
+        const p1 = comparisonProjects[0];
+        const p2 = comparisonProjects[1];
+        reply = `Comparing **${p1.title}** (${p1.progress}% progress, Status: ${p1.status}) vs **${p2.title}** (${p2.progress}% progress, Status: ${p2.status}): ${p1.progress >= p2.progress ? `${p1.title} has higher progress.` : `${p2.title} has higher progress.`}`;
+      } else if (statusFilterResult) {
+        reply = `Found ${statusFilterResult.length} matching project(s):\n` + statusFilterResult.map(p => `• **${p.project_code}** (${p.title}): ${p.progress}% progress [${p.status.toUpperCase()}]`).join('\n');
+      } else if (matchedFullRecord) {
         const p = matchedFullRecord;
         if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
           reply = `${p.title} (${p.code}) is due on ${p.due_date || 'TBD'}.`;
@@ -849,18 +1003,13 @@ DATA: ${JSON.stringify({
           reply = `${p.title} (${p.code}) is currently at ${p.progress}% completion.`;
         } else if (q.includes('status')) {
           reply = `${p.title} (${p.code}) status is ${p.status.toUpperCase()}.`;
+        } else if (q.includes('github') || q.includes('repo')) {
+          reply = p.github_repo ? `GitHub Repo for ${p.title} (${p.code}): ${p.github_repo}` : `No GitHub repository link logged for ${p.title}.`;
+        } else if (q.includes('doc') || q.includes('report')) {
+          reply = p.doc_url ? `Technical Report link for ${p.title} (${p.code}): ${p.doc_url}` : `No technical report link logged for ${p.title}.`;
         } else {
           reply = `${p.team_name || p.title} (${p.code}) is at ${p.progress}% progress, due ${p.due_date || 'TBD'}. Current status: ${p.status}. Immediate action: ${p.immediate_action || 'None logged'}.`;
         }
-      } else if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
-        const topProjects = projectList.slice(0, 3);
-        reply = topProjects.length > 0 ? topProjects.map(p => `${p.code} (${p.title}): Due ${p.due_date || 'TBD'}`).join('. ') + '.' : 'Not available in your project data.';
-      } else if (q.includes('progress') || q.includes('percent')) {
-        const topProjects = projectList.slice(0, 3);
-        reply = topProjects.length > 0 ? topProjects.map(p => `${p.code}: ${p.progress}% completed`).join('. ') + '.' : 'Not available in your project data.';
-      } else if (q.includes('status')) {
-        const topProjects = projectList.slice(0, 3);
-        reply = topProjects.length > 0 ? topProjects.map(p => `${p.code} status: ${p.status}`).join('. ') + '.' : 'Not available in your project data.';
       } else {
         reply = 'Not available in your project data.';
       }
