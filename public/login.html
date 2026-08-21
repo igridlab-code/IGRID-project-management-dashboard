@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Google OAuth Identity Services SDK -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body {
       margin: 0;
@@ -240,6 +242,32 @@
 
       <!-- 1. SIGN IN FORM -->
       <form id="form-login">
+        <!-- Gmail Google OAuth Sign-in Button -->
+        <div style="display:flex; justify-content:center; margin-bottom:14px;">
+          <div id="g_id_onload"
+               data-client_id="845239102834-igridlab.apps.googleusercontent.com"
+               data-context="signin"
+               data-ux_mode="popup"
+               data-callback="handleGoogleSignIn"
+               data-auto_prompt="false">
+          </div>
+          <div class="g_id_signin"
+               data-type="standard"
+               data-shape="rectangular"
+               data-theme="filled_dark"
+               data-text="signin_with"
+               data-size="large"
+               data-logo_alignment="left"
+               data-width="360">
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; text-align:center; margin:16px 0; color:var(--text-dim,#64748b); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">
+          <span style="flex:1; border-bottom:1px solid rgba(255,255,255,0.1);"></span>
+          <span style="padding:0 10px;">Or Sign In with Email</span>
+          <span style="flex:1; border-bottom:1px solid rgba(255,255,255,0.1);"></span>
+        </div>
+
         <div class="form-group">
           <label>Gmail / Email Address</label>
           <input type="email" id="login-email" placeholder="name@gmail.com" required autocomplete="email">
@@ -332,8 +360,26 @@
       formLogin.style.display = 'none'; formSignup.style.display = 'none'; formForgot.style.display = 'block';
     };
 
-    linkBackToLogin.onclick = () => {
-      tabLogin.click();
+    // Google Sign-In Callback Handler
+    window.handleGoogleSignIn = async function(response) {
+      try {
+        const payload = JSON.parse(atob(response.credential.split('.')[1]));
+        const res = await fetch('/api/auth/google', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: payload.email, google_id: payload.sub, credential: response.credential })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          localStorage.setItem('igrid_session', data.token);
+          showToast('Google Sign-in Successful! Redirecting...');
+          setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 800);
+        } else {
+          showToast(data.error || 'Google Sign-in failed', true);
+        }
+      } catch (err) {
+        showToast('Google Sign-in failed', true);
+      }
     };
 
     // Form Submissions

@@ -1,7 +1,0 @@
-{
-  "tunnel_mode": "ngrok",
-  "ngrok_domain": "kabob-suspect-mandate.ngrok-free.dev",
-  "ngrok_token": "3Hr56NkQmK7fScedP090Ry6c8ll_78W6QjADbCB92cWhD8ZpT",
-  "custom_domain": "https://kabob-suspect-mandate.ngrok-free.dev",
-  "port": 3000
-}

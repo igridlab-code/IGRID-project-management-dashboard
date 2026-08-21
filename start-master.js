@@ -61,8 +61,13 @@ savePublicUrl(PERMANENT_PUBLIC_URL, true);
 let serverProcess = null;
 function startServer() {
   log('Starting Express backend server (server.js)...');
+  const env = { ...process.env };
+  if (config.anthropic_api_key) {
+    env.ANTHROPIC_API_KEY = config.anthropic_api_key;
+  }
   serverProcess = spawn('node', ['server.js'], {
     cwd: projectDir,
+    env,
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
