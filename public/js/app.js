@@ -278,7 +278,7 @@ function initChatbotWidget() {
     // Append Loading Indicator
     const botLoading = document.createElement('div');
     botLoading.className = 'chat-msg bot-msg';
-    botLoading.textContent = '⏳ Thinking...';
+    botLoading.textContent = '⏳ Fetching live project data...';
     messagesBox.appendChild(botLoading);
     messagesBox.scrollTop = messagesBox.scrollHeight;
 
