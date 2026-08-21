@@ -125,6 +125,9 @@ app.post('/api/auth/login', (req, res) => {
       token,
       user: { id: user.id, email: user.email, auth_provider: user.auth_provider }
     });
+  });
+});
+
 // 3. GMAIL / GOOGLE OAUTH SIGN-IN
 app.post('/api/auth/google', (req, res) => {
   const { email, google_id } = req.body;
