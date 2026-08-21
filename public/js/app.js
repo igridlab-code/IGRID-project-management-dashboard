@@ -1406,47 +1406,92 @@ async function openProjectDetail(projectId) {
     const res = await fetch(`/api/projects/${projectId}`);
     const project = await res.json();
 
-    document.getElementById('detail-code').textContent = project.project_code;
-    document.getElementById('detail-domain').textContent = project.domain;
-    document.getElementById('detail-priority').textContent = `${project.priority} Priority`;
-    document.getElementById('detail-priority').className = `badge ${project.priority === 'High' ? 'badge-high' : (project.priority === 'Normal' ? 'badge-normal' : 'badge-low')}`;
+    document.getElementById('detail-code').textContent = project.project_code || 'IGRID-PROJ';
+    document.getElementById('detail-domain').textContent = project.domain || 'General';
+    
+    // Priority Badge (Fix "undefined Priority" bug)
+    const priorityVal = project.priority || 'Normal';
+    const priorityBadge = document.getElementById('detail-priority');
+    priorityBadge.textContent = `${priorityVal} Priority`;
+    priorityBadge.className = `badge ${priorityVal === 'High' ? 'badge-high' : (priorityVal === 'Normal' ? 'badge-normal' : 'badge-low')}`;
     
     // Hero image
     const heroWrap = document.getElementById('detail-hero-img-wrap');
     const heroImg = document.getElementById('detail-hero-img');
-    if (project.image_url) {
-      heroImg.src = project.image_url;
+    if (project.image_url && project.image_url.trim()) {
+      heroImg.src = project.image_url.trim();
       heroWrap.style.display = 'block';
     } else {
       heroWrap.style.display = 'none';
     }
 
-    document.getElementById('detail-title').textContent = project.title;
-    document.getElementById('detail-desc').textContent = project.description || 'No description provided.';
-    document.getElementById('detail-action-item').textContent = project.immediate_action || 'No blocker specified.';
-    
-    document.getElementById('detail-progress-val').textContent = `${project.progress || 0}%`;
-    document.getElementById('detail-progress-fill').style.width = `${project.progress || 0}%`;
+    // Title & Description
+    document.getElementById('detail-title').textContent = project.title || 'Untitled Project';
+    const descText = (project.description && project.description.trim()) ? project.description.trim() : 'No description provided.';
+    document.getElementById('detail-desc').textContent = descText;
 
-    document.getElementById('detail-status').textContent = formatStatus(project.status);
-    document.getElementById('detail-due-date').textContent = formatDate(project.due_date);
+    // Immediate Action / Blocker
+    const actionText = (project.immediate_action && project.immediate_action.trim()) ? project.immediate_action.trim() : 'No blocker specified.';
+    document.getElementById('detail-action-item').textContent = actionText;
+    
+    // Progress %
+    const progVal = typeof project.progress === 'number' ? project.progress : (parseInt(project.progress, 10) || 0);
+    document.getElementById('detail-progress-val').textContent = `${progVal}%`;
+    document.getElementById('detail-progress-fill').style.width = `${Math.min(100, Math.max(0, progVal))}%`;
+
+    // Status & Timeline
+    document.getElementById('detail-status').textContent = formatStatus(project.status || 'in_progress');
+    
+    let timelineText = formatDate(project.due_date);
+    if (project.start_date) {
+      timelineText = `${formatDate(project.start_date)} → ${timelineText}`;
+    }
+    document.getElementById('detail-due-date').textContent = timelineText || 'No due date set';
+
+    // Team & Lead, and Team Members List
     document.getElementById('detail-team').textContent = `${project.team_name || 'Team'} (${project.team_lead || 'Lead'})`;
+    
+    let membersText = 'No team members listed';
+    if (Array.isArray(project.team_members) && project.team_members.length > 0) {
+      membersText = project.team_members.map(m => typeof m === 'object' ? (m.name || m.email || JSON.stringify(m)) : String(m)).join(', ');
+    } else if (typeof project.team_members === 'string' && project.team_members.trim()) {
+      membersText = project.team_members.trim();
+    }
+    const teamMembersEl = document.getElementById('detail-team-members');
+    if (teamMembersEl) teamMembersEl.textContent = membersText;
+
+    // BOM Status
     document.getElementById('detail-bom-status').textContent = project.bom_status || 'Not Required';
 
-    // Media Buttons
+    // Media Buttons (GitHub, Technical Report, Video Demo, LinkedIn)
     const mediaBar = document.getElementById('detail-media-bar');
     const mediaList = [];
-    if (project.github_repo) mediaList.push(`<a href="${project.github_repo}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github">🐙 GitHub Repo</a>`);
-    if (project.youtube_url) mediaList.push(`<a href="${project.youtube_url}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube">🎥 Video Demo</a>`);
-    if (project.linkedin_url) mediaList.push(`<a href="${project.linkedin_url}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin">💼 LinkedIn Post</a>`);
-    if (project.doc_url) mediaList.push(`<a href="${project.doc_url}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc">📄 View Technical Report</a>`);
-    else mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.6; cursor: not-allowed;" title="No technical report link added yet">📄 No report uploaded yet</span>`);
+    if (project.github_repo && project.github_repo.trim()) {
+      mediaList.push(`<a href="${project.github_repo.trim()}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github">🐙 GitHub Repo</a>`);
+    } else {
+      mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.5; cursor: default;" title="No GitHub repository link added">🐙 No GitHub Link</span>`);
+    }
+
+    if (project.doc_url && project.doc_url.trim()) {
+      mediaList.push(`<a href="${project.doc_url.trim()}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc">📄 View Technical Report</a>`);
+    } else {
+      mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.5; cursor: default;" title="No technical report link added yet">📄 No report uploaded yet</span>`);
+    }
+
+    if (project.youtube_url && project.youtube_url.trim()) {
+      mediaList.push(`<a href="${project.youtube_url.trim()}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube">🎥 Video Demo</a>`);
+    }
+
+    if (project.linkedin_url && project.linkedin_url.trim()) {
+      mediaList.push(`<a href="${project.linkedin_url.trim()}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin">💼 LinkedIn Post</a>`);
+    }
     mediaBar.innerHTML = mediaList.join('');
 
+    // Deliverables
     const deliverablesWrap = document.getElementById('detail-deliverables-wrapper');
-    if (project.deliverables) {
+    if (project.deliverables && project.deliverables.trim()) {
       deliverablesWrap.style.display = 'flex';
-      document.getElementById('detail-deliverables').textContent = project.deliverables;
+      document.getElementById('detail-deliverables').textContent = project.deliverables.trim();
     } else {
       deliverablesWrap.style.display = 'none';
     }
@@ -1483,7 +1528,7 @@ async function openProjectDetail(projectId) {
     renderProjectComments(project.activities || []);
     openModal(DOM.detailModal);
   } catch (err) {
-    console.error(err);
+    console.error('Error in openProjectDetail:', err);
     showToast('Failed to open project details', 'error');
   }
 }
@@ -1677,6 +1722,9 @@ async function handleProjectFormSubmit(e) {
       await Promise.all([fetchProjects(), fetchNotifications()]);
       renderAllViews();
       updateStatsSummary();
+      if (id && String(state.activeProjectId) === String(id)) {
+        await openProjectDetail(id);
+      }
     } else {
       const errData = await res.json().catch(() => ({}));
       console.error('❌ Server rejection when saving project:', res.status, errData);
