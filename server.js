@@ -7,8 +7,26 @@ const jwt = require('jsonwebtoken');
 const { db, initDb } = require('./database');
 
 const app = express();
+const fs = require('fs');
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'igrid_lab_dashboard_session_secret_2026_auth';
+
+// Load Config file if present
+let localConfig = {};
+try {
+  localConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
+} catch (e) {}
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || localConfig.google_client_id || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || localConfig.google_client_secret || '';
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || localConfig.google_redirect_uri || 'https://kabob-suspect-mandate.ngrok-free.dev/api/auth/google/callback';
+
+function getMaskedClientId(id) {
+  if (!id || id.trim().length === 0) return '⚠️ UNDEFINED / NOT CONFIGURED';
+  const clean = id.trim();
+  if (clean.length <= 12) return '****' + clean.substring(clean.length - 4);
+  return clean.substring(0, 6) + '****' + clean.substring(clean.length - 12);
+}
 
 // Initialize Database
 initDb();
@@ -18,6 +36,17 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+
+// Public Google OAuth Configuration Endpoint
+app.get('/api/auth/google/config', (req, res) => {
+  res.json({
+    client_id: GOOGLE_CLIENT_ID,
+    masked_client_id: getMaskedClientId(GOOGLE_CLIENT_ID),
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    client_secret_configured: !!GOOGLE_CLIENT_SECRET,
+    is_configured: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID.includes('.apps.googleusercontent.com'))
+  });
+});
 
 // ----------------------------------------------------
 // AUTHENTICATION MIDDLEWARE & GATING
@@ -847,5 +876,8 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 IGRID Innovation Lab PM Dashboard is running!`);
   console.log(`🌐 Local Access:   http://localhost:${PORT}`);
   console.log(`📡 Network/Docker: http://0.0.0.0:${PORT}`);
+  console.log(`🔑 Google Client ID: ${getMaskedClientId(GOOGLE_CLIENT_ID)}`);
+  console.log(`🔐 Google Client Secret: ${GOOGLE_CLIENT_SECRET ? '✅ DEFINED / CONFIGURED' : '⚠️ UNDEFINED'}`);
+  console.log(`🔗 Google Redirect URI:  ${GOOGLE_REDIRECT_URI}`);
   console.log(`====================================================`);
 });

@@ -242,25 +242,8 @@
 
       <!-- 1. SIGN IN FORM -->
       <form id="form-login">
-        <!-- Gmail Google OAuth Sign-in Button -->
-        <div style="display:flex; justify-content:center; margin-bottom:14px;">
-          <div id="g_id_onload"
-               data-client_id="845239102834-igridlab.apps.googleusercontent.com"
-               data-context="signin"
-               data-ux_mode="popup"
-               data-callback="handleGoogleSignIn"
-               data-auto_prompt="false">
-          </div>
-          <div class="g_id_signin"
-               data-type="standard"
-               data-shape="rectangular"
-               data-theme="filled_dark"
-               data-text="signin_with"
-               data-size="large"
-               data-logo_alignment="left"
-               data-width="360">
-          </div>
-        </div>
+        <!-- Gmail Google OAuth Sign-in Button Container (Dynamically Initialized) -->
+        <div id="google-btn-container" style="display:flex; justify-content:center; margin-bottom:14px;"></div>
 
         <div style="display:flex; align-items:center; text-align:center; margin:16px 0; color:var(--text-dim,#64748b); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">
           <span style="flex:1; border-bottom:1px solid rgba(255,255,255,0.1);"></span>
@@ -381,6 +364,41 @@
         showToast('Google Sign-in failed', true);
       }
     };
+
+    // Dynamic Google OAuth Button Initializer
+    async function initGoogleOAuth() {
+      const container = document.getElementById('google-btn-container');
+      if (!container) return;
+
+      try {
+        const res = await fetch('/api/auth/google/config');
+        const config = await res.json();
+
+        if (config.is_configured && window.google && window.google.accounts) {
+          google.accounts.id.initialize({
+            client_id: config.client_id,
+            callback: window.handleGoogleSignIn
+          });
+          google.accounts.id.renderButton(container, {
+            type: 'standard',
+            shape: 'rectangular',
+            theme: 'filled_dark',
+            text: 'signin_with',
+            size: 'large',
+            logo_alignment: 'left',
+            width: 360
+          });
+        } else {
+          container.innerHTML = `
+            <div style="font-size:11px; color:#94a3b8; background:rgba(255,255,255,0.05); border:1px dashed rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; width:100%; text-align:center;">
+              🔑 Google OAuth Client ID Not Configured in Env (${config.masked_client_id})<br>Sign in directly using your Email / Gmail & Password below.
+            </div>
+          `;
+        }
+      } catch(e) {}
+    }
+
+    window.addEventListener('load', initGoogleOAuth);
 
     // Form Submissions
     formLogin.onsubmit = async (e) => {
