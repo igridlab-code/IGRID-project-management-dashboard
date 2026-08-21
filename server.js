@@ -1,10 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { db, initDb } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'igrid_lab_dashboard_session_secret_2026_auth';
 
 // Initialize Database
 initDb();
@@ -13,14 +17,242 @@ initDb();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // ----------------------------------------------------
-// API ROUTES
+// AUTHENTICATION MIDDLEWARE & GATING
 // ----------------------------------------------------
 
-// 1. GET ALL PROJECTS
-app.get('/api/projects', (req, res) => {
+function requireAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = (authHeader && authHeader.split(' ')[1]) || req.headers['x-access-token'] || req.query.token;
+
+  if (!token) {
+    if (req.path.startsWith('/api/')) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
+    return res.redirect('/login');
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      if (req.path.startsWith('/api/')) {
+        return res.status(401).json({ error: 'Session expired or invalid token.' });
+      }
+      return res.redirect('/login');
+    }
+    req.user = user;
+    next();
+  });
+}
+
+// ----------------------------------------------------
+// AUTHENTICATION ROUTES (UNPROTECTED)
+// ----------------------------------------------------
+
+// Serve Login / Signup Page
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// 1. SIGNUP (Email + Password with bcrypt hashing)
+app.post('/api/auth/signup', (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+  }
+
+  // Hash password using bcrypt (NEVER PLAINTEXT)
+  const hash = bcrypt.hashSync(password, 10);
+
+  const sql = `
+    INSERT INTO auth_users (email, password_hash, auth_provider)
+    VALUES (?, ?, 'email')
+  `;
+
+  db.run(sql, [cleanEmail, hash], function(err) {
+    if (err) {
+      if (err.message.includes('UNIQUE')) {
+        return res.status(400).json({ error: 'An account with this email address already exists.' });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+
+    const userId = this.lastID;
+    const token = jwt.sign({ id: userId, email: cleanEmail, auth_provider: 'email' }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.status(201).json({
+      message: 'Account created successfully',
+      token,
+      user: { id: userId, email: cleanEmail, auth_provider: 'email' }
+    });
+  });
+});
+
+// 2. LOGIN (Email + Password verification)
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+
+  db.get('SELECT * FROM auth_users WHERE email = ?', [cleanEmail], (err, user) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    if (!user || !user.password_hash) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    // Verify hashed password with bcrypt
+    const match = bcrypt.compareSync(password, user.password_hash);
+    if (!match) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email, auth_provider: user.auth_provider }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      message: 'Login successful',
+      token,
+      user: { id: user.id, email: user.email, auth_provider: user.auth_provider }
+    });
+  });
+});
+
+// 3. GMAIL / GOOGLE OAUTH SIGN-IN
+app.post('/api/auth/google', (req, res) => {
+  const { email, google_id, credential } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Google authentication payload invalid. Email required.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const gid = google_id || `google_${Date.now()}`;
+
+  db.get('SELECT * FROM auth_users WHERE email = ?', [cleanEmail], (err, user) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    if (user) {
+      // User exists, update google_id if needed
+      db.run('UPDATE auth_users SET google_id = ? WHERE id = ?', [gid, user.id]);
+      const token = jwt.sign({ id: user.id, email: user.email, auth_provider: 'google' }, JWT_SECRET, { expiresIn: '7d' });
+      return res.json({
+        message: 'Google sign-in successful',
+        token,
+        user: { id: user.id, email: user.email, auth_provider: 'google' }
+      });
+    }
+
+    // User does not exist, create new Google user
+    const sql = `
+      INSERT INTO auth_users (email, google_id, auth_provider)
+      VALUES (?, ?, 'google')
+    `;
+
+    db.run(sql, [cleanEmail, gid], function(err2) {
+      if (err2) return res.status(500).json({ error: err2.message });
+
+      const userId = this.lastID;
+      const token = jwt.sign({ id: userId, email: cleanEmail, auth_provider: 'google' }, JWT_SECRET, { expiresIn: '7d' });
+
+      res.status(201).json({
+        message: 'Google account registered successfully',
+        token,
+        user: { id: userId, email: cleanEmail, auth_provider: 'google' }
+      });
+    });
+  });
+});
+
+// 4. FORGOT PASSWORD (Generate email reset token)
+app.post('/api/auth/forgot-password', (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email address is required.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+
+  db.get('SELECT * FROM auth_users WHERE email = ?', [cleanEmail], (err, user) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    if (!user) {
+      // For security, return success even if email not found
+      return res.json({ message: 'If an account exists for that email, a password reset link has been generated.' });
+    }
+
+    // Generate secure random reset token expiring in 1 hour
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 3600000).toISOString(); // 1 hour
+
+    db.run('UPDATE auth_users SET reset_token = ?, reset_token_expires = ? WHERE id = ?', [resetToken, expires, user.id], (err2) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+
+      res.json({
+        message: 'Password reset link generated successfully.',
+        reset_token: resetToken,
+        reset_url: `/login?reset_token=${resetToken}`
+      });
+    });
+  });
+});
+
+// 5. RESET PASSWORD (Verify token and update password)
+app.post('/api/auth/reset-password', (req, res) => {
+  const { reset_token, new_password } = req.body;
+
+  if (!reset_token || !new_password) {
+    return res.status(400).json({ error: 'Reset token and new password are required.' });
+  }
+
+  if (new_password.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+  }
+
+  const now = new Date().toISOString();
+
+  db.get('SELECT * FROM auth_users WHERE reset_token = ? AND reset_token_expires > ?', [reset_token, now], (err, user) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired password reset token.' });
+    }
+
+    const newHash = bcrypt.hashSync(new_password, 10);
+
+    db.run(
+      'UPDATE auth_users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
+      [newHash, user.id],
+      (err2) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        res.json({ message: 'Password has been reset successfully. You can now log in with your new password.' });
+      }
+    );
+  });
+});
+
+// 6. GET CURRENT SESSION
+app.get('/api/auth/session', requireAuth, (req, res) => {
+  res.json({ user: req.user });
+});
+
+// ----------------------------------------------------
+// PROTECTED DASHBOARD API ROUTES
+// ----------------------------------------------------
+
+// GET ALL PROJECTS
+app.get('/api/projects', requireAuth, (req, res) => {
   const { domain, status, tag, search, sort, priority } = req.query;
   let sql = 'SELECT * FROM projects WHERE 1=1';
   const params = [];
@@ -81,8 +313,8 @@ app.get('/api/projects', (req, res) => {
   });
 });
 
-// 2. GET SINGLE PROJECT WITH BOM & ACTIVITIES
-app.get('/api/projects/:id', (req, res) => {
+// GET SINGLE PROJECT WITH BOM & ACTIVITIES
+app.get('/api/projects/:id', requireAuth, (req, res) => {
   const { id } = req.params;
   db.get('SELECT * FROM projects WHERE id = ?', [id], (err, project) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -111,8 +343,8 @@ app.get('/api/projects/:id', (req, res) => {
   });
 });
 
-// 3. CREATE PROJECT
-app.post('/api/projects', (req, res) => {
+// CREATE PROJECT
+app.post('/api/projects', requireAuth, (req, res) => {
   const {
     project_code, title, description, domain, tags, status, priority,
     progress, start_date, due_date, immediate_action, github_repo,
@@ -151,8 +383,8 @@ app.post('/api/projects', (req, res) => {
   );
 });
 
-// 4. UPDATE PROJECT
-app.put('/api/projects/:id', (req, res) => {
+// UPDATE PROJECT
+app.put('/api/projects/:id', requireAuth, (req, res) => {
   const { id } = req.params;
   const {
     title, description, domain, tags, status, priority,
@@ -206,8 +438,8 @@ app.put('/api/projects/:id', (req, res) => {
   );
 });
 
-// 5. UPDATE PROJECT STATUS (DRAG-AND-DROP WORKFLOW)
-app.put('/api/projects/:id/status', (req, res) => {
+// UPDATE PROJECT STATUS
+app.put('/api/projects/:id/status', requireAuth, (req, res) => {
   const { id } = req.params;
   const { status, progress } = req.body;
 
@@ -243,8 +475,8 @@ app.put('/api/projects/:id/status', (req, res) => {
   });
 });
 
-// 6. DELETE PROJECT
-app.delete('/api/projects/:id', (req, res) => {
+// DELETE PROJECT
+app.delete('/api/projects/:id', requireAuth, (req, res) => {
   const { id } = req.params;
   db.run('DELETE FROM projects WHERE id = ?', [id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
@@ -252,16 +484,16 @@ app.delete('/api/projects/:id', (req, res) => {
   });
 });
 
-// 7. GET STUDENTS
-app.get('/api/students', (req, res) => {
+// GET STUDENTS
+app.get('/api/students', requireAuth, (req, res) => {
   db.all('SELECT * FROM students ORDER BY name ASC', [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
 });
 
-// 8. ADD STUDENT
-app.post('/api/students', (req, res) => {
+// ADD STUDENT
+app.post('/api/students', requireAuth, (req, res) => {
   const { name, roll_no, email, department, year, role, skills, avatar_color, avatar_initials, photo_url } = req.body;
   if (!name || !roll_no) return res.status(400).json({ error: 'Name and Roll No are required.' });
 
@@ -279,8 +511,8 @@ app.post('/api/students', (req, res) => {
   });
 });
 
-// 9. GET BOM ITEMS
-app.get('/api/bom', (req, res) => {
+// GET BOM ITEMS
+app.get('/api/bom', requireAuth, (req, res) => {
   const { status, project_code } = req.query;
   let sql = 'SELECT * FROM bom_items WHERE 1=1';
   const params = [];
@@ -302,8 +534,8 @@ app.get('/api/bom', (req, res) => {
   });
 });
 
-// 10. SUBMIT BOM ITEM
-app.post('/api/bom', (req, res) => {
+// SUBMIT BOM ITEM
+app.post('/api/bom', requireAuth, (req, res) => {
   const {
     project_code, item_name, part_number, category, quantity,
     unit_price, supplier_url, datasheet_url, justification, submitted_by
@@ -336,8 +568,8 @@ app.post('/api/bom', (req, res) => {
   );
 });
 
-// 11. APPROVE / REJECT BOM ITEM
-app.put('/api/bom/:id/status', (req, res) => {
+// APPROVE / REJECT BOM ITEM
+app.put('/api/bom/:id/status', requireAuth, (req, res) => {
   const { id } = req.params;
   const { status, admin_remarks } = req.body;
 
@@ -358,8 +590,8 @@ app.put('/api/bom/:id/status', (req, res) => {
   });
 });
 
-// 12. ADD COMMENT / ACTIVITY
-app.post('/api/projects/:id/comments', (req, res) => {
+// ADD COMMENT / ACTIVITY
+app.post('/api/projects/:id/comments', requireAuth, (req, res) => {
   const { id } = req.params;
   const { author, author_role, message } = req.body;
 
@@ -377,8 +609,8 @@ app.post('/api/projects/:id/comments', (req, res) => {
   });
 });
 
-// 13. ANALYTICS & STATS DASHBOARD
-app.get('/api/analytics', (req, res) => {
+// ANALYTICS & STATS DASHBOARD
+app.get('/api/analytics', requireAuth, (req, res) => {
   const stats = {};
 
   db.all('SELECT status, COUNT(*) as count, AVG(progress) as avg_progress FROM projects GROUP BY status', [], (err, statusRows) => {
@@ -422,8 +654,8 @@ app.get('/api/analytics', (req, res) => {
   });
 });
 
-// 14. EXPORT TO JSON
-app.get('/api/export/json', (req, res) => {
+// EXPORT TO JSON
+app.get('/api/export/json', requireAuth, (req, res) => {
   db.all('SELECT * FROM projects', [], (err, projects) => {
     if (err) return res.status(500).json({ error: err.message });
     db.all('SELECT * FROM bom_items', [], (err, boms) => {
@@ -447,8 +679,8 @@ app.get('/api/export/json', (req, res) => {
   });
 });
 
-// 15. EXPORT TO CSV
-app.get('/api/export/csv', (req, res) => {
+// EXPORT TO CSV
+app.get('/api/export/csv', requireAuth, (req, res) => {
   db.all('SELECT project_code, title, domain, tags, status, priority, progress, start_date, due_date, immediate_action, github_repo, youtube_url, linkedin_url, bom_status, team_name, team_lead FROM projects', [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
 
@@ -483,9 +715,22 @@ app.get('/api/export/csv', (req, res) => {
   });
 });
 
-// Catch-all route to serve SPA
+// Gated SPA Route Catch-All
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  // Check authorization header, cookie, or token parameter
+  const authHeader = req.headers['authorization'];
+  const token = (authHeader && authHeader.split(' ')[1]) || req.headers['x-access-token'] || req.query.token;
+
+  if (!token) {
+    return res.redirect('/login');
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.redirect('/login');
+    }
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  });
 });
 
 // Start Server

@@ -121,6 +121,20 @@ function initDb() {
       )
     `);
 
+    // Authentication Users Table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS auth_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT,
+        google_id TEXT,
+        auth_provider TEXT DEFAULT 'email',
+        reset_token TEXT,
+        reset_token_expires DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Seed Initial Data if empty
     db.get('SELECT COUNT(*) as count FROM projects', (err, row) => {
       if (err) return console.error(err);

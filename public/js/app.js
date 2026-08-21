@@ -147,8 +147,77 @@ const DOM = {
 // ----------------------------------------------------
 // INITIALIZATION
 // ----------------------------------------------------
+// Session Authorization Helper & Redirect Gate
+function getSessionToken() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const queryToken = urlParams.get('token');
+  if (queryToken) {
+    localStorage.setItem('igrid_session', queryToken);
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return queryToken;
+  }
+  return localStorage.getItem('igrid_session');
+}
+
+async function checkSessionOrRedirect() {
+  const token = getSessionToken();
+  if (!token) {
+    window.location.href = '/login';
+    return false;
+  }
+  try {
+    const res = await fetch('/api/auth/session', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      localStorage.removeItem('igrid_session');
+      window.location.href = '/login';
+      return false;
+    }
+    const data = await res.json();
+    state.currentUser = data.user;
+    updateUserNavbarUI();
+    return true;
+  } catch (err) {
+    window.location.href = '/login';
+    return false;
+  }
+}
+
+async function authFetch(url, options = {}) {
+  const token = getSessionToken();
+  if (!token) {
+    window.location.href = '/login';
+    throw new Error('Unauthenticated');
+  }
+
+  const headers = options.headers || {};
+  headers['Authorization'] = `Bearer ${token}`;
+  options.headers = headers;
+
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    localStorage.removeItem('igrid_session');
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+  return res;
+}
+
+function updateUserNavbarUI() {
+  const userRoleBadge = document.getElementById('user-display-role');
+  const userNameText = document.getElementById('user-display-name');
+  if (state.currentUser) {
+    if (userNameText) userNameText.textContent = state.currentUser.email.split('@')[0];
+    if (userRoleBadge) userRoleBadge.textContent = state.currentUser.auth_provider === 'google' ? 'Google Auth' : 'Verified User';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
+  const authenticated = await checkSessionOrRedirect();
+  if (!authenticated) return;
+
   initEventListeners();
   await loadAllData();
   initTunnelPoller();
@@ -248,17 +317,17 @@ async function fetchProjects() {
   if (state.searchQuery) params.append('search', state.searchQuery);
   if (state.sortBy) params.append('sort', state.sortBy);
 
-  const res = await fetch(`/api/projects?${params.toString()}`);
+  const res = await authFetch(`/api/projects?${params.toString()}`);
   state.projects = await res.json();
 }
 
 async function fetchStudents() {
-  const res = await fetch('/api/students');
+  const res = await authFetch('/api/students');
   state.students = await res.json();
 }
 
 async function fetchBoms() {
-  const res = await fetch('/api/bom');
+  const res = await authFetch('/api/bom');
   state.boms = await res.json();
 }
 
