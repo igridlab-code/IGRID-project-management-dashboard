@@ -688,10 +688,10 @@ app.get('*', (req, res) => {
 });
 
 // ----------------------------------------------------
-// AI CHATBOT ASSISTANT ENDPOINT (CLAUDE API)
+// AI CHATBOT ASSISTANT ENDPOINT (CLAUDE API & MULTI-TURN CHATGPT STYLE)
 // ----------------------------------------------------
 app.post('/api/chat', requireAuth, async (req, res) => {
-  const { message } = req.body;
+  const { message, history } = req.body;
   if (!message) {
     return res.status(400).json({ error: 'Message is required.' });
   }
@@ -725,15 +725,29 @@ app.post('/api/chat', requireAuth, async (req, res) => {
       }));
 
       const contextSummary = {
-        role: isAdmin ? 'Lab Administrator (Lab-Wide Context Access)' : `Student / Team Member (${req.user.team_code || req.user.email})`,
+        role: isAdmin ? 'Lab Administrator (Lab-Wide Access)' : `Student / Team Member (${req.user.team_code || req.user.email})`,
         visible_projects_count: projectList.length,
         projects: projectList,
         boms_summary: bomData.map(b => ({ item: b.item_name, project: b.project_code, status: b.status, qty: b.quantity, price: b.total_price }))
       };
 
-      const systemPrompt = `You are the IGRID Innovation Lab AI Assistant. Answer questions accurately based ONLY on the provided project context.\nRole: ${contextSummary.role}\nProject Context:\n${JSON.stringify(contextSummary, null, 2)}`;
+      const systemPrompt = `You are the IGRID Innovation Lab AI Assistant, an intelligent conversational AI like ChatGPT.
+You assist student innovators and lab coordinators with project tracking, hardware engineering, coding (ROS2, Python, C++, OpenCV, IoT, Embedded, AI), and lab workflows.
+Use the provided role-scoped project context when relevant, but also answer general technical, coding, and engineering questions helpfully and accurately.
 
-      // Check if Anthropic API Key is present in environment
+User Role: ${contextSummary.role}
+Visible Project Context:
+${JSON.stringify(contextSummary, null, 2)}`;
+
+      // Construct Multi-Turn Messages Payload
+      const messageHistory = Array.isArray(history) ? history.map(h => ({
+        role: h.role === 'user' ? 'user' : 'assistant',
+        content: String(h.content || '')
+      })) : [];
+
+      messageHistory.push({ role: 'user', content: message });
+
+      // Call Anthropic Claude API if key present
       if (process.env.ANTHROPIC_API_KEY) {
         try {
           const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -745,9 +759,9 @@ app.post('/api/chat', requireAuth, async (req, res) => {
             },
             body: JSON.stringify({
               model: 'claude-3-5-sonnet-20241022',
-              max_tokens: 1000,
+              max_tokens: 1200,
               system: systemPrompt,
-              messages: [{ role: 'user', content: message }]
+              messages: messageHistory
             })
           });
 
@@ -760,20 +774,22 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         }
       }
 
-      // Intelligent Fallback Assistant Engine using Context Reasoning
+      // Conversational Fallback Engine (ChatGPT-Style Multi-Turn Reasoning)
       const q = message.toLowerCase();
       let reply = '';
 
-      if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
+      if (q.includes('ros2') || q.includes('node') || q.includes('publisher') || q.includes('subscriber')) {
+        reply = `🧠 **ROS2 Engineering Guide:**\nIn ROS 2 (Robot Operating System), nodes communicate via Publishers and Subscribers:\n\`\`\`python\nimport rclpy\nfrom rclpy.node import Node\nfrom std_msgs.msg import String\n\nclass LabSensorNode(Node):\n    def __init__(self):\n        super().__init__('lab_sensor_node')\n        self.pub = self.create_publisher(String, 'sensor_data', 10)\n\`\`\`\nNeed assistance implementing this in your team's ROS2 project? Let me know!`;
+      } else if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
         reply = `📅 **Project Deadlines (${contextSummary.role}):**\n` + projectList.map(p => `• **${p.code}** (${p.title}): Due **${p.due_date || 'TBD'}** [Status: ${p.status}]`).join('\n');
       } else if (q.includes('progress') || q.includes('status') || q.includes('completed')) {
         reply = `📊 **Completion Status (${contextSummary.role}):**\n` + projectList.map(p => `• **${p.code}**: ${p.progress}% completed (Status: ${p.status.toUpperCase()})`).join('\n');
-      } else if (q.includes('bom') || q.includes('hardware') || q.includes('price') || q.includes('requisition')) {
+      } else if (q.includes('bom') || q.includes('hardware') || q.includes('price') || q.includes('component')) {
         reply = `🛒 **BOM Hardware Requisitions (${contextSummary.role}):**\n` + (bomData.length > 0 ? bomData.map(b => `• **${b.item_name}** (${b.project_code}): Qty ${b.quantity} - ₹${b.total_price} [Status: ${b.status}]`).join('\n') : 'No active BOM requisitions found.');
       } else if (q.includes('action') || q.includes('blocker') || q.includes('next')) {
         reply = `⚡ **Immediate Action Items:**\n` + projectList.map(p => `• **${p.code}**: ${p.immediate_action || 'No immediate action logged.'}`).join('\n');
       } else {
-        reply = `🤖 **IGRID Lab AI Assistant (${contextSummary.role}):**\nI have access to ${projectList.length} visible project(s):\n` + projectList.map(p => `• **${p.code}** - ${p.title} (${p.progress}% progress, due ${p.due_date})`).join('\n') + `\n\nAsk me about deadlines, completion progress, BOM hardware, or next action items!`;
+        reply = `🤖 **IGRID Lab AI Assistant (${contextSummary.role}):**\nI'm ready to help you like ChatGPT with both your lab projects and technical questions!\n\n• **Visible Projects (${projectList.length})**: ${projectList.map(p => p.code).join(', ')}\n• **Capabilities**: Project deadline tracking, BOM requisitions, ROS2 coding, Python/C++, Microcontroller circuit design, and AI debugging.\n\nWhat would you like to build or troubleshoot today?`;
       }
 
       res.json({ reply });

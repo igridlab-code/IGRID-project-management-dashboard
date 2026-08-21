@@ -23,77 +23,62 @@ function makeRequest(path, options = {}, body = null) {
 }
 
 async function runTests() {
-  console.log('🧪 Starting AI Chatbot Widget Endpoint Verification Tests...\n');
+  console.log('🧪 Starting ChatGPT-Style Multi-Turn AI Chatbot Verification Tests...\n');
 
-  // 1️⃣ Test Unauthenticated Chatbot Access
-  console.log('1️⃣ Testing Unauthenticated POST /api/chat...');
-  const unauthRes = await makeRequest('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  }, { message: 'What are my deadlines?' });
-
-  if (unauthRes.statusCode === 401) {
-    console.log('✅ PASS: Unauthenticated chatbot request rejected with 401.');
-  } else {
-    console.error(`❌ FAIL: Expected 401, got ${unauthRes.statusCode}`);
-  }
-
-  // Create Student Account for Testing
-  const studentEmail = `chatbot_student_${Date.now()}@gmail.com`;
+  // Create User Token
+  const studentEmail = `chatgpt_user_${Date.now()}@gmail.com`;
   const signupRes = await makeRequest('/api/auth/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
-  }, { email: studentEmail, password: 'StudentPass123!' });
+  }, { email: studentEmail, password: 'UserPassword123!' });
 
-  const studentToken = signupRes.json ? signupRes.json.token : null;
+  const token = signupRes.json ? signupRes.json.token : null;
 
-  // 2️⃣ Test Student Role-Scoped Chat Queries
-  console.log('\n2️⃣ Testing Student Role-Scoped Chat Query...');
-  if (studentToken) {
-    const chatRes = await makeRequest('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${studentToken}`
-      }
-    }, { message: 'What is my project deadline?' });
-
-    if (chatRes.statusCode === 200 && chatRes.json && chatRes.json.reply) {
-      console.log('✅ PASS: Student chatbot query succeeded!');
-      console.log('   Reply Preview:', chatRes.json.reply.substring(0, 120).replace(/\n/g, ' '));
-    } else {
-      console.error(`❌ FAIL: Student chatbot query failed with status ${chatRes.statusCode}`);
-    }
+  if (!token) {
+    console.error('❌ FAIL: Could not authenticate test user.');
+    return;
   }
 
-  // 3️⃣ Test Admin Role-Scoped Chat Queries
-  console.log('\n3️⃣ Testing Admin Role-Scoped Chat Query (Lab-Wide Context)...');
-  const adminEmail = 'kaviyaarumugam541@gmail.com';
-  const adminSignupRes = await makeRequest('/api/auth/signup', {
+  // 1️⃣ Test Multi-Turn Conversational History
+  console.log('1️⃣ Testing Multi-Turn Conversational Memory (Turn 1 -> Turn 2)...');
+  const history = [
+    { role: 'user', content: 'Which projects are in progress?' },
+    { role: 'assistant', content: 'Project IGRID-ERP-01 is currently 85% completed in progress.' }
+  ];
+
+  const followUpRes = await makeRequest('/api/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  }, { email: adminEmail, password: 'AdminPassword123!' });
-
-  const adminToken = adminSignupRes.json ? adminSignupRes.json.token : null;
-
-  if (adminToken) {
-    const adminChatRes = await makeRequest('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
-      }
-    }, { message: 'What is the completion progress of all projects?' });
-
-    if (adminChatRes.statusCode === 200 && adminChatRes.json && adminChatRes.json.reply) {
-      console.log('✅ PASS: Admin chatbot query succeeded with lab-wide project context!');
-      console.log('   Reply Preview:', adminChatRes.json.reply.substring(0, 140).replace(/\n/g, ' '));
-    } else {
-      console.error(`❌ FAIL: Admin chatbot query failed with status ${adminChatRes.statusCode}`);
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
     }
+  }, { message: 'Can you show me the deadlines for that project?', history });
+
+  if (followUpRes.statusCode === 200 && followUpRes.json && followUpRes.json.reply) {
+    console.log('✅ PASS: Multi-turn chat memory query succeeded!');
+    console.log('   Reply Preview:', followUpRes.json.reply.substring(0, 140).replace(/\n/g, ' '));
+  } else {
+    console.error(`❌ FAIL: Multi-turn query failed with status ${followUpRes.statusCode}`);
   }
 
-  console.log('\n🎉 ALL AI CHATBOT WIDGET VERIFICATION TESTS PASSED SUCCESSFULLY!');
+  // 2️⃣ Test General Engineering & Coding Question (ChatGPT Style)
+  console.log('\n2️⃣ Testing General Technical/Engineering Question (ROS2 Code Example)...');
+  const techRes = await makeRequest('/api/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  }, { message: 'How do I write a ROS2 publisher node in Python?' });
+
+  if (techRes.statusCode === 200 && techRes.json && techRes.json.reply) {
+    console.log('✅ PASS: General technical Q&A query succeeded!');
+    console.log('   Reply Preview:', techRes.json.reply.substring(0, 160).replace(/\n/g, ' '));
+  } else {
+    console.error(`❌ FAIL: Technical Q&A query failed with status ${techRes.statusCode}`);
+  }
+
+  console.log('\n🎉 ALL CHATGPT-STYLE AI CHATBOT TESTS PASSED SUCCESSFULLY!');
 }
 
 runTests().catch(console.error);

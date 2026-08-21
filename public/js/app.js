@@ -224,6 +224,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   initChatbotWidget();
 });
 
+let chatHistory = [];
+
+function parseMarkdownChat(text) {
+  if (!text) return '';
+  let html = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.*?)`/g, '<code style="background:rgba(0,0,0,0.4); padding:2px 5px; border-radius:4px; font-family:monospace;">$1</code>')
+    .replace(/\n/g, '<br>');
+  return html;
+}
+
 function initChatbotWidget() {
   const toggleBtn = document.getElementById('chatbot-toggle-btn');
   const panel = document.getElementById('chatbot-panel');
@@ -260,6 +272,9 @@ function initChatbotWidget() {
     input.value = '';
     messagesBox.scrollTop = messagesBox.scrollHeight;
 
+    // Add user message to history
+    chatHistory.push({ role: 'user', content: query });
+
     // Append Loading Indicator
     const botLoading = document.createElement('div');
     botLoading.className = 'chat-msg bot-msg';
@@ -271,10 +286,12 @@ function initChatbotWidget() {
       const res = await authFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: query })
+        body: JSON.stringify({ message: query, history: chatHistory })
       });
       const data = await res.json();
-      botLoading.textContent = data.reply || 'No response from assistant.';
+      const reply = data.reply || 'No response from assistant.';
+      botLoading.innerHTML = parseMarkdownChat(reply);
+      chatHistory.push({ role: 'assistant', content: reply });
     } catch(err) {
       botLoading.textContent = '⚠️ Failed to connect to AI assistant.';
     }
