@@ -696,7 +696,7 @@
 
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="cancel-project-btn">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="save-project-btn" disabled>💾 Save Project</button>
+          <button type="submit" class="btn btn-primary" id="save-project-btn">Save Project</button>
         </div>
       </form>
     </div>
@@ -728,16 +728,15 @@
           <!-- Immediate Action Box -->
           <div class="detail-action-box">
             <span class="action-icon">⚡</span>
-            <div class="action-content">
-              <strong>Immediate Next Action Item:</strong>
+            <div>
+              <strong>Immediate Action Item / Blocker:</strong>
               <p id="detail-action-item">Action item text</p>
             </div>
           </div>
 
-          <!-- Progress -->
           <div class="detail-progress-card">
             <div class="progress-info-row">
-              <span>Overall Completion Progress</span>
+              <span>Sprint Completion Progress</span>
               <strong id="detail-progress-val">68%</strong>
             </div>
             <div class="progress-bar-track">
@@ -792,7 +791,7 @@
             <form id="add-comment-form" class="comment-input-row">
               <input type="text" id="comment-author" placeholder="Your Name" value="Lab Coordinator" style="width: 160px;" required>
               <input type="text" id="comment-text" placeholder="Write an update, question, or milestone note..." required>
-              <button type="submit" class="btn btn-primary" id="save-comment-btn" disabled>💬 Post</button>
+              <button type="submit" class="btn btn-primary">Post</button>
             </form>
           </div>
         </div>
@@ -861,9 +860,9 @@
           </div>
 
           <div class="form-row">
-            <div class="form-group col-3">
-              <label for="bom-part-number">Part Number</label>
-              <input type="text" id="bom-part-number" placeholder="e.g. A2M8">
+            <div class="form-group col-6">
+              <label for="bom-part-no">Manufacturer Part Number (MPN)</label>
+              <input type="text" id="bom-part-no" placeholder="e.g. RPLIDAR-A2M8">
             </div>
             <div class="form-group col-3">
               <label for="bom-quantity">Quantity *</label>
@@ -898,13 +897,13 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="cancel-bom-btn">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="save-bom-btn" disabled>🛒 Submit for Lab Approval</button>
+          <button type="submit" class="btn btn-primary">Submit for Lab Approval</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- 5. REGISTER STUDENT MODAL -->
+  <!-- 5. ADD STUDENT MODAL -->
   <div class="modal-overlay" id="student-modal">
     <div class="modal-card">
       <div class="modal-header">
@@ -916,41 +915,27 @@
           <div class="form-row">
             <div class="form-group col-6">
               <label for="student-name">Full Name *</label>
-              <input type="text" id="student-name" placeholder="e.g. Ananya Rao" required>
+              <input type="text" id="student-name" placeholder="e.g. Rahul Sharma" required>
             </div>
             <div class="form-group col-6">
-              <label for="student-roll-no">Roll Number / Register ID *</label>
-              <input type="text" id="student-roll-no" placeholder="e.g. 811221104008" required>
+              <label for="student-roll">Roll Number *</label>
+              <input type="text" id="student-roll" placeholder="e.g. 22RA019" required>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group col-6">
               <label for="student-email">Email Address</label>
-              <input type="email" id="student-email" placeholder="ananya@igridlab.com">
+              <input type="email" id="student-email" placeholder="rahul@igrid.lab">
             </div>
             <div class="form-group col-6">
-              <label for="student-role">Project Role</label>
-              <select id="student-role">
-                <option value="Lead Developer">Lead Developer / Hardware Architect</option>
-                <option value="AI & Perception Lead">AI & Perception Lead</option>
-                <option value="ROS2 Software Lead">ROS2 Software Lead</option>
-                <option value="Embedded Systems Engineer">Embedded Systems Engineer</option>
-                <option value="Power & Electronics Lead">Power & Electronics Lead</option>
-                <option value="Mechanical Designer">Mechanical Designer (CAD/3D)</option>
-                <option value="Member">Student Innovator Member</option>
-              </select>
+              <label for="student-dept">Department</label>
+              <input type="text" id="student-dept" placeholder="Robotics / AI / ECE / ME">
             </div>
           </div>
           <div class="form-row">
             <div class="form-group col-6">
-              <label for="student-dept">Department</label>
-              <select id="student-dept">
-                <option value="Robotics & Automation">Robotics & Automation</option>
-                <option value="Computer Science & AI">Computer Science & AI</option>
-                <option value="Electrical & Electronics">Electrical & Electronics</option>
-                <option value="Electronics & Comm">Electronics & Comm</option>
-                <option value="Mechanical Engineering">Mechanical Engineering</option>
-              </select>
+              <label for="student-role">Lab Role</label>
+              <input type="text" id="student-role" placeholder="e.g. Firmware Engineer">
             </div>
             <div class="form-group col-6">
               <label for="student-year">Academic Year</label>
@@ -968,7 +953,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="cancel-student-btn">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="save-student-btn" disabled>👤 Save Student</button>
+          <button type="submit" class="btn btn-primary">Save Student</button>
         </div>
       </form>
     </div>
@@ -1076,23 +1061,6 @@
       <div class="chatbot-input-bar">
         <input type="text" id="chatbot-input" placeholder="Ask about deadlines, BOM, status..." autocomplete="off">
         <button id="chatbot-send-btn" class="btn btn-primary" style="padding: 8px 14px; font-size:12px;">Send</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Universal Delete Confirmation Modal -->
-  <div class="modal" id="confirm-modal" style="display:none;">
-    <div class="modal-content modal-sm">
-      <div class="modal-header">
-        <h3 id="confirm-modal-title">⚠️ Confirmation Required</h3>
-        <button class="modal-close" id="close-confirm-modal">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p id="confirm-modal-message" style="font-size:14px; line-height:1.5; color:var(--text-main);">Are you sure? This can't be undone</p>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="btn-confirm-cancel" autofocus>Cancel</button>
-        <button class="btn btn-danger" id="btn-confirm-proceed">Confirm & Delete</button>
       </div>
     </div>
   </div>

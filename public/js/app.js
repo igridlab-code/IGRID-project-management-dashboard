@@ -222,11 +222,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadAllData();
   initTunnelPoller();
   initChatbotWidget();
-
-  bindFormDirtyStateAndEnterSave('project-form', 'save-project-btn');
-  bindFormDirtyStateAndEnterSave('bom-form', 'save-bom-btn');
-  bindFormDirtyStateAndEnterSave('student-form', 'save-student-btn');
-  bindFormDirtyStateAndEnterSave('add-comment-form', 'save-comment-btn');
 });
 
 let chatHistory = [];
@@ -304,57 +299,13 @@ function initChatbotWidget() {
     messagesBox.scrollTop = messagesBox.scrollHeight;
   }
 
-function bindFormDirtyStateAndEnterSave(formId, submitBtnId) {
-  const form = document.getElementById(formId);
-  const submitBtn = document.getElementById(submitBtnId);
-  if (!form || !submitBtn) return;
-
-  let initialValues = getFormValueSnapshot(form);
-
-  function getFormValueSnapshot(f) {
-    const data = {};
-    const inputs = f.querySelectorAll('input, select, textarea');
-    inputs.forEach(i => {
-      if (i.id || i.name) {
-        data[i.id || i.name] = i.type === 'checkbox' ? i.checked : i.value;
-      }
-    });
-    return data;
+  if (sendBtn) sendBtn.onclick = handleSendChat;
+  if (input) {
+    input.onkeyup = (e) => {
+      if (e.key === 'Enter') handleSendChat();
+    };
   }
-
-  function checkDirty() {
-    const current = getFormValueSnapshot(form);
-    let dirty = false;
-    for (let k in current) {
-      if (current[k] !== initialValues[k]) {
-        dirty = true;
-        break;
-      }
-    }
-    submitBtn.disabled = !dirty;
-  }
-
-  form.resetDirtyState = () => {
-    initialValues = getFormValueSnapshot(form);
-    submitBtn.disabled = true;
-  };
-
-  form.addEventListener('input', checkDirty);
-  form.addEventListener('change', checkDirty);
-
-  // Enter Key Triggers Save
-  form.querySelectorAll('input[type="text"], input[type="number"], input[type="url"], input[type="date"], input[type="email"]').forEach(inp => {
-    inp.addEventListener('keyup', (e) => {
-      if (e.key === 'Enter' && !submitBtn.disabled) {
-        form.requestSubmit();
-      }
-    });
-  });
-
-  submitBtn.disabled = true;
 }
-
-window.bindFormDirtyStateAndEnterSave = bindFormDirtyStateAndEnterSave;
 
 function initTheme() {
   const savedTheme = localStorage.getItem('igrid_theme') || 'dark';
@@ -1590,7 +1541,6 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   document.getElementById('form-due-date').value = nextMonth.toISOString().split('T')[0];
 
   openModal(DOM.projectModal);
-  if (DOM.projectForm && DOM.projectForm.resetDirtyState) setTimeout(() => DOM.projectForm.resetDirtyState(), 50);
 }
 
 function openProjectModalForEdit(project) {
@@ -1616,19 +1566,11 @@ function openProjectModalForEdit(project) {
   document.getElementById('form-deliverables').value = project.deliverables || '';
 
   openModal(DOM.projectModal);
-  if (DOM.projectForm && DOM.projectForm.resetDirtyState) setTimeout(() => DOM.projectForm.resetDirtyState(), 50);
 }
 
 async function handleProjectFormSubmit(e) {
   e.preventDefault();
   const id = document.getElementById('form-project-id').value;
-  const saveBtn = document.getElementById('save-project-btn');
-  const originalHtml = saveBtn ? saveBtn.innerHTML : '💾 Save Project';
-
-  if (saveBtn) {
-    saveBtn.innerHTML = '⏳ Saving...';
-    saveBtn.disabled = true;
-  }
 
   const payload = {
     project_code: document.getElementById('form-code').value.trim(),
@@ -1654,13 +1596,13 @@ async function handleProjectFormSubmit(e) {
   try {
     let res;
     if (id) {
-      res = await authFetch(`/api/projects/${id}`, {
+      res = await fetch(`/api/projects/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
     } else {
-      res = await authFetch('/api/projects', {
+      res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1669,7 +1611,7 @@ async function handleProjectFormSubmit(e) {
 
     if (res.ok) {
       closeModal(DOM.projectModal);
-      showToast(id ? '✨ Project updated successfully' : '✨ New project created successfully', 'success');
+      showToast(id ? 'Project updated successfully' : 'New project created successfully');
       await Promise.all([fetchProjects(), fetchNotifications()]);
       renderAllViews();
       updateStatsSummary();
@@ -1679,115 +1621,21 @@ async function handleProjectFormSubmit(e) {
     }
   } catch (err) {
     showToast('Failed to save project', 'error');
-  } finally {
-    if (saveBtn) {
-      saveBtn.innerHTML = originalHtml;
-      saveBtn.disabled = true;
-    }
   }
 }
-
-// Universal Confirmation Dialog for Delete Actions
-function confirmDeleteDialog({ title = '⚠️ Confirmation Required', message = "Are you sure? This can't be undone", onConfirm }) {
-  const modal = document.getElementById('confirm-modal');
-  const titleEl = document.getElementById('confirm-modal-title');
-  const msgEl = document.getElementById('confirm-modal-message');
-  const proceedBtn = document.getElementById('btn-confirm-proceed');
-  const cancelBtn = document.getElementById('btn-confirm-cancel');
-  const closeBtn = document.getElementById('close-confirm-modal');
-
-  if (!modal) return;
-
-  if (titleEl) titleEl.textContent = title;
-  if (msgEl) msgEl.textContent = message;
-
-  openModal(modal);
-
-  // Focus Cancel button by default to prevent accidental deletion on Enter
-  if (cancelBtn) {
-    setTimeout(() => cancelBtn.focus(), 50);
-  }
-
-  const cleanup = () => {
-    closeModal(modal);
-    proceedBtn.removeEventListener('click', handleProceed);
-  };
-
-  const handleProceed = () => {
-    cleanup();
-    if (onConfirm) onConfirm();
-  };
-
-  proceedBtn.addEventListener('click', handleProceed);
-  cancelBtn.onclick = cleanup;
-  closeBtn.onclick = cleanup;
-}
-
-// Global helpers for removing photos, videos, team members, comments, and BOM items
-window.confirmDeleteDialog = confirmDeleteDialog;
-
-window.confirmClearPhoto = (onClear) => {
-  confirmDeleteDialog({
-    title: '🖼️ Remove Photo',
-    message: "Are you sure? This can't be undone",
-    onConfirm: onClear
-  });
-};
-
-window.confirmClearVideo = (onClear) => {
-  confirmDeleteDialog({
-    title: '🎥 Remove Video',
-    message: "Are you sure? This can't be undone",
-    onConfirm: onClear
-  });
-};
-
-window.confirmRemoveTeamMember = (memberName, onRemove) => {
-  confirmDeleteDialog({
-    title: '👥 Remove Team Member',
-    message: `Are you sure you want to remove ${memberName}? This can't be undone`,
-    onConfirm: onRemove
-  });
-};
-
-window.confirmDeleteComment = (commentId, onDelete) => {
-  confirmDeleteDialog({
-    title: '💬 Delete Comment',
-    message: "Are you sure? This can't be undone",
-    onConfirm: onDelete
-  });
-};
-
-window.confirmDeleteBomItem = (bomId, onDelete) => {
-  confirmDeleteDialog({
-    title: '🛒 Delete BOM Item',
-    message: "Are you sure? This can't be undone",
-    onConfirm: onDelete
-  });
-};
 
 async function deleteProject(id) {
-  confirmDeleteDialog({
-    title: '⚠️ Delete Project Entry',
-    message: "Are you sure? This can't be undone",
-    onConfirm: async () => {
-      try {
-        const res = await authFetch(`/api/projects/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-          showToast('Project deleted', 'info');
-          if (DOM.detailModal) closeModal(DOM.detailModal);
-          await Promise.all([fetchProjects(), fetchNotifications()]);
-          renderAllViews();
-          updateStatsSummary();
-        } else {
-          const err = await res.json();
-          showToast(err.error || 'Failed to delete project', 'error');
-        }
-      } catch (err) {
-        showToast('Failed to delete project', 'error');
-      }
+  try {
+    const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast('Project deleted');
+      await Promise.all([fetchProjects(), fetchNotifications()]);
+      renderAllViews();
+      updateStatsSummary();
     }
-  });
+  } catch (err) {
+    showToast('Failed to delete project', 'error');
+  }
 }
 
 async function updateProjectField(id, field, value) {
@@ -1809,41 +1657,6 @@ async function updateProjectField(id, field, value) {
   }
 }
 
-async function handleCommentSubmit(e) {
-  e.preventDefault();
-  const author = document.getElementById('comment-author').value.trim();
-  const message = document.getElementById('comment-text').value.trim();
-  const saveBtn = document.getElementById('save-comment-btn');
-  const originalHtml = saveBtn ? saveBtn.innerHTML : '💬 Post';
-
-  if (!message || !state.activeProjectId) return;
-
-  if (saveBtn) {
-    saveBtn.innerHTML = '⏳ Saving...';
-    saveBtn.disabled = true;
-  }
-
-  try {
-    const res = await authFetch(`/api/projects/${state.activeProjectId}/comments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ author, author_role: 'Coordinator', message })
-    });
-    if (res.ok) {
-      document.getElementById('comment-text').value = '';
-      openProjectDetail(state.activeProjectId);
-      showToast('✨ Comment posted', 'success');
-    }
-  } catch (err) {
-    showToast('Failed to post comment', 'error');
-  } finally {
-    if (saveBtn) {
-      saveBtn.innerHTML = originalHtml;
-      saveBtn.disabled = true;
-    }
-  }
-}
-
 // ----------------------------------------------------
 // BOM SUBMISSION & APPROVALS
 // ----------------------------------------------------
@@ -1853,23 +1666,14 @@ function openBomModal(preselectedCode = null) {
     DOM.bomProjectCodeSelect.value = preselectedCode;
   }
   openModal(DOM.bomModal);
-  if (DOM.bomForm && DOM.bomForm.resetDirtyState) setTimeout(() => DOM.bomForm.resetDirtyState(), 50);
 }
 
 async function handleBomFormSubmit(e) {
   e.preventDefault();
-  const saveBtn = document.getElementById('save-bom-btn');
-  const originalHtml = saveBtn ? saveBtn.innerHTML : '🛒 Submit for Lab Approval';
-
-  if (saveBtn) {
-    saveBtn.innerHTML = '⏳ Saving...';
-    saveBtn.disabled = true;
-  }
-
   const payload = {
     project_code: DOM.bomProjectCodeSelect.value,
     item_name: document.getElementById('bom-item-name').value.trim(),
-    part_number: document.getElementById('bom-part-number') ? document.getElementById('bom-part-number').value.trim() : (document.getElementById('bom-part-no') ? document.getElementById('bom-part-no').value.trim() : ''),
+    part_number: document.getElementById('bom-part-no').value.trim(),
     category: document.getElementById('bom-category').value,
     quantity: Number(document.getElementById('bom-quantity').value) || 1,
     unit_price: Number(document.getElementById('bom-unit-price').value) || 0,
@@ -1880,36 +1684,31 @@ async function handleBomFormSubmit(e) {
   };
 
   try {
-    const res = await authFetch('/api/bom', {
+    const res = await fetch('/api/bom', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     if (res.ok) {
       closeModal(DOM.bomModal);
-      showToast('✨ BOM Requisition submitted for lab approval', 'success');
+      showToast('BOM Requisition submitted for lab approval');
       await Promise.all([fetchBoms(), fetchProjects(), fetchNotifications()]);
       renderAllViews();
     }
   } catch (err) {
     showToast('Failed to submit BOM', 'error');
-  } finally {
-    if (saveBtn) {
-      saveBtn.innerHTML = originalHtml;
-      saveBtn.disabled = true;
-    }
   }
 }
 
 async function updateBomStatus(bomId, status) {
   try {
-    const res = await authFetch(`/api/bom/${bomId}/status`, {
+    const res = await fetch(`/api/bom/${bomId}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, admin_remarks: `Set to ${status} by Lab In-Charge` })
     });
     if (res.ok) {
-      showToast(`BOM item marked as ${status}`, 'success');
+      showToast(`BOM item marked as ${status}`);
       await Promise.all([fetchBoms(), fetchNotifications()]);
       renderAllViews();
     }
@@ -1923,17 +1722,9 @@ async function updateBomStatus(bomId, status) {
 // ----------------------------------------------------
 async function handleStudentFormSubmit(e) {
   e.preventDefault();
-  const saveBtn = document.getElementById('save-student-btn');
-  const originalHtml = saveBtn ? saveBtn.innerHTML : '👤 Save Student';
-
-  if (saveBtn) {
-    saveBtn.innerHTML = '⏳ Saving...';
-    saveBtn.disabled = true;
-  }
-
   const payload = {
     name: document.getElementById('student-name').value.trim(),
-    roll_no: document.getElementById('student-roll-no') ? document.getElementById('student-roll-no').value.trim() : (document.getElementById('student-roll') ? document.getElementById('student-roll').value.trim() : ''),
+    roll_no: document.getElementById('student-roll').value.trim(),
     email: document.getElementById('student-email').value.trim(),
     department: document.getElementById('student-dept').value.trim(),
     role: document.getElementById('student-role').value.trim(),
@@ -1943,25 +1734,20 @@ async function handleStudentFormSubmit(e) {
   };
 
   try {
-    const res = await authFetch('/api/students', {
+    const res = await fetch('/api/students', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     if (res.ok) {
       closeModal(DOM.studentModal);
-      showToast('✨ Student registered successfully', 'success');
+      showToast('Student registered successfully');
       await fetchStudents();
       renderStudents();
       updateStatsSummary();
     }
   } catch (err) {
     showToast('Failed to register student', 'error');
-  } finally {
-    if (saveBtn) {
-      saveBtn.innerHTML = originalHtml;
-      saveBtn.disabled = true;
-    }
   }
 }
 
