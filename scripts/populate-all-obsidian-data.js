@@ -235,6 +235,14 @@ files.forEach((file, idx) => {
   const tags = generateTags(numId, title, domain);
   const heroImage = prototypeImages[numId] || prototypeImages["01"];
 
+  const teamMembersObj = parsed.students.map((s, sIdx) => ({
+    name: s.name,
+    reg_no: s.reg_no,
+    dept: s.dept,
+    role: sIdx === 0 ? 'Team Lead' : 'Innovator Member',
+    photo: studentPhotos[(idx * 3 + sIdx) % studentPhotos.length]
+  }));
+
   allProjects.push({
     project_code,
     title,
@@ -256,7 +264,7 @@ files.forEach((file, idx) => {
     team_name: teamName,
     team_lead: teamLead,
     team_lead_photo: leadPhoto,
-    team_members: JSON.stringify(parsed.students.map(s => s.name)),
+    team_members: JSON.stringify(teamMembersObj),
     deliverables: JSON.stringify([
       "Working Hardware Prototype / Software Build",
       "System Architecture & Documentation",

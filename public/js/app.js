@@ -563,10 +563,12 @@ function renderExecutiveShowcase() {
 
     // Team Member Avatars
     const members = Array.isArray(p.team_members) ? p.team_members : [];
-    let memberAvatarsHTML = members.slice(0, 3).map(m => `
-      <img src="${m.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name)}&background=8b5cf6&color=fff`}" 
-           class="avatar-badge" title="${m.name} (${m.role || 'Member'})" alt="${m.name}">
-    `).join('');
+    let memberAvatarsHTML = members.slice(0, 3).map(m => {
+      const mName = typeof m === 'object' && m ? (m.name || 'Student') : String(m);
+      const mRole = typeof m === 'object' && m ? (m.role || 'Member') : 'Member';
+      const mPhoto = (typeof m === 'object' && m && m.photo) ? m.photo : `https://ui-avatars.com/api/?name=${encodeURIComponent(mName)}&background=8b5cf6&color=fff`;
+      return `<img src="${mPhoto}" class="avatar-badge" title="${escapeHTML(mName)} (${mRole})" alt="${escapeHTML(mName)}">`;
+    }).join('');
 
     // Check if project has pending BOM
     const hasPendingBOM = p.bom_status === 'Submitted';
@@ -663,15 +665,20 @@ async function openSpotlightPresentation(projectId) {
 
     // Members list
     const members = Array.isArray(project.team_members) ? project.team_members : [];
-    const membersHTML = members.map(m => `
-      <div style="display:flex; align-items:center; gap:8px; background:var(--bg-card-sub); padding:6px 10px; border-radius:6px; border:1px solid var(--border-color);">
-        <img src="${m.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name)}&background=8b5cf6&color=fff`}" style="width:28px; height:28px; border-radius:50%; object-fit:cover;">
-        <div>
-          <div style="font-size:12px; font-weight:700; color:#fff;">${m.name}</div>
-          <div style="font-size:10px; color:var(--text-dim);">${m.role || 'Engineer'}</div>
+    const membersHTML = members.map(m => {
+      const mName = typeof m === 'object' && m ? (m.name || 'Student') : String(m);
+      const mRole = typeof m === 'object' && m ? (m.role || 'Member') : 'Innovator';
+      const mPhoto = (typeof m === 'object' && m && m.photo) ? m.photo : `https://ui-avatars.com/api/?name=${encodeURIComponent(mName)}&background=8b5cf6&color=fff`;
+      return `
+        <div style="display:flex; align-items:center; gap:8px; background:var(--bg-card-sub); padding:6px 10px; border-radius:6px; border:1px solid var(--border-color);">
+          <img src="${mPhoto}" style="width:28px; height:28px; border-radius:50%; object-fit:cover;">
+          <div>
+            <div style="font-size:12px; font-weight:700; color:var(--text-main);">${escapeHTML(mName)}</div>
+            <div style="font-size:10px; color:var(--text-dim);">${escapeHTML(mRole)}</div>
+          </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
     // Media Links
     const mediaPills = [];
@@ -826,15 +833,17 @@ function createCardHTML(p) {
   const members = Array.isArray(p.team_members) ? p.team_members : [];
   let avatarsHTML = '';
   if (members.length > 0) {
-    avatarsHTML = members.slice(0, 3).map(m => `
-      <img src="${m.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name)}&background=6366f1&color=fff`}" 
-           class="avatar-badge" title="${m.name} (${m.role || 'Member'})" alt="${m.name}">
-    `).join('');
+    avatarsHTML = members.slice(0, 3).map(m => {
+      const mName = typeof m === 'object' && m ? (m.name || 'Student') : String(m);
+      const mRole = typeof m === 'object' && m ? (m.role || 'Member') : 'Member';
+      const mPhoto = (typeof m === 'object' && m && m.photo) ? m.photo : `https://ui-avatars.com/api/?name=${encodeURIComponent(mName)}&background=6366f1&color=fff`;
+      return `<img src="${mPhoto}" class="avatar-badge" title="${escapeHTML(mName)} (${mRole})" alt="${escapeHTML(mName)}">`;
+    }).join('');
     if (members.length > 3) {
       avatarsHTML += `<div class="avatar-badge" style="background:#475569" title="More members">+${members.length - 3}</div>`;
     }
   } else {
-    avatarsHTML = `<img src="https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'IG')}&background=6366f1&color=fff" class="avatar-badge" title="${p.team_lead || 'Lead'}">`;
+    avatarsHTML = `<img src="${p.team_lead_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'IG')}&background=6366f1&color=fff`}" class="avatar-badge" title="${escapeHTML(p.team_lead || 'Lead')}">`;
   }
 
   let bomIcon = '';
