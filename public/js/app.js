@@ -221,7 +221,74 @@ document.addEventListener('DOMContentLoaded', async () => {
   initEventListeners();
   await loadAllData();
   initTunnelPoller();
+  initChatbotWidget();
 });
+
+function initChatbotWidget() {
+  const toggleBtn = document.getElementById('chatbot-toggle-btn');
+  const panel = document.getElementById('chatbot-panel');
+  const closeBtn = document.getElementById('chatbot-close-btn');
+  const input = document.getElementById('chatbot-input');
+  const sendBtn = document.getElementById('chatbot-send-btn');
+  const messagesBox = document.getElementById('chatbot-messages');
+  const scopedLabel = document.getElementById('chatbot-scoped-label');
+
+  if (!toggleBtn || !panel) return;
+
+  if (scopedLabel && state.currentUser) {
+    const isAdmin = state.currentUser.email === 'kaviyaarumugam541@gmail.com' || state.currentUser.role === 'admin';
+    scopedLabel.textContent = isAdmin ? '🌐 Admin Lab-Wide Context' : `👥 Scoped to User: ${state.currentUser.email}`;
+  }
+
+  toggleBtn.onclick = () => {
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+  };
+
+  closeBtn.onclick = () => {
+    panel.style.display = 'none';
+  };
+
+  async function handleSendChat() {
+    const query = input.value.trim();
+    if (!query) return;
+
+    // Append User Message
+    const userDiv = document.createElement('div');
+    userDiv.className = 'chat-msg user-msg';
+    userDiv.textContent = query;
+    messagesBox.appendChild(userDiv);
+    input.value = '';
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+
+    // Append Loading Indicator
+    const botLoading = document.createElement('div');
+    botLoading.className = 'chat-msg bot-msg';
+    botLoading.textContent = '⏳ Thinking...';
+    messagesBox.appendChild(botLoading);
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+
+    try {
+      const res = await authFetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: query })
+      });
+      const data = await res.json();
+      botLoading.textContent = data.reply || 'No response from assistant.';
+    } catch(err) {
+      botLoading.textContent = '⚠️ Failed to connect to AI assistant.';
+    }
+
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+  }
+
+  if (sendBtn) sendBtn.onclick = handleSendChat;
+  if (input) {
+    input.onkeyup = (e) => {
+      if (e.key === 'Enter') handleSendChat();
+    };
+  }
+}
 
 function initTheme() {
   const savedTheme = localStorage.getItem('igrid_theme') || 'dark';

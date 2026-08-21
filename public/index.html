@@ -1036,6 +1036,35 @@
     </div>
   </div>
 
+  <!-- Floating AI Chatbot Widget -->
+  <div class="chatbot-widget-container" id="chatbot-widget-container">
+    <!-- Collapsed Toggle Button -->
+    <button class="chatbot-toggle-btn" id="chatbot-toggle-btn" title="Open IGRID AI Assistant">
+      <span class="chat-icon">🤖</span>
+      <span class="chat-label">IGRID AI Assistant</span>
+    </button>
+
+    <!-- Expanded Chat Panel -->
+    <div class="chatbot-panel" id="chatbot-panel" style="display:none;">
+      <div class="chatbot-header">
+        <div class="chatbot-title-group">
+          <span>🤖 IGRID AI Assistant</span>
+          <span class="chatbot-subtitle" id="chatbot-scoped-label">Role-Scoped Project Context</span>
+        </div>
+        <button class="chatbot-close-btn" id="chatbot-close-btn">&times;</button>
+      </div>
+      <div class="chatbot-messages" id="chatbot-messages">
+        <div class="chat-msg bot-msg">
+          Hello! I am your IGRID Innovation Lab Assistant. Ask me about your project deadlines, completion status, BOM hardware requisitions, or team action items!
+        </div>
+      </div>
+      <div class="chatbot-input-bar">
+        <input type="text" id="chatbot-input" placeholder="Ask about deadlines, BOM, status..." autocomplete="off">
+        <button id="chatbot-send-btn" class="btn btn-primary" style="padding: 8px 14px; font-size:12px;">Send</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container"></div>
 

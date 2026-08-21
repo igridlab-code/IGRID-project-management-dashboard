@@ -687,6 +687,100 @@ app.get('*', (req, res) => {
   });
 });
 
+// ----------------------------------------------------
+// AI CHATBOT ASSISTANT ENDPOINT (CLAUDE API)
+// ----------------------------------------------------
+app.post('/api/chat', requireAuth, async (req, res) => {
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required.' });
+  }
+
+  const isAdmin = req.user.email === 'kaviyaarumugam541@gmail.com' || req.user.role === 'admin';
+
+  // Build Role-Scoped Context
+  let sql = 'SELECT * FROM projects';
+  let params = [];
+  if (!isAdmin && req.user.team_code) {
+    sql += ' WHERE project_code = ? OR team_name LIKE ?';
+    params.push(req.user.team_code, `%${req.user.team_code}%`);
+  }
+
+  db.all(sql, params, async (err, projects) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    db.all('SELECT * FROM bom_items', [], async (err2, boms) => {
+      const bomData = boms || [];
+      const projectList = (projects || []).map(p => ({
+        code: p.project_code,
+        title: p.title,
+        status: p.status,
+        progress: p.progress,
+        due_date: p.due_date,
+        priority: p.priority,
+        immediate_action: p.immediate_action,
+        team_name: p.team_name,
+        team_lead: p.team_lead,
+        bom_status: p.bom_status
+      }));
+
+      const contextSummary = {
+        role: isAdmin ? 'Lab Administrator (Lab-Wide Context Access)' : `Student / Team Member (${req.user.team_code || req.user.email})`,
+        visible_projects_count: projectList.length,
+        projects: projectList,
+        boms_summary: bomData.map(b => ({ item: b.item_name, project: b.project_code, status: b.status, qty: b.quantity, price: b.total_price }))
+      };
+
+      const systemPrompt = `You are the IGRID Innovation Lab AI Assistant. Answer questions accurately based ONLY on the provided project context.\nRole: ${contextSummary.role}\nProject Context:\n${JSON.stringify(contextSummary, null, 2)}`;
+
+      // Check if Anthropic API Key is present in environment
+      if (process.env.ANTHROPIC_API_KEY) {
+        try {
+          const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': process.env.ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model: 'claude-3-5-sonnet-20241022',
+              max_tokens: 1000,
+              system: systemPrompt,
+              messages: [{ role: 'user', content: message }]
+            })
+          });
+
+          const data = await response.json();
+          if (data.content && data.content[0] && data.content[0].text) {
+            return res.json({ reply: data.content[0].text });
+          }
+        } catch (apiErr) {
+          console.error('Claude API call error:', apiErr);
+        }
+      }
+
+      // Intelligent Fallback Assistant Engine using Context Reasoning
+      const q = message.toLowerCase();
+      let reply = '';
+
+      if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
+        reply = `📅 **Project Deadlines (${contextSummary.role}):**\n` + projectList.map(p => `• **${p.code}** (${p.title}): Due **${p.due_date || 'TBD'}** [Status: ${p.status}]`).join('\n');
+      } else if (q.includes('progress') || q.includes('status') || q.includes('completed')) {
+        reply = `📊 **Completion Status (${contextSummary.role}):**\n` + projectList.map(p => `• **${p.code}**: ${p.progress}% completed (Status: ${p.status.toUpperCase()})`).join('\n');
+      } else if (q.includes('bom') || q.includes('hardware') || q.includes('price') || q.includes('requisition')) {
+        reply = `🛒 **BOM Hardware Requisitions (${contextSummary.role}):**\n` + (bomData.length > 0 ? bomData.map(b => `• **${b.item_name}** (${b.project_code}): Qty ${b.quantity} - ₹${b.total_price} [Status: ${b.status}]`).join('\n') : 'No active BOM requisitions found.');
+      } else if (q.includes('action') || q.includes('blocker') || q.includes('next')) {
+        reply = `⚡ **Immediate Action Items:**\n` + projectList.map(p => `• **${p.code}**: ${p.immediate_action || 'No immediate action logged.'}`).join('\n');
+      } else {
+        reply = `🤖 **IGRID Lab AI Assistant (${contextSummary.role}):**\nI have access to ${projectList.length} visible project(s):\n` + projectList.map(p => `• **${p.code}** - ${p.title} (${p.progress}% progress, due ${p.due_date})`).join('\n') + `\n\nAsk me about deadlines, completion progress, BOM hardware, or next action items!`;
+      }
+
+      res.json({ reply });
+    });
+  });
+});
+
 // Start Server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`====================================================`);
