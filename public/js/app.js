@@ -1613,14 +1613,19 @@ async function handleProjectFormSubmit(e) {
   e.preventDefault();
   const id = document.getElementById('form-project-id').value;
 
-  const docUrl = document.getElementById('form-doc-url').value.trim();
+  let docUrl = document.getElementById('form-doc-url').value.trim();
 
-  // Validate Google Drive URL if provided
+  // Validate & normalize Google Drive URL if provided
   if (docUrl) {
-    const isDriveLink = (docUrl.startsWith('http://') || docUrl.startsWith('https://')) &&
-                        (docUrl.includes('drive.google.com') || docUrl.includes('docs.google.com'));
+    if (!docUrl.startsWith('http://') && !docUrl.startsWith('https://')) {
+      docUrl = 'https://' + docUrl;
+    }
+    const isDriveLink = docUrl.includes('drive.google.com') ||
+                        docUrl.includes('docs.google.com') ||
+                        docUrl.includes('google.com/drive');
     if (!isDriveLink) {
-      showToast('Please paste a valid Google Drive link (e.g. drive.google.com or docs.google.com)', 'error');
+      console.warn('⚠️ Google Drive Link Validation Failed:', docUrl);
+      showToast('Please paste a valid Google Drive or Docs link (e.g. drive.google.com or docs.google.com)', 'error');
       return;
     }
   }
@@ -1647,16 +1652,18 @@ async function handleProjectFormSubmit(e) {
     deliverables: document.getElementById('form-deliverables').value.trim()
   };
 
+  console.log('💾 Submitting Project Form Payload:', payload);
+
   try {
     let res;
     if (id) {
-      res = await fetch(`/api/projects/${id}`, {
+      res = await authFetch(`/api/projects/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
     } else {
-      res = await fetch('/api/projects', {
+      res = await authFetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1664,17 +1671,20 @@ async function handleProjectFormSubmit(e) {
     }
 
     if (res.ok) {
+      console.log('✅ Project saved successfully!');
       closeModal(DOM.projectModal);
       showToast(id ? 'Project updated successfully' : 'New project created successfully');
       await Promise.all([fetchProjects(), fetchNotifications()]);
       renderAllViews();
       updateStatsSummary();
     } else {
-      const err = await res.json();
-      showToast(err.error || 'Operation failed', 'error');
+      const errData = await res.json().catch(() => ({}));
+      console.error('❌ Server rejection when saving project:', res.status, errData);
+      showToast(errData.error || `Failed to save project (HTTP ${res.status})`, 'error');
     }
   } catch (err) {
-    showToast('Failed to save project', 'error');
+    console.error('❌ Error saving project:', err);
+    showToast(`Failed to save project: ${err.message || 'Network error'}`, 'error');
   }
 }
 
