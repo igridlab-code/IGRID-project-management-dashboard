@@ -2402,7 +2402,8 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  z-index: 200;
+  z-index: 9999;
+  pointer-events: none;
 }
 
 .toast {
@@ -2418,6 +2419,7 @@ input:focus, select:focus, textarea:focus {
   align-items: center;
   gap: 10px;
   animation: slideInRight 0.2s ease-out;
+  pointer-events: auto;
 }
 
 @keyframes slideInRight {
@@ -2851,9 +2853,9 @@ h1, h2, h3, h4, h5, h6, p, span, a, label, .card-title, .card-desc, .action-item
    ==================================================== */
 .chatbot-widget-container {
   position: fixed;
-  bottom: 24px;
+  bottom: 90px;
   right: 24px;
-  z-index: 99990;
+  z-index: 9990;
 }
 
 .chatbot-toggle-btn {
@@ -2878,10 +2880,11 @@ h1, h2, h3, h4, h5, h6, p, span, a, label, .card-title, .card-desc, .action-item
 
 .chatbot-panel {
   position: absolute;
-  bottom: 60px;
+  bottom: 54px;
   right: 0;
   width: 380px;
   height: 480px;
+  max-height: calc(100vh - 170px);
   background: var(--bg-card, rgba(15,23,42,0.95));
   border: 1px solid var(--border-color, rgba(255,255,255,0.15));
   border-radius: 16px;
@@ -2973,5 +2976,28 @@ h1, h2, h3, h4, h5, h6, p, span, a, label, .card-title, .card-desc, .action-item
   padding: 8px 12px;
   color: var(--text-main, #f8fafc);
   font-size: 12px;
+}
+
+/* Mobile Responsive Non-Overlapping Layout */
+@media (max-width: 640px) {
+  .toast-container {
+    bottom: 16px;
+    right: 16px;
+    left: 16px;
+    max-width: calc(100vw - 32px);
+  }
+
+  .chatbot-widget-container {
+    bottom: 85px;
+    right: 16px;
+  }
+
+  .chatbot-panel {
+    right: 0;
+    width: calc(100vw - 32px);
+    max-width: 360px;
+    height: 420px;
+    max-height: calc(100vh - 160px);
+  }
 }
 
