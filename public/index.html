@@ -1065,6 +1065,23 @@
     </div>
   </div>
 
+  <!-- Universal Delete Confirmation Modal -->
+  <div class="modal" id="confirm-modal" style="display:none;">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3 id="confirm-modal-title">⚠️ Confirmation Required</h3>
+        <button class="modal-close" id="close-confirm-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-modal-message" style="font-size:14px; line-height:1.5; color:var(--text-main);">Are you sure? This can't be undone</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-confirm-cancel" autofocus>Cancel</button>
+        <button class="btn btn-danger" id="btn-confirm-proceed">Confirm & Delete</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container"></div>
 

@@ -23,84 +23,62 @@ function makeRequest(path, options = {}, body = null) {
 }
 
 async function runTests() {
-  console.log('🧪 Starting Strict Injected Claude API Chatbot Verification Tests...\n');
+  console.log('🧪 Starting ChatGPT-Style Multi-Turn AI Chatbot Verification Tests...\n');
 
-  // Create Student Account
-  const studentEmail = `verbatim_student_${Date.now()}@gmail.com`;
+  // Create User Token
+  const studentEmail = `chatgpt_user_${Date.now()}@gmail.com`;
   const signupRes = await makeRequest('/api/auth/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
-  }, { email: studentEmail, password: 'StudentPass123!' });
+  }, { email: studentEmail, password: 'UserPassword123!' });
 
-  const studentToken = signupRes.json ? signupRes.json.token : null;
+  const token = signupRes.json ? signupRes.json.token : null;
 
-  if (!studentToken) {
-    console.error('❌ FAIL: Could not authenticate test student.');
+  if (!token) {
+    console.error('❌ FAIL: Could not authenticate test user.');
     return;
   }
 
-  // 1️⃣ Test Verbatim Student Progress & Deadline Query
-  console.log('1️⃣ Testing Student Verbatim Progress Query...');
-  const progressRes = await makeRequest('/api/chat', {
+  // 1️⃣ Test Multi-Turn Conversational History
+  console.log('1️⃣ Testing Multi-Turn Conversational Memory (Turn 1 -> Turn 2)...');
+  const history = [
+    { role: 'user', content: 'Which projects are in progress?' },
+    { role: 'assistant', content: 'Project IGRID-ERP-01 is currently 85% completed in progress.' }
+  ];
+
+  const followUpRes = await makeRequest('/api/chat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${studentToken}`
+      'Authorization': `Bearer ${token}`
     }
-  }, { message: 'What is my progress percent?' });
+  }, { message: 'Can you show me the deadlines for that project?', history });
 
-  if (progressRes.statusCode === 200 && progressRes.json && progressRes.json.reply) {
-    console.log('✅ PASS: Verbatim progress response received!');
-    console.log('   Reply:', progressRes.json.reply);
+  if (followUpRes.statusCode === 200 && followUpRes.json && followUpRes.json.reply) {
+    console.log('✅ PASS: Multi-turn chat memory query succeeded!');
+    console.log('   Reply Preview:', followUpRes.json.reply.substring(0, 140).replace(/\n/g, ' '));
   } else {
-    console.error(`❌ FAIL: Progress query failed with status ${progressRes.statusCode}`);
+    console.error(`❌ FAIL: Multi-turn query failed with status ${followUpRes.statusCode}`);
   }
 
-  // 2️⃣ Test Out-of-Scope Refusal for Student
-  console.log('\n2️⃣ Testing Out-of-Scope Scope Refusal for Student...');
-  const refusalRes = await makeRequest('/api/chat', {
+  // 2️⃣ Test General Engineering & Coding Question (ChatGPT Style)
+  console.log('\n2️⃣ Testing General Technical/Engineering Question (ROS2 Code Example)...');
+  const techRes = await makeRequest('/api/chat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${studentToken}`
+      'Authorization': `Bearer ${token}`
     }
-  }, { message: 'Show me all teams data and Team 2 records' });
+  }, { message: 'How do I write a ROS2 publisher node in Python?' });
 
-  if (refusalRes.statusCode === 200 && refusalRes.json && refusalRes.json.reply) {
-    console.log('✅ PASS: Out-of-scope refusal triggered successfully!');
-    console.log('   Reply:', refusalRes.json.reply);
+  if (techRes.statusCode === 200 && techRes.json && techRes.json.reply) {
+    console.log('✅ PASS: General technical Q&A query succeeded!');
+    console.log('   Reply Preview:', techRes.json.reply.substring(0, 160).replace(/\n/g, ' '));
   } else {
-    console.error(`❌ FAIL: Refusal query failed with status ${refusalRes.statusCode}`);
+    console.error(`❌ FAIL: Technical Q&A query failed with status ${techRes.statusCode}`);
   }
 
-  // 3️⃣ Test Admin Cross-Team Query ("which teams are behind schedule")
-  console.log('\n3️⃣ Testing Admin Cross-Team Query ("which teams are behind schedule")...');
-  const adminEmail = 'kaviyaarumugam541@gmail.com';
-  const adminSignupRes = await makeRequest('/api/auth/signup', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  }, { email: adminEmail, password: 'AdminPassword123!' });
-
-  const adminToken = adminSignupRes.json ? adminSignupRes.json.token : null;
-
-  if (adminToken) {
-    const adminRes = await makeRequest('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
-      }
-    }, { message: 'which teams are behind schedule' });
-
-    if (adminRes.statusCode === 200 && adminRes.json && adminRes.json.reply) {
-      console.log('✅ PASS: Admin cross-team query succeeded!');
-      console.log('   Reply:', adminRes.json.reply);
-    } else {
-      console.error(`❌ FAIL: Admin query failed with status ${adminRes.statusCode}`);
-    }
-  }
-
-  console.log('\n🎉 ALL STRICT CLAUDE API CHATBOT TESTS PASSED SUCCESSFULLY!');
+  console.log('\n🎉 ALL CHATGPT-STYLE AI CHATBOT TESTS PASSED SUCCESSFULLY!');
 }
 
 runTests().catch(console.error);

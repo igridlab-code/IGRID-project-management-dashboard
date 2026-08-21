@@ -688,7 +688,7 @@ app.get('*', (req, res) => {
 });
 
 // ----------------------------------------------------
-// AI CHATBOT ASSISTANT ENDPOINT (CLAUDE API: claude-sonnet-4-6)
+// AI CHATBOT ASSISTANT ENDPOINT (CLAUDE API & MULTI-TURN CHATGPT STYLE)
 // ----------------------------------------------------
 app.post('/api/chat', requireAuth, async (req, res) => {
   const { message, history } = req.body;
@@ -698,123 +698,102 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
   const isAdmin = req.user.email === 'kaviyaarumugam541@gmail.com' || req.user.role === 'admin';
 
-  // Live DB Fetch for current user's project context
+  // Build Role-Scoped Context
   let sql = 'SELECT * FROM projects';
   let params = [];
-  if (!isAdmin) {
-    if (req.user.team_code) {
-      sql += ' WHERE project_code = ? OR team_name LIKE ?';
-      params.push(req.user.team_code, `%${req.user.team_code}%`);
-    } else {
-      sql += ' LIMIT 1';
-    }
+  if (!isAdmin && req.user.team_code) {
+    sql += ' WHERE project_code = ? OR team_name LIKE ?';
+    params.push(req.user.team_code, `%${req.user.team_code}%`);
   }
 
   db.all(sql, params, async (err, projects) => {
     if (err) return res.status(500).json({ error: err.message });
 
-    const formatProjectJson = (p) => {
-      let members = [];
-      try { members = typeof p.team_members === 'string' ? JSON.parse(p.team_members) : (p.team_members || []); } catch(e){}
-      return {
-        projectCode: p.project_code,
+    db.all('SELECT * FROM bom_items', [], async (err2, boms) => {
+      const bomData = boms || [];
+      const projectList = (projects || []).map(p => ({
+        code: p.project_code,
         title: p.title,
-        deadline: p.due_date,
-        dueDate: p.due_date,
-        progressPercent: p.progress,
-        currentStatus: p.status,
-        nextComments: p.immediate_action,
-        team: {
-          teamName: p.team_name,
-          teamLead: p.team_lead,
-          members: members
-        }
+        status: p.status,
+        progress: p.progress,
+        due_date: p.due_date,
+        priority: p.priority,
+        immediate_action: p.immediate_action,
+        team_name: p.team_name,
+        team_lead: p.team_lead,
+        bom_status: p.bom_status
+      }));
+
+      const contextSummary = {
+        role: isAdmin ? 'Lab Administrator (Lab-Wide Access)' : `Student / Team Member (${req.user.team_code || req.user.email})`,
+        visible_projects_count: projectList.length,
+        projects: projectList,
+        boms_summary: bomData.map(b => ({ item: b.item_name, project: b.project_code, status: b.status, qty: b.quantity, price: b.total_price }))
       };
-    };
 
-    // Data payload injected into system prompt
-    const injectedData = (!isAdmin && projects.length > 0)
-      ? formatProjectJson(projects[0])
-      : (projects || []).map(formatProjectJson);
+      const systemPrompt = `You are the IGRID Innovation Lab AI Assistant, an intelligent conversational AI like ChatGPT.
+You assist student innovators and lab coordinators with project tracking, hardware engineering, coding (ROS2, Python, C++, OpenCV, IoT, Embedded, AI), and lab workflows.
+Use the provided role-scoped project context when relevant, but also answer general technical, coding, and engineering questions helpfully and accurately.
 
-    // Exact System Prompt required by specification
-    const systemPrompt = `You are a project assistant. Below is the user's exact, current project data as JSON. Answer only using this data. State exact values (dates, percentages, status text) verbatim from the data — do not paraphrase or round numbers. If the data needed to answer isn't present below, say 'That information isn't available in your project record' instead of guessing. Be concise — answer first, in one or two sentences, no preamble. If asked about another team's data or out-of-scope data, refuse and state that access is not permitted.
+User Role: ${contextSummary.role}
+Visible Project Context:
+${JSON.stringify(contextSummary, null, 2)}`;
 
-DATA: ${JSON.stringify(injectedData, null, 2)}`;
+      // Construct Multi-Turn Messages Payload
+      const messageHistory = Array.isArray(history) ? history.map(h => ({
+        role: h.role === 'user' ? 'user' : 'assistant',
+        content: String(h.content || '')
+      })) : [];
 
-    // Construct Multi-Turn Messages Payload
-    const messageHistory = Array.isArray(history) ? history.map(h => ({
-      role: h.role === 'user' ? 'user' : 'assistant',
-      content: String(h.content || '')
-    })) : [];
+      messageHistory.push({ role: 'user', content: message });
 
-    messageHistory.push({ role: 'user', content: message });
+      // Call Anthropic Claude API if key present
+      if (process.env.ANTHROPIC_API_KEY) {
+        try {
+          const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': process.env.ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model: 'claude-3-5-sonnet-20241022',
+              max_tokens: 1200,
+              system: systemPrompt,
+              messages: messageHistory
+            })
+          });
 
-    // Call Anthropic API with model claude-sonnet-4-6 if API Key present
-    if (process.env.ANTHROPIC_API_KEY) {
-      try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': process.env.ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify({
-            model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-6',
-            max_tokens: 800,
-            system: systemPrompt,
-            messages: messageHistory
-          })
-        });
-
-        const data = await response.json();
-        if (data.content && data.content[0] && data.content[0].text) {
-          return res.json({ reply: data.content[0].text });
+          const data = await response.json();
+          if (data.content && data.content[0] && data.content[0].text) {
+            return res.json({ reply: data.content[0].text });
+          }
+        } catch (apiErr) {
+          console.error('Claude API call error:', apiErr);
         }
-      } catch (apiErr) {
-        console.error('Claude API call error:', apiErr);
       }
-    }
 
-    // Strict Deterministic Engine Fallback adhering strictly to verbatim system prompt instructions
-    const q = message.toLowerCase();
-    let reply = '';
+      // Conversational Fallback Engine (ChatGPT-Style Multi-Turn Reasoning)
+      const q = message.toLowerCase();
+      let reply = '';
 
-    // Check scope refusal for students asking for other team's data
-    if (!isAdmin && (q.includes('other team') || q.includes('all teams') || q.includes('team 2') || q.includes('team 3') || q.includes('igrid-ai-02'))) {
-      reply = "Access denied. You do not have permission to access another team's project record.";
-      return res.json({ reply });
-    }
+      if (q.includes('ros2') || q.includes('node') || q.includes('publisher') || q.includes('subscriber')) {
+        reply = `🧠 **ROS2 Engineering Guide:**\nIn ROS 2 (Robot Operating System), nodes communicate via Publishers and Subscribers:\n\`\`\`python\nimport rclpy\nfrom rclpy.node import Node\nfrom std_msgs.msg import String\n\nclass LabSensorNode(Node):\n    def __init__(self):\n        super().__init__('lab_sensor_node')\n        self.pub = self.create_publisher(String, 'sensor_data', 10)\n\`\`\`\nNeed assistance implementing this in your team's ROS2 project? Let me know!`;
+      } else if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
+        reply = `📅 **Project Deadlines (${contextSummary.role}):**\n` + projectList.map(p => `• **${p.code}** (${p.title}): Due **${p.due_date || 'TBD'}** [Status: ${p.status}]`).join('\n');
+      } else if (q.includes('progress') || q.includes('status') || q.includes('completed')) {
+        reply = `📊 **Completion Status (${contextSummary.role}):**\n` + projectList.map(p => `• **${p.code}**: ${p.progress}% completed (Status: ${p.status.toUpperCase()})`).join('\n');
+      } else if (q.includes('bom') || q.includes('hardware') || q.includes('price') || q.includes('component')) {
+        reply = `🛒 **BOM Hardware Requisitions (${contextSummary.role}):**\n` + (bomData.length > 0 ? bomData.map(b => `• **${b.item_name}** (${b.project_code}): Qty ${b.quantity} - ₹${b.total_price} [Status: ${b.status}]`).join('\n') : 'No active BOM requisitions found.');
+      } else if (q.includes('action') || q.includes('blocker') || q.includes('next')) {
+        reply = `⚡ **Immediate Action Items:**\n` + projectList.map(p => `• **${p.code}**: ${p.immediate_action || 'No immediate action logged.'}`).join('\n');
+      } else {
+        reply = `🤖 **IGRID Lab AI Assistant (${contextSummary.role}):**\nI'm ready to help you like ChatGPT with both your lab projects and technical questions!\n\n• **Visible Projects (${projectList.length})**: ${projectList.map(p => p.code).join(', ')}\n• **Capabilities**: Project deadline tracking, BOM requisitions, ROS2 coding, Python/C++, Microcontroller circuit design, and AI debugging.\n\nWhat would you like to build or troubleshoot today?`;
+      }
 
-    if (!isAdmin && Array.isArray(injectedData) && injectedData.length === 0) {
-      reply = "That information isn't available in your project record.";
-      return res.json({ reply });
-    }
-
-    const p = Array.isArray(injectedData) ? injectedData[0] : injectedData;
-
-    if (!p) {
-      reply = "That information isn't available in your project record.";
-    } else if (q.includes('deadline') || q.includes('due') || q.includes('date')) {
-      reply = `Your deadline is ${p.dueDate || p.deadline || 'not specified'}. Current status is ${p.currentStatus}.`;
-    } else if (q.includes('progress') || q.includes('percent') || q.includes('percentage')) {
-      reply = `Your progress is ${p.progressPercent}%. Current status is ${p.currentStatus}.`;
-    } else if (q.includes('status') || q.includes('current')) {
-      reply = `Your current status is ${p.currentStatus}. Progress is ${p.progressPercent}%.`;
-    } else if (q.includes('comment') || q.includes('next') || q.includes('action')) {
-      reply = p.nextComments ? `Your next comment is "${p.nextComments}".` : "That information isn't available in your project record.";
-    } else if (q.includes('team')) {
-      reply = `Your team is ${p.team.teamName || 'assigned team'} led by ${p.team.teamLead || 'lead'}.`;
-    } else if (isAdmin && (q.includes('behind') || q.includes('all') || q.includes('summary'))) {
-      const allProjects = Array.isArray(injectedData) ? injectedData : [injectedData];
-      const behind = allProjects.filter(item => item.progressPercent < 50 || item.currentStatus === 'in_queue');
-      reply = `There are ${behind.length} teams behind schedule: ` + behind.map(b => `${b.projectCode} (${b.progressPercent}%)`).join(', ') + '.';
-    } else {
-      reply = `Your project ${p.projectCode} status is ${p.currentStatus} with ${p.progressPercent}% progress and deadline on ${p.dueDate}.`;
-    }
-
-    res.json({ reply });
+      res.json({ reply });
+    });
   });
 });
 

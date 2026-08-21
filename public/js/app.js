@@ -278,7 +278,7 @@ function initChatbotWidget() {
     // Append Loading Indicator
     const botLoading = document.createElement('div');
     botLoading.className = 'chat-msg bot-msg';
-    botLoading.textContent = '⏳ Fetching live project data...';
+    botLoading.textContent = '⏳ Thinking...';
     messagesBox.appendChild(botLoading);
     messagesBox.scrollTop = messagesBox.scrollHeight;
 
@@ -1624,18 +1624,107 @@ async function handleProjectFormSubmit(e) {
   }
 }
 
-async function deleteProject(id) {
-  try {
-    const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      showToast('Project deleted');
-      await Promise.all([fetchProjects(), fetchNotifications()]);
-      renderAllViews();
-      updateStatsSummary();
-    }
-  } catch (err) {
-    showToast('Failed to delete project', 'error');
+// Universal Confirmation Dialog for Delete Actions
+function confirmDeleteDialog({ title = '⚠️ Confirmation Required', message = "Are you sure? This can't be undone", onConfirm }) {
+  const modal = document.getElementById('confirm-modal');
+  const titleEl = document.getElementById('confirm-modal-title');
+  const msgEl = document.getElementById('confirm-modal-message');
+  const proceedBtn = document.getElementById('btn-confirm-proceed');
+  const cancelBtn = document.getElementById('btn-confirm-cancel');
+  const closeBtn = document.getElementById('close-confirm-modal');
+
+  if (!modal) return;
+
+  if (titleEl) titleEl.textContent = title;
+  if (msgEl) msgEl.textContent = message;
+
+  openModal(modal);
+
+  // Focus Cancel button by default to prevent accidental deletion on Enter
+  if (cancelBtn) {
+    setTimeout(() => cancelBtn.focus(), 50);
   }
+
+  const cleanup = () => {
+    closeModal(modal);
+    proceedBtn.removeEventListener('click', handleProceed);
+  };
+
+  const handleProceed = () => {
+    cleanup();
+    if (onConfirm) onConfirm();
+  };
+
+  proceedBtn.addEventListener('click', handleProceed);
+  cancelBtn.onclick = cleanup;
+  closeBtn.onclick = cleanup;
+}
+
+// Global helpers for removing photos, videos, team members, comments, and BOM items
+window.confirmDeleteDialog = confirmDeleteDialog;
+
+window.confirmClearPhoto = (onClear) => {
+  confirmDeleteDialog({
+    title: '🖼️ Remove Photo',
+    message: "Are you sure? This can't be undone",
+    onConfirm: onClear
+  });
+};
+
+window.confirmClearVideo = (onClear) => {
+  confirmDeleteDialog({
+    title: '🎥 Remove Video',
+    message: "Are you sure? This can't be undone",
+    onConfirm: onClear
+  });
+};
+
+window.confirmRemoveTeamMember = (memberName, onRemove) => {
+  confirmDeleteDialog({
+    title: '👥 Remove Team Member',
+    message: `Are you sure you want to remove ${memberName}? This can't be undone`,
+    onConfirm: onRemove
+  });
+};
+
+window.confirmDeleteComment = (commentId, onDelete) => {
+  confirmDeleteDialog({
+    title: '💬 Delete Comment',
+    message: "Are you sure? This can't be undone",
+    onConfirm: onDelete
+  });
+};
+
+window.confirmDeleteBomItem = (bomId, onDelete) => {
+  confirmDeleteDialog({
+    title: '🛒 Delete BOM Item',
+    message: "Are you sure? This can't be undone",
+    onConfirm: onDelete
+  });
+};
+
+async function deleteProject(id) {
+  confirmDeleteDialog({
+    title: '⚠️ Delete Project Entry',
+    message: "Are you sure? This can't be undone",
+    onConfirm: async () => {
+      try {
+        const res = await authFetch(`/api/projects/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          showToast('Project deleted', 'info');
+          if (DOM.detailModal) closeModal(DOM.detailModal);
+          await Promise.all([fetchProjects(), fetchNotifications()]);
+          renderAllViews();
+          updateStatsSummary();
+        } else {
+          const err = await res.json();
+          showToast(err.error || 'Failed to delete project', 'error');
+        }
+      } catch (err) {
+        showToast('Failed to delete project', 'error');
+      }
+    }
+  });
 }
 
 async function updateProjectField(id, field, value) {
