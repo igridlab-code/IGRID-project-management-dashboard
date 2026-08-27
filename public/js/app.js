@@ -3309,6 +3309,10 @@ function renderRecentActivityFeed() {
 // ----------------------------------------------------
 function openModal(modal) {
   if (modal) {
+    const activeModals = document.querySelectorAll('.modal-overlay.active');
+    const baseZIndex = (modal.id === 'detail-modal') ? 1000 : 2500;
+    const newZIndex = baseZIndex + (activeModals.length * 100);
+    modal.style.zIndex = newZIndex;
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
   }
@@ -3317,6 +3321,7 @@ function openModal(modal) {
 function closeModal(modal) {
   if (modal) {
     modal.classList.remove('active');
+    modal.style.zIndex = '';
     const activeModals = document.querySelectorAll('.modal-overlay.active');
     if (activeModals.length === 0) {
       document.body.style.overflow = '';

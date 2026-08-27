@@ -1962,6 +1962,22 @@ body {
   padding: 20px;
 }
 
+/* Stacked Modals Layering Hierarchy */
+#detail-modal {
+  z-index: 1000 !important;
+}
+
+#task-modal,
+#task-info-modal,
+#add-domain-modal,
+#calendar-activity-modal,
+#spotlight-modal,
+#bom-modal,
+#student-edit-modal,
+#student-modal {
+  z-index: 2500 !important;
+}
+
 .modal-overlay.active {
   display: flex;
   animation: modalFadeIn 0.2s ease-out;
