@@ -719,4 +719,33 @@ function seedInitialTasksIfEmpty() {
   });
 }
 
-module.exports = { db, initDb };
+function seedDefaultAdminUsers() {
+  const bcrypt = require('bcryptjs');
+  const hash1 = bcrypt.hashSync('Admin@123', 10);
+  const hash2 = bcrypt.hashSync('AdminPassword123!', 10);
+
+  const defaultAdmins = [
+    { email: 'admin@igridlab.edu.in', name: 'Admin Coordinator', hash: hash1 },
+    { email: 'kaviyaarumugam541@gmail.com', name: 'Kaviya Arumugam (Admin)', hash: hash2 },
+    { email: 'admin@igrid.com', name: 'Lab Director', hash: hash1 }
+  ];
+
+  defaultAdmins.forEach(adm => {
+    db.run(`
+      INSERT INTO auth_users (email, password_hash, name, role, auth_provider)
+      VALUES (?, ?, ?, 'admin', 'email')
+      ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, role = 'admin', name = excluded.name
+    `, [adm.email, adm.hash, adm.name], (err) => {
+      if (err) {
+        db.run(`UPDATE auth_users SET role = 'admin', password_hash = ? WHERE email = ?`, [adm.hash, adm.email]);
+      }
+    });
+  });
+}
+
+// Call seedDefaultAdminUsers on DB init
+db.serialize(() => {
+  seedDefaultAdminUsers();
+});
+
+module.exports = { db, initDb, seedDefaultAdminUsers };

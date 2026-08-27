@@ -2457,6 +2457,52 @@ async function openProjectDetail(projectId) {
     renderProjectGanttTimeline(project, state.activeProjectTasks);
 
     renderProjectComments(project.activities || []);
+
+    // Role-based visibility for Action Buttons (Edit Project, Delete Project, Quick Add BOM, Add Task)
+    const isAdmin = isUserAdmin();
+    const isStudent = isUserStudent();
+    const isPublic = isUserPublic();
+    const addTaskBtn = document.getElementById('btn-add-project-task');
+
+    if (isPublic) {
+      if (DOM.btnEditCurrentProject) DOM.btnEditCurrentProject.style.display = 'none';
+      if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'none';
+      if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'none';
+      if (addTaskBtn) addTaskBtn.style.display = 'none';
+    } else if (isAdmin) {
+      if (DOM.btnEditCurrentProject) {
+        DOM.btnEditCurrentProject.style.display = 'inline-flex';
+        DOM.btnEditCurrentProject.innerHTML = '✏️ Edit Project Details';
+      }
+      if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'inline-flex';
+      if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'inline-flex';
+      if (addTaskBtn) addTaskBtn.style.display = 'inline-flex';
+    } else if (isStudent) {
+      const userName = (state.currentUser && state.currentUser.name || '').toLowerCase();
+      const userEmail = (state.currentUser && state.currentUser.email || '').toLowerCase();
+      const isLead = project.team_lead && userName && project.team_lead.toLowerCase().includes(userName);
+      const isMember = project.team_members && (
+        (Array.isArray(project.team_members) && project.team_members.some(m => JSON.stringify(m).toLowerCase().includes(userEmail) || JSON.stringify(m).toLowerCase().includes(userName))) ||
+        (typeof project.team_members === 'string' && (project.team_members.toLowerCase().includes(userEmail) || project.team_members.toLowerCase().includes(userName)))
+      );
+      const isOwner = isLead || isMember;
+
+      if (isOwner) {
+        if (DOM.btnEditCurrentProject) {
+          DOM.btnEditCurrentProject.style.display = 'inline-flex';
+          DOM.btnEditCurrentProject.innerHTML = '✏️ Edit Links & Deliverables';
+        }
+        if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'none';
+        if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'inline-flex';
+        if (addTaskBtn) addTaskBtn.style.display = 'inline-flex';
+      } else {
+        if (DOM.btnEditCurrentProject) DOM.btnEditCurrentProject.style.display = 'none';
+        if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'none';
+        if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'none';
+        if (addTaskBtn) addTaskBtn.style.display = 'none';
+      }
+    }
+
     openModal(DOM.detailModal);
   } catch (err) {
     console.error('Error in openProjectDetail:', err);
@@ -3004,11 +3050,31 @@ function openProjectModalForEdit(project) {
   }
 
   const isAdmin = isUserAdmin();
+  const isStudent = isUserStudent();
+
+  if (isStudent) {
+    const userName = (state.currentUser && state.currentUser.name || '').toLowerCase();
+    const userEmail = (state.currentUser && state.currentUser.email || '').toLowerCase();
+    const isLead = project.team_lead && userName && project.team_lead.toLowerCase().includes(userName);
+    const isMember = project.team_members && (
+      (Array.isArray(project.team_members) && project.team_members.some(m => JSON.stringify(m).toLowerCase().includes(userEmail) || JSON.stringify(m).toLowerCase().includes(userName))) ||
+      (typeof project.team_members === 'string' && (project.team_members.toLowerCase().includes(userEmail) || project.team_members.toLowerCase().includes(userName)))
+    );
+    if (!isLead && !isMember) {
+      showToast('Access denied: You can only edit your own assigned project.', 'error');
+      return;
+    }
+  }
 
   if (DOM.modalProjectTitle) {
     DOM.modalProjectTitle.textContent = isAdmin
-      ? `✏️ Admin Edit Project: ${project.project_code || ''}`
-      : `✏️ Student Edit Links & Deliverables: ${project.project_code || ''}`;
+      ? `👑 Admin Edit Project Details: ${project.project_code || ''}`
+      : `🎓 Student Edit Links & Deliverables: ${project.project_code || ''}`;
+  }
+
+  const saveBtn = document.getElementById('save-project-btn');
+  if (saveBtn) {
+    saveBtn.innerHTML = isAdmin ? '💾 Save Project Details' : '💾 Save Links & Deliverables';
   }
 
   document.getElementById('form-project-id').value = project.id || '';
