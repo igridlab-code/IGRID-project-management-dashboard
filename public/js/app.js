@@ -2582,6 +2582,7 @@ function syncDatesFromMonthSelects() {
 }
 
 function openTaskModalForCreate() {
+  console.log('[IGRID] openTaskModalForCreate called, activeProjectId:', state.activeProjectId);
   if (!state.activeProjectId) {
     showToast('Please open a project first', 'error');
     return;
@@ -2615,7 +2616,17 @@ function openTaskModalForCreate() {
 
   syncMonthSelectsFromDates();
   updateTaskDurationPreview();
-  openModal(DOM.taskModal);
+
+  // Force task modal to appear above the detail modal
+  const taskModalEl = DOM.taskModal || document.getElementById('task-modal');
+  if (taskModalEl) {
+    taskModalEl.style.zIndex = '300';
+    taskModalEl.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    console.log('[IGRID] Task modal opened successfully');
+  } else {
+    console.error('[IGRID] Task modal element not found!');
+  }
 }
 
 function openTaskModalForEdit(taskId) {
@@ -2639,7 +2650,14 @@ function openTaskModalForEdit(taskId) {
 
   syncMonthSelectsFromDates();
   updateTaskDurationPreview();
-  openModal(DOM.taskModal);
+
+  // Force task modal to appear above the detail modal
+  const taskModalEl = DOM.taskModal || document.getElementById('task-modal');
+  if (taskModalEl) {
+    taskModalEl.style.zIndex = '300';
+    taskModalEl.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
 }
 
 function updateTaskDurationPreview() {
@@ -2764,7 +2782,13 @@ function openTaskInfoModal(taskId) {
   if (descEl) descEl.textContent = task.description || 'No description provided for this task.';
   if (assignedEl) assignedEl.textContent = `Assigned to: ${task.assigned_member || 'Unassigned'}`;
 
-  openModal(DOM.taskInfoModal);
+  // Force task info modal to appear above the detail modal
+  const infoModalEl = DOM.taskInfoModal || document.getElementById('task-info-modal');
+  if (infoModalEl) {
+    infoModalEl.style.zIndex = '300';
+    infoModalEl.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
 }
 
 async function deleteTask(taskId) {
