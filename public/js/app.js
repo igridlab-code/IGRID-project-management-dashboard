@@ -2439,8 +2439,8 @@ function renderProjectGanttTimeline(project, tasks = []) {
 
   const currentYear = new Date().getFullYear();
   const startOfYear = new Date(currentYear, 0, 1);
-  const endOfYear = new Date(currentYear, 11, 31);
-  const totalYearDays = (endOfYear - startOfYear) / (1000 * 60 * 60 * 24) + 1;
+  const endOfYear = new Date(currentYear, 11, 31, 23, 59, 59, 999);
+  const totalYearDays = (endOfYear - startOfYear) / (1000 * 60 * 60 * 24);
 
   const todayObj = new Date();
   let todayLeftPct = null;
@@ -2492,25 +2492,39 @@ function renderProjectGanttTimeline(project, tasks = []) {
       if (isNaN(tStart.getTime())) tStart = new Date(currentYear, 0, 1);
       if (isNaN(tEnd.getTime())) tEnd = new Date(currentYear, 11, 31);
 
-      const clampedStart = new Date(Math.max(startOfYear, Math.min(endOfYear, tStart)));
-      const clampedEnd = new Date(Math.max(startOfYear, Math.min(endOfYear, tEnd)));
+      const isOverflowLeft = tStart < startOfYear;
+      const isOverflowRight = tEnd > endOfYear;
 
-      const startDayOfYear = Math.round((clampedStart - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
-      const endDayOfYear = Math.round((clampedEnd - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
+      const clampedStart = new Date(Math.max(startOfYear.getTime(), Math.min(endOfYear.getTime(), tStart.getTime())));
+      const clampedEnd = new Date(Math.max(startOfYear.getTime(), Math.min(endOfYear.getTime(), tEnd.getTime())));
 
-      const leftPct = Math.max(0, Math.min(99, ((startDayOfYear - 1) / totalYearDays) * 100));
-      const widthPct = Math.max(2.0, Math.min(100 - leftPct, ((endDayOfYear - startDayOfYear + 1) / totalYearDays) * 100));
+      const startDayOfYear = Math.max(1, Math.round((clampedStart - startOfYear) / (1000 * 60 * 60 * 24)) + 1);
+      const endDayOfYear = Math.max(startDayOfYear, Math.round((clampedEnd - startOfYear) / (1000 * 60 * 60 * 24)) + 1);
 
-      const durationDays = Math.round((tEnd - tStart) / (1000 * 60 * 60 * 24)) + 1;
+      const leftPct = Math.max(0, Math.min(97.5, ((startDayOfYear - 1) / totalYearDays) * 100));
+      const rawWidthPct = ((endDayOfYear - startDayOfYear + 1) / totalYearDays) * 100;
+      const widthPct = Math.max(2.5, Math.min(100 - leftPct, rawWidthPct));
+
+      const durationDays = Math.max(1, Math.round((tEnd - tStart) / (1000 * 60 * 60 * 24)) + 1);
       const statusClass = `bar-${task.status || 'in_progress'}`;
       const dateLabel = `${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)}`;
 
+      const leftMarker = isOverflowLeft
+        ? `<span class="ref-bar-overflow-left" title="Starts before Jan 1, ${currentYear}">◀</span>`
+        : `<span class="ref-bar-marker">✓</span>`;
+
+      const rightMarker = isOverflowRight
+        ? `<span class="ref-bar-overflow-right" title="Extends beyond Dec 31, ${currentYear}">▶</span>`
+        : `<span class="ref-bar-marker">✓</span>`;
+
+      const richTooltip = `${task.task_name} | ${task.priority || 'Normal'} Priority | ${task.status || 'In Progress'}\nFrom: ${formatDateShort(task.start_date)} → To: ${formatDateShort(task.end_date)} (${durationDays} days)${isOverflowLeft ? ' [Starts before Jan 1]' : ''}${isOverflowRight ? ' [Extends beyond Dec 31]' : ''}`;
+
       taskRowsHTML += `
         <tr>
-          <td class="ref-gantt-td-taskname" onclick="openTaskInfoModal('${task.id}')" style="cursor:pointer;" title="${escapeHTML(task.task_name)}">
+          <td class="ref-gantt-td-taskname" onclick="openTaskInfoModal('${task.id}')" style="cursor:pointer;" title="${escapeHTML(richTooltip)}">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:4px;">
-              <span>${escapeHTML(task.task_name)}</span>
-              <span style="font-size:10px; padding:2px 4px; border-radius:4px; background:rgba(0,0,0,0.06); font-weight:600;">${escapeHTML(task.priority || 'Normal')}</span>
+              <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHTML(task.task_name)}</span>
+              <span style="font-size:10px; padding:2px 4px; border-radius:4px; background:rgba(0,0,0,0.06); font-weight:600; flex-shrink:0;">${escapeHTML(task.priority || 'Normal')}</span>
             </div>
           </td>
           <td colspan="12" class="ref-gantt-td-grid">
@@ -2519,10 +2533,10 @@ function renderProjectGanttTimeline(project, tasks = []) {
             <div class="ref-task-bar ${statusClass}" 
                  style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%;"
                  onclick="openTaskInfoModal('${task.id}')"
-                 title="${escapeHTML(task.task_name)} | ${dateLabel} (${durationDays} days)">
-              <span class="ref-bar-marker">✓</span>
+                 title="${escapeHTML(richTooltip)}">
+              ${leftMarker}
               <span class="ref-bar-label">${escapeHTML(task.task_name)} (${dateLabel})</span>
-              <span class="ref-bar-marker">✓</span>
+              ${rightMarker}
             </div>
           </td>
         </tr>
@@ -2682,7 +2696,7 @@ function updateTaskDurationPreview() {
       const dur = Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
       if (dur < 1) {
         preview.style.color = '#ef4444';
-        preview.textContent = '⚠️ End Date must be on or after Start Date';
+        preview.textContent = '⚠️ To Date cannot be earlier than From Date';
       } else {
         preview.style.color = 'var(--primary)';
         preview.textContent = `Calculated Duration: ${dur} day${dur === 1 ? '' : 's'}`;
@@ -2710,7 +2724,7 @@ async function handleTaskFormSubmit(e) {
   }
 
   if (new Date(end_date) < new Date(start_date)) {
-    showToast('End Date must be on or after Start Date.', 'error');
+    showToast('To Date cannot be earlier than From Date.', 'error');
     return;
   }
 
