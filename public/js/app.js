@@ -909,6 +909,12 @@ function initEventListeners() {
   DOM.labAnalyticsBtn.addEventListener('click', () => openAnalyticsModal());
   DOM.closeAnalyticsModal.addEventListener('click', () => closeModal(DOM.analyticsModal));
   DOM.btnCloseAnalytics.addEventListener('click', () => closeModal(DOM.analyticsModal));
+
+  const btnRefreshAnalytics = document.getElementById('btn-refresh-analytics');
+  if (btnRefreshAnalytics) btnRefreshAnalytics.addEventListener('click', loadAnalyticsData);
+
+  const btnRetryAnalytics = document.getElementById('btn-retry-analytics');
+  if (btnRetryAnalytics) btnRetryAnalytics.addEventListener('click', loadAnalyticsData);
 }
 
 function switchView(viewName) {
@@ -934,6 +940,7 @@ function renderAllViews() {
   renderBOM();
   renderCompleted();
   renderStudents();
+  renderAnalytics();
   populateBomProjectSelect();
 }
 
@@ -2470,68 +2477,134 @@ async function handleStudentFormSubmit(e) {
 }
 
 // ----------------------------------------------------
-// ANALYTICS MODAL
+// ANALYTICS & STATS DASHBOARD
 // ----------------------------------------------------
-async function openAnalyticsModal() {
+
+function renderAnalytics() {
+  if (state.currentView === 'analytics') {
+    loadAnalyticsData();
+  }
+}
+
+async function loadAnalyticsData() {
+  const loadingEl = document.getElementById('analytics-view-loading');
+  const errorEl = document.getElementById('analytics-view-error');
+  const errorTextEl = document.getElementById('analytics-error-text');
+
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (errorEl) errorEl.style.display = 'none';
+
   try {
-    const res = await fetch('/api/analytics');
+    const res = await authFetch('/api/analytics');
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || `Server returned HTTP ${res.status}`);
+    }
+
     const stats = await res.json();
+    if (loadingEl) loadingEl.style.display = 'none';
 
-    DOM.analyticsKpiRoot.innerHTML = `
-      <div class="kpi-card">
-        <span class="stat-label">Total Lab Projects</span>
-        <span class="kpi-val text-primary">${stats.totalProjects || 0}</span>
-      </div>
-      <div class="kpi-card">
-        <span class="stat-label">Active Prototyping</span>
-        <span class="kpi-val text-warning">${stats.byStatus.in_progress || 0}</span>
-      </div>
-      <div class="kpi-card">
-        <span class="stat-label">BOM Pending Signoff</span>
-        <span class="kpi-val text-warning">${stats.pendingBOMCount || 0}</span>
-      </div>
-      <div class="kpi-card">
-        <span class="stat-label">Completed & Showcased</span>
-        <span class="kpi-val text-success">${stats.byStatus.completed || 0}</span>
-      </div>
-    `;
+    renderAnalyticsContent(stats);
+    return stats;
+  } catch (err) {
+    console.error('Error loading analytics:', err);
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (errorEl) {
+      errorEl.style.display = 'block';
+      if (errorTextEl) errorTextEl.textContent = `Error loading analytics: ${err.message}`;
+    }
+    showToast('Failed to load analytics data', 'error');
+    return null;
+  }
+}
 
-    const totalP = stats.totalProjects || 1;
-    DOM.analyticsDomainBars.innerHTML = (stats.byDomain || []).map(d => {
-      const pct = Math.round((d.count / totalP) * 100);
+function renderAnalyticsContent(stats = {}) {
+  const totalProjects = stats.totalProjects || 0;
+  const byStatus = stats.byStatus || { in_queue: 0, in_progress: 0, testing: 0, completed: 0 };
+  const byDomain = Array.isArray(stats.byDomain) ? stats.byDomain : [];
+  const pendingBOMCount = stats.pendingBOMCount || 0;
+
+  const kpiHTML = `
+    <div class="kpi-card">
+      <span class="stat-label">Total Lab Projects</span>
+      <span class="kpi-val text-primary">${totalProjects}</span>
+    </div>
+    <div class="kpi-card">
+      <span class="stat-label">Active Prototyping</span>
+      <span class="kpi-val text-warning">${byStatus.in_progress || 0}</span>
+    </div>
+    <div class="kpi-card">
+      <span class="stat-label">BOM Pending Signoff</span>
+      <span class="kpi-val text-warning">${pendingBOMCount}</span>
+    </div>
+    <div class="kpi-card">
+      <span class="stat-label">Completed & Showcased</span>
+      <span class="kpi-val text-success">${byStatus.completed || 0}</span>
+    </div>
+  `;
+
+  if (DOM.analyticsKpiRoot) DOM.analyticsKpiRoot.innerHTML = kpiHTML;
+  const pageKpiRoot = document.getElementById('analytics-page-kpi-root');
+  if (pageKpiRoot) pageKpiRoot.innerHTML = kpiHTML;
+
+  const totalP = totalProjects > 0 ? totalProjects : 1;
+  let domainBarsHTML = '';
+  if (byDomain.length === 0) {
+    domainBarsHTML = '<div style="font-size:12px; color:var(--text-dim); padding:10px;">No domain distribution data available.</div>';
+  } else {
+    domainBarsHTML = byDomain.map(d => {
+      const pct = Math.round(((d.count || 0) / totalP) * 100);
       return `
         <div class="bar-row">
-          <span class="bar-label">${d.domain}</span>
+          <span class="bar-label">${escapeHTML(d.domain || 'Other')}</span>
           <div class="bar-fill-wrap">
             <div class="bar-fill-color" style="width:${pct}%;"></div>
           </div>
-          <span class="bar-num">${d.count}</span>
+          <span class="bar-num">${d.count || 0}</span>
         </div>
       `;
     }).join('');
+  }
 
-    const statusLabels = {
-      in_queue: 'In Queue',
-      in_progress: 'On Progress',
-      testing: 'Testing',
-      completed: 'Completed'
-    };
-    DOM.analyticsStatusBars.innerHTML = Object.entries(stats.byStatus || {}).map(([st, count]) => {
-      const pct = Math.round((count / totalP) * 100);
+  if (DOM.analyticsDomainBars) DOM.analyticsDomainBars.innerHTML = domainBarsHTML;
+  const pageDomainBars = document.getElementById('analytics-page-domain-bars');
+  if (pageDomainBars) pageDomainBars.innerHTML = domainBarsHTML;
+
+  const statusLabels = {
+    in_queue: 'In Queue / Ideation',
+    in_progress: 'On Progress / Prototyping',
+    testing: 'Testing & BOM Review',
+    completed: 'Completed & Deployed'
+  };
+
+  let statusBarsHTML = '';
+  const statusEntries = Object.entries(byStatus);
+  if (statusEntries.length === 0) {
+    statusBarsHTML = '<div style="font-size:12px; color:var(--text-dim); padding:10px;">No status distribution data available.</div>';
+  } else {
+    statusBarsHTML = statusEntries.map(([st, count]) => {
+      const pct = Math.round(((count || 0) / totalP) * 100);
       return `
         <div class="bar-row">
           <span class="bar-label">${statusLabels[st] || st}</span>
           <div class="bar-fill-wrap">
             <div class="bar-fill-color" style="width:${pct}%; background:#8b5cf6;"></div>
           </div>
-          <span class="bar-num">${count}</span>
+          <span class="bar-num">${count || 0}</span>
         </div>
       `;
     }).join('');
+  }
 
+  if (DOM.analyticsStatusBars) DOM.analyticsStatusBars.innerHTML = statusBarsHTML;
+  const pageStatusBars = document.getElementById('analytics-page-status-bars');
+  if (pageStatusBars) pageStatusBars.innerHTML = statusBarsHTML;
+}
+
+async function openAnalyticsModal() {
+  const stats = await loadAnalyticsData();
+  if (stats) {
     openModal(DOM.analyticsModal);
-  } catch (err) {
-    showToast('Failed to load analytics', 'error');
   }
 }
 
