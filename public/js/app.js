@@ -946,6 +946,15 @@ function initEventListeners() {
     });
   }
 
+  // Date input picker click trigger enhancer
+  document.querySelectorAll('input[type="date"]').forEach(dInput => {
+    dInput.addEventListener('click', () => {
+      if (typeof dInput.showPicker === 'function') {
+        try { dInput.showPicker(); } catch(e) {}
+      }
+    });
+  });
+
   // Spotlight Modal Actions
   DOM.closeSpotlightModal.addEventListener('click', () => closeModal(DOM.spotlightModal));
   DOM.btnCloseSpotlight.addEventListener('click', () => closeModal(DOM.spotlightModal));
@@ -2909,9 +2918,15 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   document.getElementById('form-project-id').value = '';
   document.getElementById('form-status').value = defaultStatus;
   
+  const today = new Date();
   const nextMonth = new Date();
   nextMonth.setDate(nextMonth.getDate() + 30);
-  document.getElementById('form-due-date').value = nextMonth.toISOString().split('T')[0];
+
+  const startDateInput = document.getElementById('form-start-date');
+  if (startDateInput) startDateInput.value = today.toISOString().split('T')[0];
+  
+  const dueDateInput = document.getElementById('form-due-date');
+  if (dueDateInput) dueDateInput.value = nextMonth.toISOString().split('T')[0];
 
   ['preview-image-url', 'preview-github', 'preview-youtube', 'preview-doc-url', 'preview-linkedin'].forEach(id => {
     updateLinkPreviewIcon(id, '');
@@ -2950,9 +2965,15 @@ function openProjectModalForEdit(project) {
   document.getElementById('form-tags').value = project.tags || '';
   document.getElementById('form-progress').value = project.progress !== undefined ? project.progress : 0;
   
+  let formattedStartDate = project.start_date || '';
+  if (formattedStartDate.includes('T')) formattedStartDate = formattedStartDate.split('T')[0];
+  const startDateInput = document.getElementById('form-start-date');
+  if (startDateInput) startDateInput.value = formattedStartDate;
+
   let formattedDueDate = project.due_date || '';
   if (formattedDueDate.includes('T')) formattedDueDate = formattedDueDate.split('T')[0];
-  document.getElementById('form-due-date').value = formattedDueDate;
+  const dueDateInput = document.getElementById('form-due-date');
+  if (dueDateInput) dueDateInput.value = formattedDueDate;
 
   document.getElementById('form-action-item').value = project.immediate_action || '';
   document.getElementById('form-github').value = project.github_repo || '';
@@ -2986,6 +3007,14 @@ async function handleProjectFormSubmit(e) {
   try {
     const id = document.getElementById('form-project-id').value;
 
+    const start_date = document.getElementById('form-start-date') ? document.getElementById('form-start-date').value : '';
+    const due_date = document.getElementById('form-due-date') ? document.getElementById('form-due-date').value : '';
+
+    if (start_date && due_date && new Date(due_date) < new Date(start_date)) {
+      showToast('To Date cannot be earlier than From Date.', 'error');
+      return;
+    }
+
     let docUrl = normalizeUrl(document.getElementById('form-doc-url').value);
     if (docUrl) {
       const isDriveLink = docUrl.includes('drive.google.com') ||
@@ -3006,7 +3035,8 @@ async function handleProjectFormSubmit(e) {
       status: document.getElementById('form-status').value,
       tags: document.getElementById('form-tags').value.trim(),
       progress: Number(document.getElementById('form-progress').value) || 0,
-      due_date: document.getElementById('form-due-date').value,
+      start_date: start_date,
+      due_date: due_date,
       immediate_action: document.getElementById('form-action-item').value.trim(),
       github_repo: normalizeUrl(document.getElementById('form-github').value),
       youtube_url: normalizeUrl(document.getElementById('form-youtube').value),

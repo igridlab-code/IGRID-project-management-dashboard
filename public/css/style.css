@@ -2109,6 +2109,25 @@ textarea {
   transition: var(--transition);
 }
 
+input[type="date"] {
+  color-scheme: dark;
+  cursor: pointer;
+  position: relative;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(0.8) brightness(1.2);
+  opacity: 0.85;
+  transition: opacity 0.2s ease, filter 0.2s ease;
+  padding: 4px;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  filter: invert(1) brightness(1.5);
+}
+
 input:focus, select:focus, textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px var(--primary-glow);

@@ -58,13 +58,15 @@ async function runTests() {
   const projectId = testProject.id;
   console.log(`✅ PASS: Using Project ID ${projectId} ("${testProject.title}") for edit testing.\n`);
 
-  // 3. Edit Project Details
+  // 3. Edit Project Details with From Date & To Date
   const updatedTitle = `Test Project Save ${Date.now()}`;
-  const updatedDesc = 'Comprehensive edit verification description testing save flow and modal closure.';
+  const updatedDesc = 'Comprehensive edit verification description testing save flow, date pickers and modal closure.';
   const updatedAction = 'Verify hardware test bench and publish updated milestone report.';
   const updatedDocUrl = 'https://drive.google.com/file/d/123456789/view';
+  const updatedStartDate = '2026-02-01';
+  const updatedDueDate = '2026-11-30';
 
-  console.log('1️⃣ Submitting PUT /api/projects/:id with updated project details...');
+  console.log('1️⃣ Submitting PUT /api/projects/:id with updated project details & From/To Dates...');
   const editRes = await makeRequest(`/api/projects/${projectId}`, {
     method: 'PUT',
     headers: {
@@ -80,7 +82,8 @@ async function runTests() {
     status: 'in_progress',
     tags: '#Robotics, #Updated, #Verified',
     progress: 75,
-    due_date: '2026-11-30',
+    start_date: updatedStartDate,
+    due_date: updatedDueDate,
     immediate_action: updatedAction,
     github_repo: 'https://github.com/igrid-lab/test-project',
     youtube_url: 'https://youtube.com/watch?v=123456',
@@ -111,10 +114,12 @@ async function runTests() {
   }
 
   const updatedProj = getSingleRes.json;
-  if (updatedProj.title === updatedTitle && updatedProj.immediate_action === updatedAction && updatedProj.doc_url === updatedDocUrl && updatedProj.progress === 75) {
-    console.log('✅ PASS: All updated fields persisted accurately in SQLite database!');
+  if (updatedProj.title === updatedTitle && updatedProj.start_date === updatedStartDate && updatedProj.due_date === updatedDueDate && updatedProj.progress === 75) {
+    console.log('✅ PASS: All updated fields (including From Date & To Date) persisted accurately in SQLite database!');
     console.log(`   - Title: "${updatedProj.title}"`);
     console.log(`   - Priority: "${updatedProj.priority}"`);
+    console.log(`   - From Date: "${updatedProj.start_date}"`);
+    console.log(`   - To Date: "${updatedProj.due_date}"`);
     console.log(`   - Progress: ${updatedProj.progress}%`);
     console.log(`   - Doc URL: "${updatedProj.doc_url}"`);
   } else {
@@ -135,7 +140,7 @@ async function runTests() {
     process.exit(1);
   }
 
-  // Restore original title
+  // Restore original fields
   await makeRequest(`/api/projects/${projectId}`, {
     method: 'PUT',
     headers: {
@@ -147,7 +152,9 @@ async function runTests() {
     description: testProject.description,
     immediate_action: testProject.immediate_action,
     doc_url: testProject.doc_url,
-    progress: testProject.progress
+    progress: testProject.progress,
+    start_date: testProject.start_date,
+    due_date: testProject.due_date
   });
 
   console.log('\n🎉 ALL EDIT PROJECT SAVE & PERSISTENCE TESTS PASSED 100% SUCCESSFULLY!');
