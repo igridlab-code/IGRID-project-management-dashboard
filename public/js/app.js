@@ -2387,7 +2387,7 @@ async function openProjectDetail(projectId) {
 
     // Fetch & render Project-Specific Timeline Gantt Chart
     try {
-      const tasksRes = await authFetch(`/api/projects/${id}/tasks`);
+      const tasksRes = await authFetch(`/api/projects/${projectId}/tasks`);
       if (tasksRes.ok) {
         state.activeProjectTasks = await tasksRes.json();
       } else {
@@ -3309,10 +3309,11 @@ function renderRecentActivityFeed() {
 // ----------------------------------------------------
 function openModal(modal) {
   if (modal) {
-    const activeModals = document.querySelectorAll('.modal-overlay.active');
-    const baseZIndex = (modal.id === 'detail-modal') ? 1000 : 2500;
-    const newZIndex = baseZIndex + (activeModals.length * 100);
-    modal.style.zIndex = newZIndex;
+    if (modal.id === 'task-modal' || modal.id === 'task-info-modal' || modal.id === 'calendar-activity-modal' || modal.id === 'add-domain-modal') {
+      modal.style.zIndex = '2050';
+    } else {
+      modal.style.zIndex = '1000';
+    }
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
   }
