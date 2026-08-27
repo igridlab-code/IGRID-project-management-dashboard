@@ -1164,7 +1164,7 @@ function renderExecutiveShowcase() {
 // 2. SPOTLIGHT PRESENTATION VIEW
 async function openSpotlightPresentation(projectId) {
   try {
-    const res = await fetch(`/api/projects/${projectId}`);
+    const res = await authFetch(`/api/projects/${projectId}`);
     const project = await res.json();
 
     document.getElementById('spotlight-code').textContent = `${project.project_code} - ${project.title}`;
@@ -2240,7 +2240,7 @@ async function handleDrop(e, targetStatus) {
     updateStatsSummary();
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/status`, {
+      const res = await authFetch(`/api/projects/${projectId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: targetStatus, progress: project.progress })
@@ -2265,7 +2265,7 @@ async function handleDrop(e, targetStatus) {
 async function openProjectDetail(projectId) {
   state.activeProjectId = projectId;
   try {
-    const res = await fetch(`/api/projects/${projectId}`);
+    const res = await authFetch(`/api/projects/${projectId}`);
     const project = await res.json();
 
     document.getElementById('detail-code').textContent = project.project_code || 'IGRID-PROJ';
@@ -2847,7 +2847,7 @@ async function handleCommentSubmit(e) {
   if (!message || !state.activeProjectId) return;
 
   try {
-    const res = await fetch(`/api/projects/${state.activeProjectId}/comments`, {
+    const res = await authFetch(`/api/projects/${state.activeProjectId}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ author, author_role: 'Coordinator', message })
@@ -2865,6 +2865,16 @@ async function handleCommentSubmit(e) {
 // ----------------------------------------------------
 // PROJECT FORM CREATE / EDIT
 // ----------------------------------------------------
+function normalizeUrl(url) {
+  if (!url) return '';
+  url = String(url).trim();
+  if (!url) return '';
+  if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('/')) {
+    return 'https://' + url;
+  }
+  return url;
+}
+
 function updateLinkPreviewIcon(elementId, url) {
   const icon = document.getElementById(elementId);
   if (!icon) return;
@@ -2911,17 +2921,39 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
 }
 
 function openProjectModalForEdit(project) {
-  DOM.modalProjectTitle.textContent = `✏️ Edit Project: ${project.project_code}`;
-  document.getElementById('form-project-id').value = project.id;
-  document.getElementById('form-code').value = project.project_code;
-  document.getElementById('form-title').value = project.title;
+  DOM.modalProjectTitle.textContent = `✏️ Edit Project: ${project.project_code || ''}`;
+  document.getElementById('form-project-id').value = project.id || '';
+  document.getElementById('form-code').value = project.project_code || '';
+  document.getElementById('form-title').value = project.title || '';
   document.getElementById('form-description').value = project.description || '';
-  document.getElementById('form-domain').value = project.domain;
-  document.getElementById('form-priority').value = project.priority;
-  document.getElementById('form-status').value = project.status;
+  
+  const domainSelect = document.getElementById('form-domain');
+  if (domainSelect) {
+    let exists = false;
+    for (let i = 0; i < domainSelect.options.length; i++) {
+      if (domainSelect.options[i].value === project.domain) {
+        exists = true;
+        break;
+      }
+    }
+    if (!exists && project.domain) {
+      const opt = document.createElement('option');
+      opt.value = project.domain;
+      opt.textContent = project.domain;
+      domainSelect.insertBefore(opt, domainSelect.firstChild);
+    }
+    domainSelect.value = project.domain || (domainSelect.options[0] ? domainSelect.options[0].value : 'AI');
+  }
+
+  document.getElementById('form-priority').value = project.priority || 'Normal';
+  document.getElementById('form-status').value = project.status || 'in_progress';
   document.getElementById('form-tags').value = project.tags || '';
-  document.getElementById('form-progress').value = project.progress || 0;
-  document.getElementById('form-due-date').value = project.due_date || '';
+  document.getElementById('form-progress').value = project.progress !== undefined ? project.progress : 0;
+  
+  let formattedDueDate = project.due_date || '';
+  if (formattedDueDate.includes('T')) formattedDueDate = formattedDueDate.split('T')[0];
+  document.getElementById('form-due-date').value = formattedDueDate;
+
   document.getElementById('form-action-item').value = project.immediate_action || '';
   document.getElementById('form-github').value = project.github_repo || '';
   document.getElementById('form-youtube').value = project.youtube_url || '';
@@ -2944,50 +2976,51 @@ function openProjectModalForEdit(project) {
 
 async function handleProjectFormSubmit(e) {
   e.preventDefault();
-  const id = document.getElementById('form-project-id').value;
-
-  let docUrl = document.getElementById('form-doc-url').value.trim();
-
-  // Validate & normalize Google Drive URL if provided
-  if (docUrl) {
-    if (!docUrl.startsWith('http://') && !docUrl.startsWith('https://')) {
-      docUrl = 'https://' + docUrl;
-    }
-    const isDriveLink = docUrl.includes('drive.google.com') ||
-                        docUrl.includes('docs.google.com') ||
-                        docUrl.includes('google.com/drive');
-    if (!isDriveLink) {
-      console.warn('⚠️ Google Drive Link Validation Failed:', docUrl);
-      showToast('Please paste a valid Google Drive or Docs link (e.g. drive.google.com or docs.google.com)', 'error');
-      return;
-    }
+  const saveBtn = document.getElementById('save-project-btn');
+  const originalBtnText = saveBtn ? saveBtn.innerHTML : '💾 Save Project Details';
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '⏳ Saving...';
   }
 
-  const payload = {
-    project_code: document.getElementById('form-code').value.trim(),
-    title: document.getElementById('form-title').value.trim(),
-    description: document.getElementById('form-description').value.trim(),
-    domain: document.getElementById('form-domain').value,
-    priority: document.getElementById('form-priority').value,
-    status: document.getElementById('form-status').value,
-    tags: document.getElementById('form-tags').value.trim(),
-    progress: Number(document.getElementById('form-progress').value) || 0,
-    due_date: document.getElementById('form-due-date').value,
-    immediate_action: document.getElementById('form-action-item').value.trim(),
-    github_repo: document.getElementById('form-github').value.trim(),
-    youtube_url: document.getElementById('form-youtube').value.trim(),
-    doc_url: docUrl,
-    linkedin_url: document.getElementById('form-linkedin').value.trim(),
-    image_url: document.getElementById('form-image-url').value.trim(),
-    team_name: document.getElementById('form-team-name').value.trim(),
-    team_lead: document.getElementById('form-team-lead').value.trim(),
-    team_lead_photo: document.getElementById('form-team-lead-photo').value.trim(),
-    deliverables: document.getElementById('form-deliverables').value.trim()
-  };
-
-  console.log('💾 Submitting Project Form Payload:', payload);
-
   try {
+    const id = document.getElementById('form-project-id').value;
+
+    let docUrl = normalizeUrl(document.getElementById('form-doc-url').value);
+    if (docUrl) {
+      const isDriveLink = docUrl.includes('drive.google.com') ||
+                          docUrl.includes('docs.google.com') ||
+                          docUrl.includes('google.com/drive');
+      if (!isDriveLink) {
+        showToast('Please paste a valid Google Drive or Docs link (e.g. drive.google.com)', 'error');
+        return;
+      }
+    }
+
+    const payload = {
+      project_code: document.getElementById('form-code').value.trim(),
+      title: document.getElementById('form-title').value.trim(),
+      description: document.getElementById('form-description').value.trim(),
+      domain: document.getElementById('form-domain').value,
+      priority: document.getElementById('form-priority').value,
+      status: document.getElementById('form-status').value,
+      tags: document.getElementById('form-tags').value.trim(),
+      progress: Number(document.getElementById('form-progress').value) || 0,
+      due_date: document.getElementById('form-due-date').value,
+      immediate_action: document.getElementById('form-action-item').value.trim(),
+      github_repo: normalizeUrl(document.getElementById('form-github').value),
+      youtube_url: normalizeUrl(document.getElementById('form-youtube').value),
+      doc_url: docUrl,
+      linkedin_url: normalizeUrl(document.getElementById('form-linkedin').value),
+      image_url: normalizeUrl(document.getElementById('form-image-url').value),
+      team_name: document.getElementById('form-team-name').value.trim(),
+      team_lead: document.getElementById('form-team-lead').value.trim(),
+      team_lead_photo: normalizeUrl(document.getElementById('form-team-lead-photo').value),
+      deliverables: document.getElementById('form-deliverables').value.trim()
+    };
+
+    console.log('💾 Submitting Project Form Payload:', payload);
+
     let res;
     if (id) {
       res = await authFetch(`/api/projects/${id}`, {
@@ -3006,7 +3039,7 @@ async function handleProjectFormSubmit(e) {
     if (res.ok) {
       console.log('✅ Project saved successfully!');
       closeModal(DOM.projectModal);
-      showToast(id ? 'Project updated successfully' : 'New project created successfully');
+      showToast(id ? 'Project details updated successfully' : 'New project created successfully');
       await Promise.all([fetchProjects(), fetchNotifications()]);
       renderAllViews();
       updateStatsSummary();
@@ -3021,12 +3054,21 @@ async function handleProjectFormSubmit(e) {
   } catch (err) {
     console.error('❌ Error saving project:', err);
     showToast(`Failed to save project: ${err.message || 'Network error'}`, 'error');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = originalBtnText;
+    }
+    const activeModals = document.querySelectorAll('.modal-overlay.active');
+    if (activeModals.length === 0) {
+      document.body.style.overflow = '';
+    }
   }
 }
 
 async function deleteProject(id) {
   try {
-    const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+    const res = await authFetch(`/api/projects/${id}`, { method: 'DELETE' });
     if (res.ok) {
       showToast('Project deleted');
       await Promise.all([fetchProjects(), fetchNotifications()]);
@@ -3042,7 +3084,7 @@ async function updateProjectField(id, field, value) {
   try {
     const payload = {};
     payload[field] = value;
-    const res = await fetch(`/api/projects/${id}`, {
+    const res = await authFetch(`/api/projects/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -3084,7 +3126,7 @@ async function handleBomFormSubmit(e) {
   };
 
   try {
-    const res = await fetch('/api/bom', {
+    const res = await authFetch('/api/bom', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -3102,7 +3144,7 @@ async function handleBomFormSubmit(e) {
 
 async function updateBomStatus(bomId, status) {
   try {
-    const res = await fetch(`/api/bom/${bomId}/status`, {
+    const res = await authFetch(`/api/bom/${bomId}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, admin_remarks: `Set to ${status} by Lab In-Charge` })
@@ -3134,7 +3176,7 @@ async function handleStudentFormSubmit(e) {
   };
 
   try {
-    const res = await fetch('/api/students', {
+    const res = await authFetch('/api/students', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -3320,12 +3362,23 @@ function openModal(modal) {
 function closeModal(modal) {
   if (modal) {
     modal.classList.remove('active');
-    const activeModals = document.querySelectorAll('.modal-overlay.active');
-    if (activeModals.length === 0) {
-      document.body.style.overflow = '';
-    }
+  }
+  const activeModals = document.querySelectorAll('.modal-overlay.active');
+  if (activeModals.length === 0) {
+    document.body.style.overflow = '';
   }
 }
+
+// Global ESC key handler to close topmost active modal and restore body scroll
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const activeModals = document.querySelectorAll('.modal-overlay.active');
+    if (activeModals.length > 0) {
+      const topModal = activeModals[activeModals.length - 1];
+      closeModal(topModal);
+    }
+  }
+});
 
 function showToast(msg, type = 'success') {
   const toast = document.createElement('div');

@@ -452,16 +452,24 @@ app.post('/api/projects', requireAuth, (req, res) => {
 app.put('/api/projects/:id', requireAuth, (req, res) => {
   const { id } = req.params;
   const {
+    project_code,
     title, description, domain, tags, status, priority,
     progress, start_date, due_date, immediate_action, github_repo,
     youtube_url, linkedin_url, doc_url, image_url,
     bom_status, team_name, team_lead, team_lead_photo, team_members, deliverables
   } = req.body;
 
-  const membersJson = typeof team_members === 'string' ? team_members : JSON.stringify(team_members || []);
+  const membersJson = team_members !== undefined
+    ? (typeof team_members === 'string' ? team_members : JSON.stringify(team_members || []))
+    : null;
+
+  const progressNum = (progress !== undefined && progress !== null && progress !== '')
+    ? Number(progress)
+    : null;
 
   const sql = `
     UPDATE projects SET
+      project_code = COALESCE(?, project_code),
       title = COALESCE(?, title),
       description = COALESCE(?, description),
       domain = COALESCE(?, domain),
@@ -490,8 +498,9 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
   db.run(
     sql,
     [
+      project_code,
       title, description, domain, tags, status, priority,
-      progress !== undefined ? Number(progress) : null,
+      progressNum,
       start_date, due_date, immediate_action, github_repo,
       youtube_url, linkedin_url, doc_url, image_url,
       bom_status, team_name, team_lead, team_lead_photo, membersJson, deliverables, id
