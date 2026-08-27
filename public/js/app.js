@@ -229,9 +229,26 @@ async function authFetch(url, options = {}) {
 function updateUserNavbarUI() {
   const userRoleBadge = document.getElementById('user-display-role');
   const userNameText = document.getElementById('user-display-name');
+  const openAddStudentBtn = document.getElementById('open-add-student-modal');
+  const openAddProjectBtn = document.getElementById('open-project-modal');
+
   if (state.currentUser) {
-    if (userNameText) userNameText.textContent = state.currentUser.email.split('@')[0];
-    if (userRoleBadge) userRoleBadge.textContent = 'Authenticated User';
+    const isAdmin = isUserAdmin();
+    const displayName = state.currentUser.name || state.currentUser.email.split('@')[0];
+
+    if (userNameText) userNameText.textContent = displayName;
+    if (userRoleBadge) {
+      userRoleBadge.textContent = isAdmin ? '👑 Admin Coordinator' : '🎓 Student Innovator';
+      userRoleBadge.className = `badge ${isAdmin ? 'badge-primary' : 'badge-success'}`;
+    }
+
+    if (!isAdmin) {
+      if (openAddStudentBtn) openAddStudentBtn.style.display = 'none';
+      if (openAddProjectBtn) openAddProjectBtn.style.display = 'none';
+    } else {
+      if (openAddStudentBtn) openAddStudentBtn.style.display = 'inline-block';
+      if (openAddProjectBtn) openAddProjectBtn.style.display = 'inline-block';
+    }
   }
 }
 
@@ -919,6 +936,32 @@ function initEventListeners() {
 
   const studentEditForm = document.getElementById('student-edit-form');
   if (studentEditForm) studentEditForm.addEventListener('submit', handleStudentEditFormSubmit);
+
+  // Student Search & Filter Listeners
+  const studentSearchInput = document.getElementById('student-search-input');
+  if (studentSearchInput) studentSearchInput.addEventListener('input', renderStudents);
+
+  const studentDeptFilter = document.getElementById('student-dept-filter');
+  if (studentDeptFilter) studentDeptFilter.addEventListener('change', renderStudents);
+
+  const studentYearFilter = document.getElementById('student-year-filter');
+  if (studentYearFilter) studentYearFilter.addEventListener('change', renderStudents);
+
+  const studentStatusFilter = document.getElementById('student-status-filter');
+  if (studentStatusFilter) studentStatusFilter.addEventListener('change', renderStudents);
+
+  const studentSortBy = document.getElementById('student-sort-by');
+  if (studentSortBy) studentSortBy.addEventListener('change', renderStudents);
+
+  // Calendar Activity Modal Listeners
+  const closeCalModal = document.getElementById('close-calendar-activity-modal');
+  if (closeCalModal) closeCalModal.addEventListener('click', () => closeModal(document.getElementById('calendar-activity-modal')));
+
+  const cancelCalBtn = document.getElementById('cancel-cal-activity-btn');
+  if (cancelCalBtn) cancelCalBtn.addEventListener('click', () => closeModal(document.getElementById('calendar-activity-modal')));
+
+  const calForm = document.getElementById('calendar-activity-form');
+  if (calForm) calForm.addEventListener('submit', handleCalendarActivityFormSubmit);
 
   // Analytics Modal Actions
   DOM.labAnalyticsBtn.addEventListener('click', () => openAnalyticsModal());
@@ -1634,6 +1677,55 @@ function renderStudents() {
 
   const isAdmin = isUserAdmin();
 
+  // Search & Filters
+  const searchInput = document.getElementById('student-search-input');
+  const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+  const deptSelect = document.getElementById('student-dept-filter');
+  const selectedDept = deptSelect ? deptSelect.value : 'All';
+
+  const yearSelect = document.getElementById('student-year-filter');
+  const selectedYear = yearSelect ? yearSelect.value : 'All';
+
+  const statusSelect = document.getElementById('student-status-filter');
+  const selectedStatus = statusSelect ? statusSelect.value : 'All';
+
+  const sortSelect = document.getElementById('student-sort-by');
+  const selectedSort = sortSelect ? sortSelect.value : 'name_asc';
+
+  let filtered = state.students.filter(s => {
+    if (query) {
+      const matchName = (s.name || '').toLowerCase().includes(query);
+      const matchRoll = (s.roll_no || '').toLowerCase().includes(query);
+      const matchProject = (s.assigned_project || s.project_title || '').toLowerCase().includes(query);
+      if (!matchName && !matchRoll && !matchProject) return false;
+    }
+    if (selectedDept !== 'All' && (s.department || '').toLowerCase() !== selectedDept.toLowerCase()) {
+      return false;
+    }
+    if (selectedYear !== 'All' && (s.year || '').toLowerCase() !== selectedYear.toLowerCase()) {
+      return false;
+    }
+    if (selectedStatus !== 'All' && (s.status || 'Active').toLowerCase() !== selectedStatus.toLowerCase()) {
+      return false;
+    }
+    return true;
+  });
+
+  // Sorting
+  filtered.sort((a, b) => {
+    if (selectedSort === 'name_asc') return (a.name || '').localeCompare(b.name || '');
+    if (selectedSort === 'name_desc') return (b.name || '').localeCompare(a.name || '');
+    if (selectedSort === 'roll_asc') return (a.roll_no || '').localeCompare(b.roll_no || '');
+    if (selectedSort === 'progress_desc') return (b.progress || 0) - (a.progress || 0);
+    return 0;
+  });
+
+  if (filtered.length === 0) {
+    DOM.studentsGridRoot.innerHTML = '<div style="padding:20px; color:var(--text-dim);">No student profiles match the filter criteria.</div>';
+    return;
+  }
+
   let html = `
     <div class="students-table-outer" style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-card); margin-top: 16px;">
       <table class="students-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
@@ -1642,7 +1734,8 @@ function renderStudents() {
             <th style="padding: 12px 16px;">Student</th>
             <th style="padding: 12px 16px;">Register No</th>
             <th style="padding: 12px 16px;">Dept & Year</th>
-            <th style="padding: 12px 16px;">Contact Info</th>
+            <th style="padding: 12px 16px;">Project & Guide</th>
+            <th style="padding: 12px 16px;">Progress</th>
             <th style="padding: 12px 16px;">Status</th>
             <th style="padding: 12px 16px; text-align: right;">Actions</th>
           </tr>
@@ -1650,10 +1743,13 @@ function renderStudents() {
         <tbody>
   `;
 
-  state.students.forEach(s => {
+  filtered.forEach(s => {
     const photo = s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=${(s.avatar_color || '6366f1').replace('#','')}&color=fff`;
     const statusText = s.status || 'Active';
     const statusBadge = statusText === 'Active' ? 'badge-success' : 'badge-normal';
+    const projName = s.assigned_project || s.project_title || 'Unassigned';
+    const guideName = s.guide || 'Not assigned';
+    const prog = s.progress || 0;
 
     html += `
       <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.15s ease;" class="student-table-row">
@@ -1662,7 +1758,7 @@ function renderStudents() {
             <img src="${photo}" alt="${escapeHTML(s.name)}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid ${s.avatar_color || '#6366f1'};">
             <div>
               <div style="font-weight: 700; color: var(--text-main);">${escapeHTML(s.name)}</div>
-              <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.role || 'Innovator')}</div>
+              <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.email || '')}</div>
             </div>
           </div>
         </td>
@@ -1672,14 +1768,22 @@ function renderStudents() {
           <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.year || 'Student')} ${s.section ? '• ' + escapeHTML(s.section) : ''}</div>
         </td>
         <td style="padding: 12px 16px;">
-          <div><a href="mailto:${s.email}" style="color: #60a5fa; text-decoration: none;">${escapeHTML(s.email || 'N/A')}</a></div>
-          <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.phone || '')}</div>
+          <div style="font-weight: 600; color: #60a5fa;">${escapeHTML(projName)}</div>
+          <div style="font-size: 11px; color: var(--text-dim);">Guide: ${escapeHTML(guideName)}</div>
+        </td>
+        <td style="padding: 12px 16px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="flex:1; height:6px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden; min-width:60px;">
+              <div style="width:${prog}%; height:100%; background:linear-gradient(90deg, #2563eb, #10b981); border-radius:4px;"></div>
+            </div>
+            <span style="font-size:11px; font-weight:700; color:var(--text-main);">${prog}%</span>
+          </div>
         </td>
         <td style="padding: 12px 16px;">
           <span class="badge ${statusBadge}">${escapeHTML(statusText)}</span>
         </td>
         <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
-          <button class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" style="margin-right: 6px;">👁️ View</button>
+          <button class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" style="margin-right: 6px;">👁️ View Profile</button>
           ${isAdmin ? `<button class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})">✏️ Edit</button>` : ''}
         </td>
       </tr>
@@ -1745,7 +1849,13 @@ function openStudentViewModal(studentId) {
   }
 
   const teamEl = document.getElementById('view-student-team');
-  if (teamEl) teamEl.textContent = s.assigned_project || 'No team/project assigned yet.';
+  if (teamEl) teamEl.textContent = s.assigned_project || s.project_title || 'No team/project assigned yet.';
+
+  const guideEl = document.getElementById('view-student-guide');
+  if (guideEl) guideEl.textContent = s.guide || 'Not assigned';
+
+  const membersEl = document.getElementById('view-student-members');
+  if (membersEl) membersEl.textContent = s.team_members || s.name;
 
   const bioEl = document.getElementById('view-student-bio');
   if (bioEl) bioEl.textContent = s.bio || 'No biography details provided.';
@@ -1785,7 +1895,143 @@ function openStudentViewModal(studentId) {
     }
   }
 
+  loadStudentCalendar(s.id);
+
   openModal(document.getElementById('student-view-modal'));
+}
+
+async function loadStudentCalendar(studentId) {
+  const tbody = document.getElementById('student-calendar-tbody');
+  if (!tbody) return;
+
+  const btnAddCal = document.getElementById('btn-admin-add-calendar-activity');
+  const isAdmin = isUserAdmin();
+
+  if (btnAddCal) {
+    if (isAdmin) {
+      btnAddCal.style.display = 'inline-block';
+      btnAddCal.onclick = () => openCalendarActivityModal(studentId);
+    } else {
+      btnAddCal.style.display = 'none';
+    }
+  }
+
+  try {
+    const res = await authFetch(`/api/students/${studentId}/calendar`);
+    if (!res.ok) throw new Error('Failed to load calendar');
+    const activities = await res.json();
+
+    if (activities.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="padding:16px; color:var(--text-dim); text-align:center;">No month-wise calendar activities recorded for this student.</td></tr>';
+      return;
+    }
+
+    let html = '';
+    activities.forEach(act => {
+      let badgeClass = 'badge-normal';
+      if (act.status === 'Completed') badgeClass = 'badge-success';
+      if (act.status === 'In Progress') badgeClass = 'badge-primary';
+
+      html += `
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+          <td style="padding:10px; font-weight:700; color:var(--text-main);">${escapeHTML(act.month)}</td>
+          <td style="padding:10px; color:var(--text-muted);">${escapeHTML(act.date || '-')}</td>
+          <td style="padding:10px; font-weight:600; color:#e2e8f0;">${escapeHTML(act.activity)}</td>
+          <td style="padding:10px;"><span class="badge ${badgeClass}">${escapeHTML(act.status || 'Pending')}</span></td>
+          <td style="padding:10px; font-weight:700; color:#34d399;">${act.progress || 0}%</td>
+          <td style="padding:10px; color:var(--text-dim); font-size:11px;">${escapeHTML(act.remarks || '-')}</td>
+          <td style="padding:10px; text-align:right;" class="admin-cal-col">
+            ${isAdmin ? `
+              <button class="btn btn-sm btn-secondary" onclick="openCalendarActivityModal(${studentId}, ${act.id})" style="padding:2px 6px; font-size:11px; margin-right:4px;">✏️</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteCalendarActivity(${studentId}, ${act.id})" style="padding:2px 6px; font-size:11px;">🗑️</button>
+            ` : '-'}
+          </td>
+        </tr>
+      `;
+    });
+
+    tbody.innerHTML = html;
+  } catch (err) {
+    console.error('Error loading student calendar:', err);
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:12px; color:#ef4444;">Failed to load calendar activities.</td></tr>';
+  }
+}
+
+function openCalendarActivityModal(studentId, activityId = null) {
+  document.getElementById('cal-student-id').value = studentId;
+  document.getElementById('cal-activity-id').value = activityId || '';
+
+  if (activityId) {
+    document.getElementById('calendar-activity-title').textContent = '✏️ Edit Calendar Activity';
+    authFetch(`/api/students/${studentId}/calendar`).then(r => r.json()).then(activities => {
+      const act = activities.find(a => Number(a.id) === Number(activityId));
+      if (act) {
+        document.getElementById('cal-month').value = act.month || 'January';
+        document.getElementById('cal-date').value = act.date || '';
+        document.getElementById('cal-activity-text').value = act.activity || '';
+        document.getElementById('cal-status').value = act.status || 'Pending';
+        document.getElementById('cal-progress').value = act.progress || 0;
+        document.getElementById('cal-remarks').value = act.remarks || '';
+      }
+    });
+  } else {
+    document.getElementById('calendar-activity-title').textContent = '📅 Add Calendar Activity';
+    document.getElementById('cal-month').value = 'January';
+    document.getElementById('cal-date').value = '01';
+    document.getElementById('cal-activity-text').value = '';
+    document.getElementById('cal-status').value = 'In Progress';
+    document.getElementById('cal-progress').value = '25';
+    document.getElementById('cal-remarks').value = '';
+  }
+
+  openModal(document.getElementById('calendar-activity-modal'));
+}
+
+async function handleCalendarActivityFormSubmit(e) {
+  e.preventDefault();
+  const studentId = document.getElementById('cal-student-id').value;
+  const activityId = document.getElementById('cal-activity-id').value;
+  const month = document.getElementById('cal-month').value;
+  const date = document.getElementById('cal-date').value.trim();
+  const activity = document.getElementById('cal-activity-text').value.trim();
+  const status = document.getElementById('cal-status').value;
+  const progress = Number(document.getElementById('cal-progress').value || 0);
+  const remarks = document.getElementById('cal-remarks').value.trim();
+
+  if (!month || !activity) {
+    showToast('Month and Activity description are required', 'error');
+    return;
+  }
+
+  const payload = { month, date, activity, status, progress, remarks };
+  const url = activityId ? `/api/students/calendar/${activityId}` : `/api/students/${studentId}/calendar`;
+  const method = activityId ? 'PUT' : 'POST';
+
+  try {
+    const res = await authFetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Failed to save activity');
+    showToast('Calendar activity saved successfully', 'success');
+    closeModal(document.getElementById('calendar-activity-modal'));
+    loadStudentCalendar(studentId);
+  } catch (err) {
+    showToast(`Error saving calendar activity: ${err.message}`, 'error');
+  }
+}
+
+async function deleteCalendarActivity(studentId, activityId) {
+  if (!confirm('Are you sure you want to delete this calendar activity?')) return;
+  try {
+    const res = await authFetch(`/api/students/calendar/${activityId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Failed to delete activity');
+    showToast('Calendar activity deleted successfully', 'success');
+    loadStudentCalendar(studentId);
+  } catch (err) {
+    showToast(`Error deleting activity: ${err.message}`, 'error');
+  }
 }
 
 function openStudentEditModal(studentId) {

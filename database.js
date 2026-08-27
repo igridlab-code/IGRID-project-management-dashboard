@@ -71,6 +71,7 @@ function initDb() {
     db.run(`
       CREATE TABLE IF NOT EXISTS students (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
         name TEXT NOT NULL,
         roll_no TEXT NOT NULL UNIQUE,
         email TEXT,
@@ -88,11 +89,16 @@ function initDb() {
         linkedin_url TEXT,
         bio TEXT,
         assigned_project TEXT,
-        status TEXT DEFAULT 'Active'
+        project_title TEXT,
+        project_desc TEXT,
+        team_members TEXT,
+        guide TEXT,
+        status TEXT DEFAULT 'Active',
+        progress INTEGER DEFAULT 0
       )
     `);
 
-    const studentCols = ['phone', 'section', 'college', 'github_url', 'linkedin_url', 'bio', 'assigned_project', 'status'];
+    const studentCols = ['user_id', 'phone', 'section', 'college', 'github_url', 'linkedin_url', 'bio', 'assigned_project', 'project_title', 'project_desc', 'team_members', 'guide', 'status', 'progress'];
     studentCols.forEach(col => {
       db.run(`ALTER TABLE students ADD COLUMN ${col} TEXT`, () => {});
     });
@@ -140,6 +146,8 @@ function initDb() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT NOT NULL UNIQUE,
         password_hash TEXT,
+        name TEXT,
+        role TEXT DEFAULT 'student',
         google_id TEXT,
         auth_provider TEXT DEFAULT 'email',
         reset_token TEXT,
@@ -147,6 +155,9 @@ function initDb() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    db.run(`ALTER TABLE auth_users ADD COLUMN name TEXT`, () => {});
+    db.run(`ALTER TABLE auth_users ADD COLUMN role TEXT DEFAULT 'student'`, () => {});
 
     // Domains Table
     db.run(`
@@ -172,6 +183,23 @@ function initDb() {
         assigned_member TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+      )
+    `);
+
+    // Month-Wise Student Calendar Activities Table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS student_calendar (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_id INTEGER NOT NULL,
+        project_id INTEGER,
+        month TEXT NOT NULL,
+        date TEXT NOT NULL,
+        activity TEXT NOT NULL,
+        status TEXT DEFAULT 'Pending',
+        progress INTEGER DEFAULT 0,
+        remarks TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE
       )
     `);
 

@@ -228,24 +228,65 @@
         <button type="submit" class="btn-submit" id="btn-login-submit">Sign In to Dashboard</button>
       </form>
 
-      <!-- 2. CREATE ACCOUNT FORM -->
+      <!-- 2. CREATE STUDENT ACCOUNT FORM -->
       <form id="form-signup" style="display: none;">
         <div class="form-group">
-          <label>Gmail / Email Address</label>
+          <label>Full Name *</label>
+          <input type="text" id="signup-name" placeholder="e.g. Priya Sundaram" required>
+        </div>
+
+        <div class="form-group">
+          <label>Student ID / Register Number *</label>
+          <input type="text" id="signup-roll" placeholder="e.g. 811221104045" required>
+        </div>
+
+        <div class="form-group">
+          <label>Email Address *</label>
           <input type="email" id="signup-email" placeholder="student@gmail.com" required autocomplete="email">
         </div>
 
         <div class="form-group">
-          <label>Create Password (encrypted)</label>
+          <label>Phone Number</label>
+          <input type="tel" id="signup-phone" placeholder="+91 98765 43210">
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+          <div class="form-group" style="flex: 1;">
+            <label>Department</label>
+            <input type="text" id="signup-dept" placeholder="ECE / CSE / Mech / AI">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label>Year & Section</label>
+            <input type="text" id="signup-year" placeholder="3rd Year (Sec A)">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Project Title</label>
+          <input type="text" id="signup-project" placeholder="e.g. Smart Grass Cutter Robot">
+        </div>
+
+        <div class="form-group">
+          <label>Team Members</label>
+          <input type="text" id="signup-team" placeholder="Alex Chen, Sarah Jenkins">
+        </div>
+
+        <div class="form-group">
+          <label>Guide / Mentor Name</label>
+          <input type="text" id="signup-guide" placeholder="Dr. R. Arumugam">
+        </div>
+
+        <div class="form-group">
+          <label>Create Password * (encrypted)</label>
           <input type="password" id="signup-password" placeholder="At least 6 characters" minlength="6" required autocomplete="new-password">
         </div>
 
         <div class="form-group">
-          <label>Confirm Password</label>
+          <label>Confirm Password *</label>
           <input type="password" id="signup-confirm-password" placeholder="Re-enter password" minlength="6" required autocomplete="new-password">
         </div>
 
-        <button type="submit" class="btn-submit" id="btn-signup-submit">Register Account</button>
+        <button type="submit" class="btn-submit" id="btn-signup-submit">Register Student Account</button>
       </form>
 
       <!-- 3. FORGOT PASSWORD FORM -->
@@ -335,9 +376,22 @@
 
     formSignup.onsubmit = async (e) => {
       e.preventDefault();
+      const name = document.getElementById('signup-name').value.trim();
+      const roll_no = document.getElementById('signup-roll').value.trim();
       const email = document.getElementById('signup-email').value.trim();
+      const phone = document.getElementById('signup-phone').value.trim();
+      const department = document.getElementById('signup-dept').value.trim();
+      const year = document.getElementById('signup-year').value.trim();
+      const project_title = document.getElementById('signup-project').value.trim();
+      const team_members = document.getElementById('signup-team').value.trim();
+      const guide = document.getElementById('signup-guide').value.trim();
       const password = document.getElementById('signup-password').value;
       const confirmPassword = document.getElementById('signup-confirm-password').value;
+
+      if (!name || !roll_no || !email || !password) {
+        showToast('Please fill in all required fields', true);
+        return;
+      }
 
       if (password !== confirmPassword) {
         showToast('Passwords do not match', true);
@@ -348,12 +402,15 @@
         const res = await fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
+          body: JSON.stringify({
+            name, roll_no, email, phone, department, year,
+            project_title, team_members, guide, password
+          })
         });
         const data = await res.json();
         if (res.ok) {
           localStorage.setItem('igrid_session', data.token);
-          showToast('Account registered! Redirecting to dashboard...');
+          showToast('Student Account Registered! Redirecting...');
           setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 600);
         } else {
           showToast(data.error || 'Registration failed', true);

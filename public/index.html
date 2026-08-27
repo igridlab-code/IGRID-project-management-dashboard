@@ -568,11 +568,53 @@
         <div class="students-container">
           <div class="students-header">
             <div>
-              <h2>👥 IGRID Student Innovator Directory</h2>
-              <p>Active lab researchers, domain specialists, and hardware engineers.</p>
+              <h2>👥 Student Management Directory</h2>
+              <p>Registered student researchers, project teams, and guide assignments.</p>
             </div>
             <button class="btn btn-primary" id="open-add-student-modal">+ Register Student</button>
           </div>
+
+          <!-- ADMIN STUDENT SEARCH & FILTERS -->
+          <div class="student-filters-bar" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 10px; border: 1px solid var(--border-color);">
+            <div style="flex: 2; min-width: 180px;">
+              <input type="text" id="student-search-input" placeholder="🔍 Search by name, roll no, or project..." style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px;">
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+              <select id="student-dept-filter" style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px;">
+                <option value="All">All Departments</option>
+                <option value="ECE">ECE</option>
+                <option value="CSE">CSE</option>
+                <option value="Mech">Mechanical</option>
+                <option value="AI">AI & DS</option>
+                <option value="EEE">EEE</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 120px;">
+              <select id="student-year-filter" style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px;">
+                <option value="All">All Years</option>
+                <option value="1st Year">1st Year</option>
+                <option value="2nd Year">2nd Year</option>
+                <option value="3rd Year">3rd Year</option>
+                <option value="4th Year">4th Year</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 120px;">
+              <select id="student-status-filter" style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px;">
+                <option value="All">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+              <select id="student-sort-by" style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px;">
+                <option value="name_asc">Sort: Name (A-Z)</option>
+                <option value="name_desc">Sort: Name (Z-A)</option>
+                <option value="roll_asc">Sort: Register No</option>
+                <option value="progress_desc">Sort: Highest Progress</option>
+              </select>
+            </div>
+          </div>
+
           <div class="students-grid" id="students-grid-root"></div>
         </div>
       </div>
@@ -1108,17 +1150,54 @@
           <p id="view-student-team" style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-main); font-weight: 600;">-</p>
         </div>
 
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 16px; background: rgba(255,255,255,0.02); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+          <div>
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Guide / Mentor</span>
+            <p id="view-student-guide" style="margin: 2px 0 0 0; font-size: 13px; font-weight: 600; color: var(--text-main);">-</p>
+          </div>
+          <div>
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Team Members</span>
+            <p id="view-student-members" style="margin: 2px 0 0 0; font-size: 13px; font-weight: 600; color: var(--text-main);">-</p>
+          </div>
+        </div>
+
         <div style="margin-bottom: 16px;">
           <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Biography</span>
           <p id="view-student-bio" style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.5;">-</p>
         </div>
 
-        <div style="display: flex; gap: 12px;">
+        <div style="display: flex; gap: 12px; margin-bottom: 18px;">
           <div id="view-student-github-wrap" style="display:none;">
             <a id="view-student-github" href="#" target="_blank" class="btn btn-secondary btn-sm" style="gap:6px;">🐙 GitHub Profile</a>
           </div>
           <div id="view-student-linkedin-wrap" style="display:none;">
             <a id="view-student-linkedin" href="#" target="_blank" class="btn btn-secondary btn-sm" style="gap:6px;">💼 LinkedIn Profile</a>
+          </div>
+        </div>
+
+        <!-- 📅 MONTH-WISE CALENDAR & PROGRESS TABLE -->
+        <div style="border-top: 1px solid var(--border-color); padding-top: 16px; margin-top: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text-main);">📅 Month-Wise Project Calendar & Progress Table</h4>
+            <button type="button" class="btn btn-sm btn-primary" id="btn-admin-add-calendar-activity" style="display:none;">+ Add Activity</button>
+          </div>
+          <div style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(0,0,0,0.2);">
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
+              <thead>
+                <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--border-color); color: var(--text-muted); text-transform: uppercase; font-size: 10px;">
+                  <th style="padding: 8px 10px;">Month</th>
+                  <th style="padding: 8px 10px;">Date</th>
+                  <th style="padding: 8px 10px;">Activity</th>
+                  <th style="padding: 8px 10px;">Status</th>
+                  <th style="padding: 8px 10px;">Progress</th>
+                  <th style="padding: 8px 10px;">Remarks</th>
+                  <th style="padding: 8px 10px; text-align: right;" class="admin-cal-col">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="student-calendar-tbody">
+                <tr><td colspan="7" style="padding:12px; color:var(--text-dim);">Loading calendar activities...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1127,6 +1206,74 @@
         <button type="button" class="btn btn-secondary" id="btn-close-student-view">Close</button>
         <button type="button" class="btn btn-primary" id="btn-admin-edit-from-view" style="display:none;">✏️ Edit Profile</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 5D. CALENDAR ACTIVITY MODAL (ADMIN ONLY) -->
+  <div class="modal-overlay" id="calendar-activity-modal">
+    <div class="modal-card modal-sm" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 id="calendar-activity-title">📅 Calendar Activity</h3>
+        <button class="modal-close" id="close-calendar-activity-modal">&times;</button>
+      </div>
+      <form id="calendar-activity-form">
+        <input type="hidden" id="cal-activity-id">
+        <input type="hidden" id="cal-student-id">
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="cal-month">Month *</label>
+              <select id="cal-month" required style="width:100%; padding:8px; border-radius:6px; background:var(--bg-input); border:1px solid var(--border-color); color:var(--text-main);">
+                <option value="January">January</option>
+                <option value="February">February</option>
+                <option value="March">March</option>
+                <option value="April">April</option>
+                <option value="May">May</option>
+                <option value="June">June</option>
+                <option value="July">July</option>
+                <option value="August">August</option>
+                <option value="September">September</option>
+                <option value="October">October</option>
+                <option value="November">November</option>
+                <option value="December">December</option>
+              </select>
+            </div>
+            <div class="form-group col-6">
+              <label for="cal-date">Day / Date</label>
+              <input type="text" id="cal-date" placeholder="e.g. 05 or Jan 05">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="cal-activity-text">Activity Description *</label>
+            <input type="text" id="cal-activity-text" required placeholder="e.g. System Design & Component Selection">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="cal-status">Status</label>
+              <select id="cal-status" style="width:100%; padding:8px; border-radius:6px; background:var(--bg-input); border:1px solid var(--border-color); color:var(--text-main);">
+                <option value="Completed">Completed</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Pending">Pending</option>
+              </select>
+            </div>
+            <div class="form-group col-6">
+              <label for="cal-progress">Progress %</label>
+              <input type="number" id="cal-progress" min="0" max="100" placeholder="e.g. 50">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="cal-remarks">Remarks / Remarks Note</label>
+            <input type="text" id="cal-remarks" placeholder="e.g. Approved by Mentor">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancel-cal-activity-btn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Activity</button>
+        </div>
+      </form>
     </div>
   </div>
 

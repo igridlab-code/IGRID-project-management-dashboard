@@ -55,9 +55,9 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// 1. SIGNUP (Email + Password with bcrypt hashing)
+// 1. SIGNUP (Email + Password with student profile creation)
 app.post('/api/auth/signup', (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, name, roll_no, phone, department, year, section, project_title, team_members, guide } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
@@ -68,15 +68,16 @@ app.post('/api/auth/signup', (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
   }
 
-  // Hash password using bcrypt (NEVER PLAINTEXT)
+  const role = (cleanEmail === 'kaviyaarumugam541@gmail.com' || cleanEmail.includes('admin') || req.body.role === 'admin') ? 'admin' : 'student';
+  const displayName = name || cleanEmail.split('@')[0];
   const hash = bcrypt.hashSync(password, 10);
 
   const sql = `
-    INSERT INTO auth_users (email, password_hash, auth_provider)
-    VALUES (?, ?, 'email')
+    INSERT INTO auth_users (email, password_hash, name, role, auth_provider)
+    VALUES (?, ?, ?, ?, 'email')
   `;
 
-  db.run(sql, [cleanEmail, hash], function(err) {
+  db.run(sql, [cleanEmail, hash, displayName, role], function(err) {
     if (err) {
       if (err.message.includes('UNIQUE')) {
         return res.status(400).json({ error: 'An account with this email address already exists.' });
@@ -85,12 +86,46 @@ app.post('/api/auth/signup', (req, res) => {
     }
 
     const userId = this.lastID;
-    const token = jwt.sign({ id: userId, email: cleanEmail, auth_provider: 'email' }, JWT_SECRET, { expiresIn: '7d' });
 
-    res.status(201).json({
-      message: 'Account created successfully',
-      token,
-      user: { id: userId, email: cleanEmail, auth_provider: 'email' }
+    // Create student profile automatically if student ID / roll_no provided or student role
+    const studentRoll = roll_no || `REG-${Date.now().toString().slice(-6)}`;
+    const studentSql = `
+      INSERT INTO students (
+        user_id, name, roll_no, email, phone, department, year, section,
+        assigned_project, project_title, team_members, guide, status, progress
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const studentParams = [
+      userId, displayName, studentRoll, cleanEmail, phone || '', department || 'IGRID Lab',
+      year || '1st Year', section || 'A', project_title || '', project_title || '',
+      team_members || '', guide || '', 'Active', 0
+    ];
+
+    db.run(studentSql, studentParams, function(err2) {
+      if (err2) {
+        console.error('Error creating student record during signup:', err2.message);
+      }
+      const newStudentId = (this && this.lastID) ? this.lastID : null;
+
+      db.get('SELECT id FROM students WHERE user_id = ? OR email = ?', [userId, cleanEmail], (err3, stRow) => {
+        const studentId = stRow ? stRow.id : newStudentId;
+
+        const token = jwt.sign({
+          id: userId,
+          email: cleanEmail,
+          name: displayName,
+          role: role,
+          student_id: studentId
+        }, JWT_SECRET, { expiresIn: '7d' });
+
+        res.status(201).json({
+          message: 'Account created successfully',
+          token,
+          user: { id: userId, email: cleanEmail, name: displayName, role, student_id: studentId }
+        });
+      });
     });
   });
 });
@@ -112,18 +147,36 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    // Verify hashed password with bcrypt
     const match = bcrypt.compareSync(password, user.password_hash);
     if (!match) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, auth_provider: user.auth_provider }, JWT_SECRET, { expiresIn: '7d' });
+    const userRole = user.role || (cleanEmail === 'kaviyaarumugam541@gmail.com' || cleanEmail.includes('admin') ? 'admin' : 'student');
 
-    res.json({
-      message: 'Login successful',
-      token,
-      user: { id: user.id, email: user.email, auth_provider: user.auth_provider }
+    // Find student record if any
+    db.get('SELECT id FROM students WHERE user_id = ? OR email = ?', [user.id, cleanEmail], (err2, student) => {
+      const studentId = student ? student.id : null;
+
+      const token = jwt.sign({
+        id: user.id,
+        email: user.email,
+        name: user.name || user.email.split('@')[0],
+        role: userRole,
+        student_id: studentId
+      }, JWT_SECRET, { expiresIn: '7d' });
+
+      res.json({
+        message: 'Login successful',
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name || user.email.split('@')[0],
+          role: userRole,
+          student_id: studentId
+        }
+      });
     });
   });
 });
@@ -504,89 +557,195 @@ app.get('/api/students', requireAuth, (req, res) => {
   });
 });
 
-// GET SINGLE STUDENT
+// GET SINGLE STUDENT PROFILE (ADMIN OR SELF ONLY)
 app.get('/api/students/:id', requireAuth, (req, res) => {
-  db.get('SELECT * FROM students WHERE id = ?', [req.params.id], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: 'Student profile not found.' });
-    res.json(row);
-  });
-});
-
-// ADD STUDENT
-app.post('/api/students', requireAuth, (req, res) => {
-  const {
-    name, roll_no, email, phone, department, year, section, college,
-    role, skills, avatar_color, avatar_initials, photo_url, github_url, linkedin_url, bio, assigned_project, status
-  } = req.body;
-  if (!name || !roll_no) return res.status(400).json({ error: 'Name and Register Number are required.' });
-
-  const initials = avatar_initials || name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-  const color = avatar_color || '#6366f1';
-
-  const sql = `
-    INSERT INTO students (
-      name, roll_no, email, phone, department, year, section, college,
-      role, skills, avatar_color, avatar_initials, photo_url, github_url, linkedin_url, bio, assigned_project, status
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-
-  const params = [
-    name, roll_no, email || '', phone || '', department || '', year || '', section || '', college || 'Indra Ganesan College of Engineering',
-    role || 'Member', skills || '', color, initials, photo_url || '', github_url || '', linkedin_url || '', bio || '', assigned_project || '', status || 'Active'
-  ];
-
-  db.run(sql, params, function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.status(201).json({ id: this.lastID, message: 'Student registered successfully' });
-  });
-});
-
-// EDIT / UPDATE STUDENT (ADMIN ONLY)
-app.put('/api/students/:id', requireAuth, (req, res) => {
+  const reqStudentId = Number(req.params.id);
   const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
   const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
   const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
-  
+
+  db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err, studentRow) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!studentRow) return res.status(404).json({ error: 'Student profile not found.' });
+
+    const isSelf = (req.user.student_id && Number(req.user.student_id) === reqStudentId) ||
+                   (studentRow.user_id && Number(studentRow.user_id) === Number(req.user.id)) ||
+                   (studentRow.email && studentRow.email.toLowerCase() === userEmail);
+
+    if (!isAdmin && !isSelf) {
+      return res.status(403).json({ error: 'Access denied. You can only view your own student profile.' });
+    }
+
+    res.json(studentRow);
+  });
+});
+
+// UPDATE STUDENT PROFILE (ADMIN HAS FULL ACCESS, STUDENT CAN ONLY UPDATE PERMITTED PERSONAL INFO)
+app.put('/api/students/:id', requireAuth, (req, res) => {
+  const reqStudentId = Number(req.params.id);
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+
+  db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err, existingStudent) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!existingStudent) return res.status(404).json({ error: 'Student record not found.' });
+
+    const isSelf = (req.user.student_id && Number(req.user.student_id) === reqStudentId) ||
+                   (existingStudent.user_id && Number(existingStudent.user_id) === Number(req.user.id)) ||
+                   (existingStudent.email && existingStudent.email.toLowerCase() === userEmail);
+
+    if (!isAdmin && !isSelf) {
+      return res.status(403).json({ error: 'Access denied. You cannot modify another student\'s profile.' });
+    }
+
+    if (isAdmin) {
+      const {
+        name, roll_no, email, phone, department, year, section, college,
+        role, skills, photo_url, github_url, linkedin_url, bio, assigned_project,
+        project_title, project_desc, team_members, guide, status, progress
+      } = req.body;
+
+      if (!name || !roll_no) {
+        return res.status(400).json({ error: 'Student Name and Register Number are required.' });
+      }
+
+      const sql = `
+        UPDATE students SET
+          name = ?, roll_no = ?, email = ?, phone = ?, department = ?, year = ?,
+          section = ?, college = ?, role = ?, skills = ?, photo_url = ?,
+          github_url = ?, linkedin_url = ?, bio = ?, assigned_project = ?,
+          project_title = ?, project_desc = ?, team_members = ?, guide = ?,
+          status = ?, progress = ?
+        WHERE id = ?
+      `;
+
+      const params = [
+        name, roll_no, email || '', phone || '', department || '', year || '',
+        section || '', college || '', role || 'Member', skills || '', photo_url || '',
+        github_url || '', linkedin_url || '', bio || '', assigned_project || project_title || '',
+        project_title || assigned_project || '', project_desc || '', team_members || '', guide || '',
+        status || 'Active', progress || 0,
+        reqStudentId
+      ];
+
+      db.run(sql, params, function(err2) {
+        if (err2) return res.status(500).json({ error: err2.message });
+        db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err3, updated) => {
+          res.json({ message: 'Student profile updated successfully', student: updated });
+        });
+      });
+    } else {
+      // Student self update: permitted personal fields ONLY
+      const { phone, email, bio, photo_url, github_url, linkedin_url, skills } = req.body;
+
+      const sql = `
+        UPDATE students SET
+          phone = ?, email = ?, bio = ?, photo_url = ?, github_url = ?, linkedin_url = ?, skills = ?
+        WHERE id = ?
+      `;
+
+      const params = [
+        phone || existingStudent.phone || '',
+        email || existingStudent.email || '',
+        bio || existingStudent.bio || '',
+        photo_url || existingStudent.photo_url || '',
+        github_url || existingStudent.github_url || '',
+        linkedin_url || existingStudent.linkedin_url || '',
+        skills || existingStudent.skills || '',
+        reqStudentId
+      ];
+
+      db.run(sql, params, function(err2) {
+        if (err2) return res.status(500).json({ error: err2.message });
+        db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err3, updated) => {
+          res.json({ message: 'Personal profile updated successfully', student: updated });
+        });
+      });
+    }
+  });
+});
+
+// ----------------------------------------------------
+// MONTH-WISE STUDENT CALENDAR API ROUTES
+// ----------------------------------------------------
+
+// GET CALENDAR ACTIVITIES FOR A STUDENT
+app.get('/api/students/:id/calendar', requireAuth, (req, res) => {
+  const reqStudentId = Number(req.params.id);
+  db.all('SELECT * FROM student_calendar WHERE student_id = ? ORDER BY id ASC', [reqStudentId], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows || []);
+  });
+});
+
+// ADD MONTH-WISE CALENDAR ACTIVITY (ADMIN ONLY)
+app.post('/api/students/:id/calendar', requireAuth, (req, res) => {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+
   if (!isAdmin) {
-    return res.status(403).json({ error: 'Access denied. Only Admins can edit student profiles.' });
+    return res.status(403).json({ error: 'Access denied. Only Admins can manage student calendar activities.' });
   }
 
-  const {
-    name, roll_no, email, phone, department, year, section, college,
-    role, skills, photo_url, github_url, linkedin_url, bio, assigned_project, status
-  } = req.body;
+  const reqStudentId = Number(req.params.id);
+  const { month, date, activity, status, progress, remarks } = req.body;
 
-  if (!name || !roll_no) {
-    return res.status(400).json({ error: 'Student Name and Register Number are required.' });
+  if (!month || !activity) {
+    return res.status(400).json({ error: 'Month and Activity description are required.' });
   }
-
-  const studentId = req.params.id;
 
   const sql = `
-    UPDATE students SET
-      name = ?, roll_no = ?, email = ?, phone = ?, department = ?, year = ?,
-      section = ?, college = ?, role = ?, skills = ?, photo_url = ?,
-      github_url = ?, linkedin_url = ?, bio = ?, assigned_project = ?, status = ?
+    INSERT INTO student_calendar (student_id, month, date, activity, status, progress, remarks)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  db.run(sql, [reqStudentId, month, date || '01', activity, status || 'Pending', progress || 0, remarks || ''], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.status(201).json({ id: this.lastID, message: 'Calendar activity added successfully' });
+  });
+});
+
+// UPDATE CALENDAR ACTIVITY (ADMIN ONLY)
+app.put('/api/students/calendar/:activityId', requireAuth, (req, res) => {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Access denied. Only Admins can edit calendar activities.' });
+  }
+
+  const activityId = Number(req.params.activityId);
+  const { month, date, activity, status, progress, remarks } = req.body;
+
+  const sql = `
+    UPDATE student_calendar SET
+      month = ?, date = ?, activity = ?, status = ?, progress = ?, remarks = ?
     WHERE id = ?
   `;
 
-  const params = [
-    name, roll_no, email || '', phone || '', department || '', year || '',
-    section || '', college || '', role || 'Member', skills || '', photo_url || '',
-    github_url || '', linkedin_url || '', bio || '', assigned_project || '', status || 'Active',
-    studentId
-  ];
-
-  db.run(sql, params, function(err) {
+  db.run(sql, [month, date, activity, status, progress, remarks, activityId], function(err) {
     if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Student record not found.' });
+    res.json({ message: 'Calendar activity updated successfully' });
+  });
+});
 
-    db.get('SELECT * FROM students WHERE id = ?', [studentId], (err, updatedStudent) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: 'Student profile updated successfully', student: updatedStudent });
-    });
+// DELETE CALENDAR ACTIVITY (ADMIN ONLY)
+app.delete('/api/students/calendar/:activityId', requireAuth, (req, res) => {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Access denied. Only Admins can delete calendar activities.' });
+  }
+
+  const activityId = Number(req.params.activityId);
+  db.run('DELETE FROM student_calendar WHERE id = ?', [activityId], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Calendar activity deleted successfully' });
   });
 });
 
