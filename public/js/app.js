@@ -897,16 +897,49 @@ function initEventListeners() {
 
   DOM.addCommentForm.addEventListener('submit', handleCommentSubmit);
 
-  // Project Task Management Modal Actions
-  if (DOM.btnAddProjectTask) DOM.btnAddProjectTask.addEventListener('click', openTaskModalForCreate);
+  // Project Task Management Modal Actions & Global Event Delegation
+  document.addEventListener('click', function(event) {
+    const addTaskBtn = event.target.closest('.add-task-btn, #btn-add-project-task, .ref-gantt-add-btn, #btn-gantt-add-task');
+    if (addTaskBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      openTaskModalForCreate();
+      return;
+    }
+
+    const editTaskBtn = event.target.closest('.btn-edit-task, [data-action="edit-task"]');
+    if (editTaskBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      const taskId = parseInt(editTaskBtn.getAttribute('data-task-id'), 10);
+      if (taskId) openTaskModalForEdit(taskId);
+      return;
+    }
+
+    const deleteTaskBtn = event.target.closest('.btn-delete-task, [data-action="delete-task"]');
+    if (deleteTaskBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      const taskId = parseInt(deleteTaskBtn.getAttribute('data-task-id'), 10);
+      if (taskId) deleteTask(taskId);
+      return;
+    }
+  });
+
   if (DOM.closeTaskModal) DOM.closeTaskModal.addEventListener('click', () => closeModal(DOM.taskModal));
   if (DOM.btnCancelTask) DOM.btnCancelTask.addEventListener('click', () => closeModal(DOM.taskModal));
   if (DOM.taskForm) DOM.taskForm.addEventListener('submit', handleTaskFormSubmit);
 
   const taskStartInput = document.getElementById('task-start-input');
   const taskEndInput = document.getElementById('task-end-input');
-  if (taskStartInput) taskStartInput.addEventListener('input', updateTaskDurationPreview);
-  if (taskEndInput) taskEndInput.addEventListener('input', updateTaskDurationPreview);
+  const taskStartMonthInput = document.getElementById('task-start-month-input');
+  const taskEndMonthInput = document.getElementById('task-end-month-input');
+
+  if (taskStartMonthInput) taskStartMonthInput.addEventListener('change', syncDatesFromMonthDropdowns);
+  if (taskEndMonthInput) taskEndMonthInput.addEventListener('change', syncDatesFromMonthDropdowns);
+
+  if (taskStartInput) taskStartInput.addEventListener('change', () => { syncMonthDropdownsFromDates(); updateTaskDurationPreview(); });
+  if (taskEndInput) taskEndInput.addEventListener('change', () => { syncMonthDropdownsFromDates(); updateTaskDurationPreview(); });
 
   if (DOM.closeTaskInfoModal) DOM.closeTaskInfoModal.addEventListener('click', () => closeModal(DOM.taskInfoModal));
   if (DOM.btnCloseTaskInfo) DOM.btnCloseTaskInfo.addEventListener('click', () => closeModal(DOM.taskInfoModal));
@@ -2386,6 +2419,60 @@ function formatDateShort(dateStr) {
   return `${day} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+const monthNamesFull = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function syncMonthDropdownsFromDates() {
+  const startVal = document.getElementById('task-start-input').value;
+  const endVal = document.getElementById('task-end-input').value;
+
+  if (startVal) {
+    const s = new Date(startVal);
+    if (!isNaN(s.getTime())) {
+      const m = monthNamesFull[s.getMonth()];
+      const startMonthSel = document.getElementById('task-start-month-input');
+      if (startMonthSel) startMonthSel.value = m;
+    }
+  }
+  if (endVal) {
+    const e = new Date(endVal);
+    if (!isNaN(e.getTime())) {
+      const m = monthNamesFull[e.getMonth()];
+      const endMonthSel = document.getElementById('task-end-month-input');
+      if (endMonthSel) endMonthSel.value = m;
+    }
+  }
+}
+
+function syncDatesFromMonthDropdowns() {
+  const startM = document.getElementById('task-start-month-input').value;
+  const endM = document.getElementById('task-end-month-input').value;
+  const currentYear = new Date().getFullYear();
+
+  if (startM) {
+    const startIdx = monthNamesFull.indexOf(startM);
+    if (startIdx !== -1) {
+      const curStart = document.getElementById('task-start-input').value;
+      if (!curStart || new Date(curStart).getMonth() !== startIdx) {
+        const monthStr = String(startIdx + 1).padStart(2, '0');
+        document.getElementById('task-start-input').value = `${currentYear}-${monthStr}-01`;
+      }
+    }
+  }
+  if (endM) {
+    const endIdx = monthNamesFull.indexOf(endM);
+    if (endIdx !== -1) {
+      const curEnd = document.getElementById('task-end-input').value;
+      if (!curEnd || new Date(curEnd).getMonth() !== endIdx) {
+        const lastDay = new Date(currentYear, endIdx + 1, 0).getDate();
+        const monthStr = String(endIdx + 1).padStart(2, '0');
+        const dayStr = String(lastDay).padStart(2, '0');
+        document.getElementById('task-end-input').value = `${currentYear}-${monthStr}-${dayStr}`;
+      }
+    }
+  }
+  updateTaskDurationPreview();
+}
+
 function renderProjectGanttTimeline(project, tasks = []) {
   const container = document.getElementById('detail-gantt-container');
   const summaryEl = document.getElementById('detail-timeline-summary');
@@ -2432,8 +2519,8 @@ function renderProjectGanttTimeline(project, tasks = []) {
         <td class="ref-gantt-td-taskname">No Tasks</td>
         <td colspan="12" class="ref-gantt-td-grid">
           <div class="ref-grid-bg">${monthGridBgHTML}</div>
-          <div style="padding:15px; text-align:center; color:#64748b; font-size:13px;">
-            No timeline tasks added for ${escapeHTML(project.title)}. Click "+ Add Task" to create a task.
+          <div style="padding:20px; text-align:center; color:#64748b; font-size:13px; font-weight:500;">
+            No Tasks &bull; No timeline tasks added yet. Click <strong>"+ Add Task"</strong> to create your first task.
           </div>
         </td>
       </tr>
@@ -2462,7 +2549,17 @@ function renderProjectGanttTimeline(project, tasks = []) {
 
       taskRowsHTML += `
         <tr>
-          <td class="ref-gantt-td-taskname" onclick="openTaskInfoModal(${task.id})" style="cursor:pointer;" title="${escapeHTML(task.task_name)}">${escapeHTML(task.task_name)}</td>
+          <td class="ref-gantt-td-taskname">
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+              <span onclick="openTaskInfoModal(${task.id})" style="cursor:pointer; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHTML(task.task_name)}">
+                ${escapeHTML(task.task_name)}
+              </span>
+              <div style="display:inline-flex; gap:4px; margin-left:6px;">
+                <button type="button" class="btn-edit-task" data-task-id="${task.id}" title="Edit Task" style="background:none; border:none; cursor:pointer; font-size:12px; padding:2px 4px; border-radius:4px; opacity:0.8;">✏️</button>
+                <button type="button" class="btn-delete-task" data-task-id="${task.id}" title="Delete Task" style="background:none; border:none; cursor:pointer; font-size:12px; padding:2px 4px; border-radius:4px; opacity:0.8;">🗑️</button>
+              </div>
+            </div>
+          </td>
           <td colspan="12" class="ref-gantt-td-grid">
             <div class="ref-grid-bg">${monthGridBgHTML}</div>
             ${todayLeftPct !== null ? `<div class="ref-today-line" style="left:${todayLeftPct}%;" title="Today"></div>` : ''}
@@ -2487,7 +2584,7 @@ function renderProjectGanttTimeline(project, tasks = []) {
           <h3 class="ref-gantt-title">Project Management Timeline</h3>
           <p class="ref-gantt-subtitle">${escapeHTML(project.title)} • ${currentYear} Milestone Schedule</p>
         </div>
-        <button class="ref-gantt-add-btn" onclick="openTaskModalForCreate()">➕ + Add Task</button>
+        <button class="ref-gantt-add-btn add-task-btn" id="btn-gantt-add-task" type="button">➕ + Add Task</button>
       </div>
 
       <div class="ref-gantt-scroll-wrapper">
@@ -2524,12 +2621,13 @@ function openTaskModalForCreate() {
   const todayStr = today.toISOString().split('T')[0];
   
   const end = new Date();
-  end.setDate(end.getDate() + 5);
+  end.setDate(end.getDate() + 7);
   const endStr = end.toISOString().split('T')[0];
 
   document.getElementById('task-start-input').value = todayStr;
   document.getElementById('task-end-input').value = endStr;
   document.getElementById('task-status-input').value = 'in_progress';
+  document.getElementById('task-priority-input').value = 'normal';
 
   const activeProj = state.projects.find(p => p.id === state.activeProjectId);
   if (activeProj && activeProj.team_lead) {
@@ -2538,8 +2636,59 @@ function openTaskModalForCreate() {
     document.getElementById('task-assigned-input').value = '';
   }
 
+  syncMonthDropdownsFromDates();
   updateTaskDurationPreview();
   openModal(DOM.taskModal);
+}
+
+function openTaskModalForEdit(taskId) {
+  const task = state.activeProjectTasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  if (DOM.taskInfoModal) closeModal(DOM.taskInfoModal);
+
+  const modalTitle = document.getElementById('modal-task-title');
+  if (modalTitle) modalTitle.textContent = '✏️ Edit Project Task';
+
+  document.getElementById('task-id-input').value = task.id;
+  document.getElementById('task-name-input').value = task.task_name || '';
+  document.getElementById('task-desc-input').value = task.description || '';
+  document.getElementById('task-start-input').value = task.start_date || '';
+  document.getElementById('task-end-input').value = task.end_date || '';
+  document.getElementById('task-status-input').value = task.status || 'in_progress';
+  document.getElementById('task-priority-input').value = task.priority || 'normal';
+  document.getElementById('task-assigned-input').value = task.assigned_member || '';
+
+  syncMonthDropdownsFromDates();
+  updateTaskDurationPreview();
+  openModal(DOM.taskModal);
+}
+
+async function deleteTask(taskId) {
+  if (!confirm('Are you sure you want to delete this task?')) return;
+
+  try {
+    const res = await authFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast('Task deleted successfully', 'success');
+      if (DOM.taskInfoModal) closeModal(DOM.taskInfoModal);
+      if (DOM.taskModal) closeModal(DOM.taskModal);
+
+      const tasksRes = await authFetch(`/api/projects/${state.activeProjectId}/tasks`);
+      if (tasksRes.ok) {
+        state.activeProjectTasks = await tasksRes.json();
+      }
+      const activeProj = state.projects.find(p => p.id === state.activeProjectId);
+      if (activeProj) {
+        renderProjectGanttTimeline(activeProj, state.activeProjectTasks);
+      }
+    } else {
+      showToast('Failed to delete task', 'error');
+    }
+  } catch (err) {
+    console.error('Error deleting task:', err);
+    showToast('Error deleting task', 'error');
+  }
 }
 
 function updateTaskDurationPreview() {
@@ -2570,14 +2719,22 @@ async function handleTaskFormSubmit(e) {
   e.preventDefault();
   const taskId = document.getElementById('task-id-input').value;
   const task_name = document.getElementById('task-name-input').value.trim();
+  const description = document.getElementById('task-desc-input').value.trim();
   const start_date = document.getElementById('task-start-input').value;
   const end_date = document.getElementById('task-end-input').value;
+  const start_month = document.getElementById('task-start-month-input').value;
+  const end_month = document.getElementById('task-end-month-input').value;
   const status = document.getElementById('task-status-input').value;
+  const priority = document.getElementById('task-priority-input').value;
   const assigned_member = document.getElementById('task-assigned-input').value.trim();
-  const description = document.getElementById('task-desc-input').value.trim();
 
-  if (!task_name || !start_date || !end_date) {
-    showToast('Please fill in all required task fields.', 'error');
+  if (!task_name) {
+    showToast('Task Name cannot be empty.', 'error');
+    return;
+  }
+
+  if (!start_date || !end_date) {
+    showToast('Start Date and End Date are required.', 'error');
     return;
   }
 
@@ -2586,7 +2743,9 @@ async function handleTaskFormSubmit(e) {
     return;
   }
 
-  const payload = { task_name, start_date, end_date, status, assigned_member, description };
+  const payload = {
+    task_name, description, start_date, end_date, start_month, end_month, status, priority, assigned_member
+  };
 
   try {
     let res;
@@ -2606,7 +2765,7 @@ async function handleTaskFormSubmit(e) {
 
     if (res.ok) {
       closeModal(DOM.taskModal);
-      showToast(taskId ? 'Task updated successfully' : 'Task added successfully');
+      showToast(taskId ? 'Task updated successfully' : 'Task saved successfully');
       
       const tasksRes = await authFetch(`/api/projects/${state.activeProjectId}/tasks`);
       if (tasksRes.ok) {
@@ -2641,14 +2800,20 @@ function openTaskInfoModal(taskId) {
 
   if (titleEl) titleEl.textContent = task.task_name;
   if (badgeEl) {
-    const statusLabel = task.status === 'completed' ? 'Completed' : (task.status === 'pending' ? 'Pending' : 'In Progress');
+    const statusLabel = task.status === 'completed' ? 'Completed' : (task.status === 'on_hold' ? 'On Hold' : (task.status === 'not_started' ? 'Not Started' : 'In Progress'));
     badgeEl.textContent = statusLabel;
-    badgeEl.className = `badge ${task.status === 'completed' ? 'badge-normal' : (task.status === 'pending' ? 'badge-date' : 'badge-blue')}`;
+    badgeEl.className = `badge ${task.status === 'completed' ? 'badge-normal' : (task.status === 'on_hold' ? 'badge-danger' : 'badge-blue')}`;
   }
   if (pillEl) pillEl.textContent = `${dur} day${dur === 1 ? '' : 's'}`;
   if (datesEl) datesEl.textContent = `${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)}`;
   if (descEl) descEl.textContent = task.description || 'No description provided for this task.';
-  if (assignedEl) assignedEl.textContent = `Assigned to: ${task.assigned_member || 'Unassigned'}`;
+  if (assignedEl) assignedEl.textContent = `Assigned to: ${task.assigned_member || 'Unassigned'} • Priority: ${(task.priority || 'normal').toUpperCase()}`;
+
+  const editBtn = document.getElementById('btn-edit-task-info');
+  if (editBtn) editBtn.onclick = () => openTaskModalForEdit(task.id);
+
+  const deleteBtn = document.getElementById('btn-delete-task-info');
+  if (deleteBtn) deleteBtn.onclick = () => deleteTask(task.id);
 
   openModal(DOM.taskInfoModal);
 }

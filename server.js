@@ -844,7 +844,7 @@ app.get('/api/projects/:id/tasks', requireAuth, (req, res) => {
 // CREATE TASK FOR SPECIFIC PROJECT
 app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
   const { id } = req.params;
-  const { task_name, start_date, end_date, status, description, assigned_member } = req.body;
+  const { task_name, start_date, end_date, start_month, end_month, status, priority, description, assigned_member } = req.body;
 
   if (!task_name || !start_date || !end_date) {
     return res.status(400).json({ error: 'Task Name, Start Date, and End Date are required.' });
@@ -854,13 +854,17 @@ app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
     if (err || !proj) return res.status(404).json({ error: 'Project not found' });
 
     const sql = `
-      INSERT INTO project_tasks (project_id, project_code, task_name, start_date, end_date, status, description, assigned_member)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO project_tasks (project_id, project_code, task_name, start_date, end_date, start_month, end_month, status, priority, description, assigned_member)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     db.run(
       sql,
-      [id, proj.project_code, task_name.trim(), start_date, end_date, status || 'in_progress', (description || '').trim(), (assigned_member || '').trim()],
+      [
+        id, proj.project_code, task_name.trim(), start_date, end_date,
+        start_month || '', end_month || '', status || 'in_progress', priority || 'normal',
+        (description || '').trim(), (assigned_member || '').trim()
+      ],
       function(err2) {
         if (err2) return res.status(500).json({ error: err2.message });
         res.status(201).json({ id: this.lastID, message: 'Task created successfully.' });
@@ -872,7 +876,7 @@ app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
 // UPDATE TASK
 app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
   const { taskId } = req.params;
-  const { task_name, start_date, end_date, status, description, assigned_member } = req.body;
+  const { task_name, start_date, end_date, start_month, end_month, status, priority, description, assigned_member } = req.body;
 
   if (!task_name || !start_date || !end_date) {
     return res.status(400).json({ error: 'Task Name, Start Date, and End Date are required.' });
@@ -883,7 +887,10 @@ app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
       task_name = ?,
       start_date = ?,
       end_date = ?,
+      start_month = ?,
+      end_month = ?,
       status = ?,
+      priority = ?,
       description = ?,
       assigned_member = ?
     WHERE id = ?
@@ -891,7 +898,11 @@ app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
 
   db.run(
     sql,
-    [task_name.trim(), start_date, end_date, status || 'in_progress', (description || '').trim(), (assigned_member || '').trim(), taskId],
+    [
+      task_name.trim(), start_date, end_date,
+      start_month || '', end_month || '', status || 'in_progress', priority || 'normal',
+      (description || '').trim(), (assigned_member || '').trim(), taskId
+    ],
     function(err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ message: 'Task updated successfully.' });

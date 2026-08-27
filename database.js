@@ -178,13 +178,21 @@ function initDb() {
         task_name TEXT NOT NULL,
         start_date TEXT NOT NULL,
         end_date TEXT NOT NULL,
+        start_month TEXT,
+        end_month TEXT,
         status TEXT DEFAULT 'in_progress',
+        priority TEXT DEFAULT 'normal',
         description TEXT,
         assigned_member TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
       )
     `);
+
+    const projectTaskCols = ['start_month', 'end_month', 'priority'];
+    projectTaskCols.forEach(col => {
+      db.run(`ALTER TABLE project_tasks ADD COLUMN ${col} TEXT`, () => {});
+    });
 
     // Month-Wise Student Calendar Activities Table
     db.run(`
