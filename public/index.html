@@ -436,36 +436,18 @@
 
       <!-- 3. TIMELINE (GANTT) VIEW -->
       <div class="view-panel" id="view-timeline">
-        <div class="timeline-container" style="padding: 10px 0;">
-          <!-- TIMELINE HEADER (Requirement #11) -->
-          <div class="timeline-header-bar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 20px;">
-            <div>
-              <h2 style="margin: 0; font-size: 22px; font-weight: 700; color: var(--text-main);">Project Management Timeline</h2>
-              <span style="font-size: 13px; color: #60a5fa; font-weight: 600;">2026 Milestone Schedule</span>
+        <div class="timeline-container">
+          <div class="timeline-controls-bar">
+            <div class="timeline-legend">
+              <span class="legend-item"><span class="legend-dot high-dot"></span> High Priority</span>
+              <span class="legend-item"><span class="legend-dot normal-dot"></span> Normal Priority</span>
+              <span class="legend-item"><span class="legend-dot low-dot"></span> Low Priority</span>
+              <span class="legend-item"><span class="legend-dot completed-dot"></span> Completed</span>
             </div>
-            <button class="btn btn-primary" id="open-add-timeline-task-btn" style="display: none;">+ Add Task</button>
-          </div>
-
-          <!-- SUMMARY METRIC CARDS (Requirement #11) -->
-          <div class="timeline-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px;">
-            <div class="stat-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 16px;">
-              <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Total Tasks</span>
-              <div style="font-size: 24px; font-weight: 800; color: var(--text-main); margin-top: 4px;" id="timeline-stat-total">0</div>
-            </div>
-            <div class="stat-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 16px;">
-              <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Completed</span>
-              <div style="font-size: 24px; font-weight: 800; color: #10b981; margin-top: 4px;" id="timeline-stat-completed">0</div>
-            </div>
-            <div class="stat-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 16px;">
-              <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">In Progress</span>
-              <div style="font-size: 24px; font-weight: 800; color: #3b82f6; margin-top: 4px;" id="timeline-stat-progress">0</div>
-            </div>
-            <div class="stat-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 16px;">
-              <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Delayed / Overdue</span>
-              <div style="font-size: 24px; font-weight: 800; color: #ef4444; margin-top: 4px;" id="timeline-stat-delayed">0</div>
+            <div class="timeline-zoom-info">
+              <span>📅 Innovation Sprint 2026 (Jan - May)</span>
             </div>
           </div>
-
           <div class="timeline-chart" id="timeline-chart-root"></div>
         </div>
       </div>
@@ -1292,133 +1274,6 @@
           <button type="submit" class="btn btn-primary">Save Activity</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- 5E. GANTT TASK EDITOR MODAL (ADD / EDIT TASK FOR ADMIN) -->
-  <div class="modal-overlay" id="task-editor-modal">
-    <div class="modal-card modal-md" style="max-width: 580px;">
-      <div class="modal-header">
-        <h3 id="task-editor-title">📅 Add Gantt Timeline Task</h3>
-        <button class="modal-close" id="close-task-editor-modal">&times;</button>
-      </div>
-      <form id="task-editor-form">
-        <input type="hidden" id="task-editor-id">
-        <input type="hidden" id="task-editor-project-id">
-        <div class="modal-body">
-          <div class="form-group" id="task-editor-project-select-wrap">
-            <label for="task-editor-project-select">Assigned Project *</label>
-            <select id="task-editor-project-select" style="width:100%; padding:10px; border-radius:8px; background:var(--bg-input); border:1px solid var(--border-color); color:var(--text-main);"></select>
-          </div>
-
-          <div class="form-group">
-            <label for="task-editor-name">Task Name *</label>
-            <input type="text" id="task-editor-name" required placeholder="e.g. Hardware Assembly & Circuit Wiring">
-          </div>
-
-          <div class="form-row">
-            <div class="form-group col-6">
-              <label for="task-editor-start-date">Start Date *</label>
-              <input type="date" id="task-editor-start-date" required>
-            </div>
-            <div class="form-group col-6">
-              <label for="task-editor-end-date">End Date *</label>
-              <input type="date" id="task-editor-end-date" required>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group col-6">
-              <label for="task-editor-status">Status</label>
-              <select id="task-editor-status" style="width:100%; padding:10px; border-radius:8px; background:var(--bg-input); border:1px solid var(--border-color); color:var(--text-main);">
-                <option value="not_started">Not Started</option>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-                <option value="delayed">Delayed</option>
-              </select>
-            </div>
-            <div class="form-group col-6">
-              <label for="task-editor-priority">Priority</label>
-              <select id="task-editor-priority" style="width:100%; padding:10px; border-radius:8px; background:var(--bg-input); border:1px solid var(--border-color); color:var(--text-main);">
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label for="task-editor-member">Assigned Student / Team Member</label>
-            <input type="text" id="task-editor-member" placeholder="e.g. Alex Chen (Lead Hardware Researcher)">
-          </div>
-
-          <div class="form-group">
-            <label for="task-editor-desc">Task Description</label>
-            <textarea id="task-editor-desc" rows="2" placeholder="Task objective, requirements, or deliverables..." style="width:100%; padding:10px; border-radius:8px; background:var(--bg-input); border:1px solid var(--border-color); color:var(--text-main); font-family:inherit;"></textarea>
-          </div>
-
-          <div class="form-group" style="display:flex; align-items:center; gap:8px;">
-            <input type="checkbox" id="task-editor-milestone" style="width:16px; height:16px;">
-            <label for="task-editor-milestone" style="margin:0; font-weight:600; cursor:pointer;">Mark as Key Milestone (🚩)</label>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" id="cancel-task-editor-btn">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save Task</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 5F. GANTT TASK DETAILS POPUP MODAL -->
-  <div class="modal-overlay" id="task-details-modal">
-    <div class="modal-card modal-sm" style="max-width: 480px;">
-      <div class="modal-header">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <h3 id="task-detail-name" style="margin:0;">Task Details</h3>
-          <span id="task-detail-milestone-badge" class="badge badge-primary" style="display:none;">🚩 Milestone</span>
-        </div>
-        <button class="modal-close" id="close-task-details-modal">&times;</button>
-      </div>
-      <div class="modal-body" style="padding:20px;">
-        <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:14px; background:rgba(255,255,255,0.03); padding:12px; border-radius:8px; border:1px solid var(--border-color);">
-          <div>
-            <span style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase;">Status</span>
-            <div><span id="task-detail-status" class="badge badge-success">In Progress</span></div>
-          </div>
-          <div>
-            <span style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase;">Priority</span>
-            <div><span id="task-detail-priority" class="badge badge-normal">Medium</span></div>
-          </div>
-          <div>
-            <span style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase;">Start Date</span>
-            <p id="task-detail-start" style="margin:2px 0 0 0; font-size:13px; font-weight:600; color:var(--text-main);">-</p>
-          </div>
-          <div>
-            <span style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase;">End Date</span>
-            <p id="task-detail-end" style="margin:2px 0 0 0; font-size:13px; font-weight:600; color:var(--text-main);">-</p>
-          </div>
-        </div>
-
-        <div style="margin-bottom:12px;">
-          <span style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase;">Duration</span>
-          <p id="task-detail-duration" style="margin:2px 0 0 0; font-size:13px; font-weight:700; color:#34d399;">-</p>
-        </div>
-
-        <div style="margin-bottom:12px;">
-          <span style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase;">Assigned Student / Member</span>
-          <p id="task-detail-member" style="margin:2px 0 0 0; font-size:13px; font-weight:600; color:var(--text-main);">-</p>
-        </div>
-
-        <div style="margin-bottom:12px;">
-          <span style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase;">Description</span>
-          <p id="task-detail-desc" style="margin:2px 0 0 0; font-size:13px; color:var(--text-muted); line-height:1.4;">-</p>
-        </div>
-      </div>
-      <div class="modal-footer" style="display:flex; justify-content:space-between;">
-        <button type="button" class="btn btn-secondary" id="btn-close-task-detail">Close</button>
-        <button type="button" class="btn btn-primary" id="btn-admin-edit-task-from-popup" style="display:none;">✏️ Edit Task</button>
-      </div>
     </div>
   </div>
 

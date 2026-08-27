@@ -179,17 +179,12 @@ function initDb() {
         start_date TEXT NOT NULL,
         end_date TEXT NOT NULL,
         status TEXT DEFAULT 'in_progress',
-        priority TEXT DEFAULT 'Medium',
-        is_milestone INTEGER DEFAULT 0,
         description TEXT,
         assigned_member TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
       )
     `);
-
-    db.run(`ALTER TABLE project_tasks ADD COLUMN priority TEXT DEFAULT 'Medium'`, () => {});
-    db.run(`ALTER TABLE project_tasks ADD COLUMN is_milestone INTEGER DEFAULT 0`, () => {});
 
     // Month-Wise Student Calendar Activities Table
     db.run(`

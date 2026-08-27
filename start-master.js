@@ -64,7 +64,7 @@ let isExiting = false;
 function cleanPort3000() {
   try {
     if (process.platform === 'win32') {
-      execSync('powershell -Command "$p = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue; if ($p) { $p | ForEach-Object { if ($_.OwningProcess -ne $PID -and $_.OwningProcess -gt 0) { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } } }"', { stdio: 'ignore' });
+      execSync('powershell -Command "Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Where-Object { $_ -ne $PID -and $_ -gt 0 } | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"', { stdio: 'ignore' });
     }
   } catch(e) {}
 }
@@ -119,10 +119,7 @@ async function startNgrokSdk() {
     savePublicUrl(liveUrl, true);
   } catch (err) {
     log(`[Ngrok Error] ${err.message || err}`);
-    if (err.message && err.message.includes('already online')) {
-      log('Ngrok endpoint is already online and routing traffic.');
-      savePublicUrl(PERMANENT_PUBLIC_URL, true);
-    }
+    savePublicUrl(PERMANENT_PUBLIC_URL, true);
   }
 }
 
