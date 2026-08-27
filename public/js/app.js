@@ -905,6 +905,21 @@ function initEventListeners() {
   DOM.cancelStudentBtn.addEventListener('click', () => closeModal(DOM.studentModal));
   DOM.studentForm.addEventListener('submit', handleStudentFormSubmit);
 
+  const closeStudentViewModal = document.getElementById('close-student-view-modal');
+  if (closeStudentViewModal) closeStudentViewModal.addEventListener('click', () => closeModal(document.getElementById('student-view-modal')));
+
+  const btnCloseStudentView = document.getElementById('btn-close-student-view');
+  if (btnCloseStudentView) btnCloseStudentView.addEventListener('click', () => closeModal(document.getElementById('student-view-modal')));
+
+  const closeStudentEditModal = document.getElementById('close-student-edit-modal');
+  if (closeStudentEditModal) closeStudentEditModal.addEventListener('click', () => closeModal(document.getElementById('student-edit-modal')));
+
+  const cancelStudentEditBtn = document.getElementById('cancel-student-edit-btn');
+  if (cancelStudentEditBtn) cancelStudentEditBtn.addEventListener('click', () => closeModal(document.getElementById('student-edit-modal')));
+
+  const studentEditForm = document.getElementById('student-edit-form');
+  if (studentEditForm) studentEditForm.addEventListener('submit', handleStudentEditFormSubmit);
+
   // Analytics Modal Actions
   DOM.labAnalyticsBtn.addEventListener('click', () => openAnalyticsModal());
   DOM.closeAnalyticsModal.addEventListener('click', () => closeModal(DOM.analyticsModal));
@@ -1602,47 +1617,286 @@ function renderCompleted() {
   DOM.showcaseGridRoot.innerHTML = html;
 }
 
+function isUserAdmin() {
+  if (!state.currentUser) return false;
+  const role = (state.currentUser.role || '').toLowerCase();
+  const email = (state.currentUser.email || '').toLowerCase();
+  return role === 'admin' || email === 'kaviyaarumugam541@gmail.com' || email.includes('admin');
+}
+
 // 9. RENDER STUDENTS DIRECTORY
 function renderStudents() {
   if (!DOM.studentsGridRoot) return;
   if (state.students.length === 0) {
-    DOM.studentsGridRoot.innerHTML = '<div style="padding:20px; color:var(--text-dim);">No student profiles found.</div>';
+    DOM.studentsGridRoot.innerHTML = '<div style="padding:20px; color:var(--text-dim);">No registered student profiles found.</div>';
     return;
   }
 
-  let html = '';
+  const isAdmin = isUserAdmin();
+
+  let html = `
+    <div class="students-table-outer" style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-card); margin-top: 16px;">
+      <table class="students-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+        <thead>
+          <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
+            <th style="padding: 12px 16px;">Student</th>
+            <th style="padding: 12px 16px;">Register No</th>
+            <th style="padding: 12px 16px;">Dept & Year</th>
+            <th style="padding: 12px 16px;">Contact Info</th>
+            <th style="padding: 12px 16px;">Status</th>
+            <th style="padding: 12px 16px; text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
   state.students.forEach(s => {
-    const skillsList = (s.skills || '').split(',').map(sk => sk.trim()).filter(Boolean);
-    const skillsHTML = skillsList.map(sk => `<span class="card-tag-pill" style="color:#c7d2fe;">${sk}</span>`).join('');
     const photo = s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=${(s.avatar_color || '6366f1').replace('#','')}&color=fff`;
+    const statusText = s.status || 'Active';
+    const statusBadge = statusText === 'Active' ? 'badge-success' : 'badge-normal';
 
     html += `
-      <div class="student-card">
-        <div class="student-card-top">
-          <img src="${photo}" alt="${escapeHTML(s.name)}" class="student-avatar-big" style="border:2px solid ${s.avatar_color || '#6366f1'};">
-          <div class="student-info-main">
-            <h4>${escapeHTML(s.name)}</h4>
-            <span class="student-roll">${s.roll_no} • ${s.year || 'Student'}</span>
+      <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.15s ease;" class="student-table-row">
+        <td style="padding: 12px 16px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <img src="${photo}" alt="${escapeHTML(s.name)}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid ${s.avatar_color || '#6366f1'};">
+            <div>
+              <div style="font-weight: 700; color: var(--text-main);">${escapeHTML(s.name)}</div>
+              <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.role || 'Innovator')}</div>
+            </div>
           </div>
-        </div>
-
-        <div style="font-size:12px; color:var(--text-muted);">
-          <div><strong>Role:</strong> ${escapeHTML(s.role || 'Innovator')}</div>
-          <div><strong>Dept:</strong> ${escapeHTML(s.department || 'IGRID Lab')}</div>
-          <div><strong>Email:</strong> <a href="mailto:${s.email}" style="color:#60a5fa;">${s.email}</a></div>
-        </div>
-
-        ${skillsHTML ? `
-          <div style="margin-top:auto;">
-            <div style="font-size:10px; font-weight:700; color:var(--text-dim); margin-bottom:4px;">SKILLS:</div>
-            <div class="card-tags">${skillsHTML}</div>
-          </div>
-        ` : ''}
-      </div>
+        </td>
+        <td style="padding: 12px 16px; font-weight: 600; color: var(--text-muted);">${escapeHTML(s.roll_no)}</td>
+        <td style="padding: 12px 16px;">
+          <div style="font-weight: 600; color: var(--text-main);">${escapeHTML(s.department || 'Lab')}</div>
+          <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.year || 'Student')} ${s.section ? '• ' + escapeHTML(s.section) : ''}</div>
+        </td>
+        <td style="padding: 12px 16px;">
+          <div><a href="mailto:${s.email}" style="color: #60a5fa; text-decoration: none;">${escapeHTML(s.email || 'N/A')}</a></div>
+          <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.phone || '')}</div>
+        </td>
+        <td style="padding: 12px 16px;">
+          <span class="badge ${statusBadge}">${escapeHTML(statusText)}</span>
+        </td>
+        <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
+          <button class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" style="margin-right: 6px;">👁️ View</button>
+          ${isAdmin ? `<button class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})">✏️ Edit</button>` : ''}
+        </td>
+      </tr>
     `;
   });
 
+  html += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
   DOM.studentsGridRoot.innerHTML = html;
+}
+
+function openStudentViewModal(studentId) {
+  const s = state.students.find(st => Number(st.id) === Number(studentId));
+  if (!s) return;
+
+  const photo = s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=${(s.avatar_color || '6366f1').replace('#','')}&color=fff`;
+
+  const avatarEl = document.getElementById('view-student-avatar');
+  if (avatarEl) avatarEl.src = photo;
+
+  const nameEl = document.getElementById('view-student-name');
+  if (nameEl) nameEl.textContent = s.name;
+
+  const rollEl = document.getElementById('view-student-roll');
+  if (rollEl) rollEl.textContent = s.roll_no;
+
+  const statusEl = document.getElementById('view-student-status');
+  if (statusEl) {
+    statusEl.textContent = s.status || 'Active';
+    statusEl.className = `badge ${s.status === 'Inactive' ? 'badge-normal' : 'badge-success'}`;
+  }
+
+  const deptEl = document.getElementById('view-student-dept');
+  if (deptEl) deptEl.textContent = s.department || 'N/A';
+
+  const yearSecEl = document.getElementById('view-student-year-sec');
+  if (yearSecEl) yearSecEl.textContent = `${s.year || 'N/A'} ${s.section ? ' (' + s.section + ')' : ''}`;
+
+  const collegeEl = document.getElementById('view-student-college');
+  if (collegeEl) collegeEl.textContent = s.college || 'Indra Ganesan College of Engineering';
+
+  const roleEl = document.getElementById('view-student-role');
+  if (roleEl) roleEl.textContent = s.role || 'Member / Researcher';
+
+  const emailEl = document.getElementById('view-student-email');
+  if (emailEl) emailEl.textContent = s.email || 'N/A';
+
+  const phoneEl = document.getElementById('view-student-phone');
+  if (phoneEl) phoneEl.textContent = s.phone || 'N/A';
+
+  const skillsEl = document.getElementById('view-student-skills');
+  if (skillsEl) {
+    const skillsList = (s.skills || '').split(',').map(sk => sk.trim()).filter(Boolean);
+    if (skillsList.length > 0) {
+      skillsEl.innerHTML = skillsList.map(sk => `<span class="card-tag-pill" style="color:#c7d2fe; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); padding:3px 8px; border-radius:6px; font-size:11px;">${escapeHTML(sk)}</span>`).join('');
+    } else {
+      skillsEl.textContent = 'No technical skills specified.';
+    }
+  }
+
+  const teamEl = document.getElementById('view-student-team');
+  if (teamEl) teamEl.textContent = s.assigned_project || 'No team/project assigned yet.';
+
+  const bioEl = document.getElementById('view-student-bio');
+  if (bioEl) bioEl.textContent = s.bio || 'No biography details provided.';
+
+  const githubWrap = document.getElementById('view-student-github-wrap');
+  const githubLink = document.getElementById('view-student-github');
+  if (githubWrap && githubLink) {
+    if (s.github_url) {
+      githubLink.href = s.github_url;
+      githubWrap.style.display = 'block';
+    } else {
+      githubWrap.style.display = 'none';
+    }
+  }
+
+  const linkedinWrap = document.getElementById('view-student-linkedin-wrap');
+  const linkedinLink = document.getElementById('view-student-linkedin');
+  if (linkedinWrap && linkedinLink) {
+    if (s.linkedin_url) {
+      linkedinLink.href = s.linkedin_url;
+      linkedinWrap.style.display = 'block';
+    } else {
+      linkedinWrap.style.display = 'none';
+    }
+  }
+
+  const btnEditFromView = document.getElementById('btn-admin-edit-from-view');
+  if (btnEditFromView) {
+    if (isUserAdmin()) {
+      btnEditFromView.style.display = 'inline-block';
+      btnEditFromView.onclick = () => {
+        closeModal(document.getElementById('student-view-modal'));
+        openStudentEditModal(s.id);
+      };
+    } else {
+      btnEditFromView.style.display = 'none';
+    }
+  }
+
+  openModal(document.getElementById('student-view-modal'));
+}
+
+function openStudentEditModal(studentId) {
+  if (!isUserAdmin()) {
+    showToast('Only Admins can edit student profiles', 'error');
+    return;
+  }
+  const s = state.students.find(st => Number(st.id) === Number(studentId));
+  if (!s) return;
+
+  document.getElementById('edit-student-id').value = s.id;
+  document.getElementById('edit-student-name').value = s.name || '';
+  document.getElementById('edit-student-roll').value = s.roll_no || '';
+  document.getElementById('edit-student-email').value = s.email || '';
+  document.getElementById('edit-student-phone').value = s.phone || '';
+  document.getElementById('edit-student-dept').value = s.department || '';
+  document.getElementById('edit-student-year').value = s.year || '';
+  document.getElementById('edit-student-section').value = s.section || '';
+  document.getElementById('edit-student-college').value = s.college || 'Indra Ganesan College of Engineering';
+  document.getElementById('edit-student-role').value = s.role || '';
+  document.getElementById('edit-student-photo').value = s.photo_url || '';
+  document.getElementById('edit-student-status').value = s.status || 'Active';
+  document.getElementById('edit-student-skills').value = s.skills || '';
+  document.getElementById('edit-student-github').value = s.github_url || '';
+  document.getElementById('edit-student-linkedin').value = s.linkedin_url || '';
+  document.getElementById('edit-student-team').value = s.assigned_project || '';
+  document.getElementById('edit-student-bio').value = s.bio || '';
+
+  openModal(document.getElementById('student-edit-modal'));
+}
+
+async function handleStudentEditFormSubmit(e) {
+  e.preventDefault();
+  if (!isUserAdmin()) {
+    showToast('Only Admins can edit student profiles', 'error');
+    return;
+  }
+
+  const studentId = document.getElementById('edit-student-id').value;
+  const name = document.getElementById('edit-student-name').value.trim();
+  const roll_no = document.getElementById('edit-student-roll').value.trim();
+
+  if (!name || !roll_no) {
+    showToast('Student Name and Register Number are required', 'error');
+    return;
+  }
+
+  const photo_url = document.getElementById('edit-student-photo').value.trim();
+  const github_url = document.getElementById('edit-student-github').value.trim();
+  const linkedin_url = document.getElementById('edit-student-linkedin').value.trim();
+
+  const urlRegex = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([\/\w .-]*)*\/?$/i;
+  if (photo_url && !urlRegex.test(photo_url)) {
+    showToast('Please enter a valid Photo URL', 'error');
+    return;
+  }
+  if (github_url && !urlRegex.test(github_url)) {
+    showToast('Please enter a valid GitHub Profile URL', 'error');
+    return;
+  }
+  if (linkedin_url && !urlRegex.test(linkedin_url)) {
+    showToast('Please enter a valid LinkedIn Profile URL', 'error');
+    return;
+  }
+
+  const payload = {
+    name,
+    roll_no,
+    email: document.getElementById('edit-student-email').value.trim(),
+    phone: document.getElementById('edit-student-phone').value.trim(),
+    department: document.getElementById('edit-student-dept').value.trim(),
+    year: document.getElementById('edit-student-year').value.trim(),
+    section: document.getElementById('edit-student-section').value.trim(),
+    college: document.getElementById('edit-student-college').value.trim(),
+    role: document.getElementById('edit-student-role').value.trim(),
+    photo_url,
+    status: document.getElementById('edit-student-status').value,
+    skills: document.getElementById('edit-student-skills').value.trim(),
+    github_url,
+    linkedin_url,
+    assigned_project: document.getElementById('edit-student-team').value.trim(),
+    bio: document.getElementById('edit-student-bio').value.trim()
+  };
+
+  try {
+    const res = await authFetch(`/api/students/${studentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || `Server returned ${res.status}`);
+    }
+
+    const data = await res.json();
+    showToast('Student profile updated successfully', 'success');
+
+    closeModal(document.getElementById('student-edit-modal'));
+
+    // Refresh student data & re-render view
+    const studentsRes = await authFetch('/api/students');
+    if (studentsRes.ok) {
+      state.students = await studentsRes.json();
+      renderStudents();
+    }
+  } catch (err) {
+    console.error('Error updating student:', err);
+    showToast(`Failed to update student: ${err.message}`, 'error');
+  }
 }
 
 function populateBomProjectSelect() {

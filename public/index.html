@@ -1053,6 +1053,190 @@
     </div>
   </div>
 
+  <!-- 5B. VIEW STUDENT PROFILE MODAL -->
+  <div class="modal-overlay" id="student-view-modal">
+    <div class="modal-card modal-md" style="max-width: 650px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #1e293b, #0f172a); border-bottom: 1px solid var(--border-color);">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <img id="view-student-avatar" src="" alt="Avatar" style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary);">
+          <div>
+            <h3 id="view-student-name" style="margin: 0; font-size: 20px; font-weight: 700; color: var(--text-main);">Student Name</h3>
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+              <span id="view-student-roll" style="font-size: 13px; color: var(--text-muted); font-weight: 600;">REG-1234</span>
+              <span id="view-student-status" class="badge badge-success">Active</span>
+            </div>
+          </div>
+        </div>
+        <button class="modal-close" id="close-student-view-modal">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding: 20px;">
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 18px; background: rgba(255,255,255,0.03); padding: 14px; border-radius: 10px; border: 1px solid var(--border-color);">
+          <div>
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Department</span>
+            <p id="view-student-dept" style="margin: 2px 0 0 0; font-size: 14px; font-weight: 600; color: var(--text-main);">-</p>
+          </div>
+          <div>
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Year & Section</span>
+            <p id="view-student-year-sec" style="margin: 2px 0 0 0; font-size: 14px; font-weight: 600; color: var(--text-main);">-</p>
+          </div>
+          <div>
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">College / Institution</span>
+            <p id="view-student-college" style="margin: 2px 0 0 0; font-size: 14px; font-weight: 600; color: var(--text-main);">-</p>
+          </div>
+          <div>
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Lab Role</span>
+            <p id="view-student-role" style="margin: 2px 0 0 0; font-size: 14px; font-weight: 600; color: var(--text-main);">-</p>
+          </div>
+          <div>
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Email Address</span>
+            <p id="view-student-email" style="margin: 2px 0 0 0; font-size: 14px; font-weight: 600; color: #60a5fa;">-</p>
+          </div>
+          <div>
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Phone Number</span>
+            <p id="view-student-phone" style="margin: 2px 0 0 0; font-size: 14px; font-weight: 600; color: var(--text-main);">-</p>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Technical Skills</span>
+          <div id="view-student-skills" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">-</div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Assigned Team / Project</span>
+          <p id="view-student-team" style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-main); font-weight: 600;">-</p>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Biography</span>
+          <p id="view-student-bio" style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.5;">-</p>
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+          <div id="view-student-github-wrap" style="display:none;">
+            <a id="view-student-github" href="#" target="_blank" class="btn btn-secondary btn-sm" style="gap:6px;">🐙 GitHub Profile</a>
+          </div>
+          <div id="view-student-linkedin-wrap" style="display:none;">
+            <a id="view-student-linkedin" href="#" target="_blank" class="btn btn-secondary btn-sm" style="gap:6px;">💼 LinkedIn Profile</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between;">
+        <button type="button" class="btn btn-secondary" id="btn-close-student-view">Close</button>
+        <button type="button" class="btn btn-primary" id="btn-admin-edit-from-view" style="display:none;">✏️ Edit Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5C. EDIT STUDENT PROFILE MODAL (ADMIN ONLY) -->
+  <div class="modal-overlay" id="student-edit-modal">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3>✏️ Edit Student Profile</h3>
+        <button class="modal-close" id="close-student-edit-modal">&times;</button>
+      </div>
+      <form id="student-edit-form">
+        <input type="hidden" id="edit-student-id">
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="edit-student-name">Student Full Name *</label>
+              <input type="text" id="edit-student-name" required placeholder="e.g. Priya Sundaram">
+            </div>
+            <div class="form-group col-6">
+              <label for="edit-student-roll">Register Number / Roll No *</label>
+              <input type="text" id="edit-student-roll" required placeholder="e.g. 811221104045">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="edit-student-email">Email Address</label>
+              <input type="email" id="edit-student-email" placeholder="priya@igridlab.edu.in">
+            </div>
+            <div class="form-group col-6">
+              <label for="edit-student-phone">Phone Number</label>
+              <input type="tel" id="edit-student-phone" placeholder="+91 98765 43210">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-4">
+              <label for="edit-student-dept">Department</label>
+              <input type="text" id="edit-student-dept" placeholder="ECE / CSE / Mech / AI">
+            </div>
+            <div class="form-group col-4">
+              <label for="edit-student-year">Academic Year</label>
+              <input type="text" id="edit-student-year" placeholder="e.g. 3rd Year">
+            </div>
+            <div class="form-group col-4">
+              <label for="edit-student-section">Section</label>
+              <input type="text" id="edit-student-section" placeholder="e.g. Section A">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="edit-student-college">College / Institution</label>
+              <input type="text" id="edit-student-college" placeholder="Indra Ganesan College of Engineering">
+            </div>
+            <div class="form-group col-6">
+              <label for="edit-student-role">Lab Role</label>
+              <input type="text" id="edit-student-role" placeholder="e.g. Lead Firmware Researcher">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="edit-student-photo">Profile Photo URL</label>
+              <input type="url" id="edit-student-photo" placeholder="https://images.unsplash.com/...">
+            </div>
+            <div class="form-group col-6">
+              <label for="edit-student-status">Account Status</label>
+              <select id="edit-student-status" style="width:100%; padding:10px; border-radius:8px; background:var(--bg-input); border:1px solid var(--border-color); color:var(--text-main);">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-student-skills">Technical Skills (Comma separated)</label>
+            <input type="text" id="edit-student-skills" placeholder="ROS2, Python, PCB Design, FreeRTOS, Embedded C">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="edit-student-github">GitHub Profile URL</label>
+              <input type="url" id="edit-student-github" placeholder="https://github.com/username">
+            </div>
+            <div class="form-group col-6">
+              <label for="edit-student-linkedin">LinkedIn Profile URL</label>
+              <input type="url" id="edit-student-linkedin" placeholder="https://linkedin.com/in/username">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-student-team">Assigned Team / Project Information</label>
+            <input type="text" id="edit-student-team" placeholder="e.g. Smart Grass Cutter Robot (Team VisionCore)">
+          </div>
+
+          <div class="form-group">
+            <label for="edit-student-bio">Student Biography / Lab Notes</label>
+            <textarea id="edit-student-bio" rows="3" placeholder="Brief researcher bio, domain focus, or project achievements..." style="width:100%; padding:10px; border-radius:8px; background:var(--bg-input); border:1px solid var(--border-color); color:var(--text-main); font-family:inherit;"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancel-student-edit-btn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- 6. LAB ANALYTICS MODAL -->
   <div class="modal-overlay" id="analytics-modal">
     <div class="modal-card modal-lg">

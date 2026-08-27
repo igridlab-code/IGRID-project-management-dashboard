@@ -504,22 +504,89 @@ app.get('/api/students', requireAuth, (req, res) => {
   });
 });
 
+// GET SINGLE STUDENT
+app.get('/api/students/:id', requireAuth, (req, res) => {
+  db.get('SELECT * FROM students WHERE id = ?', [req.params.id], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Student profile not found.' });
+    res.json(row);
+  });
+});
+
 // ADD STUDENT
 app.post('/api/students', requireAuth, (req, res) => {
-  const { name, roll_no, email, department, year, role, skills, avatar_color, avatar_initials, photo_url } = req.body;
-  if (!name || !roll_no) return res.status(400).json({ error: 'Name and Roll No are required.' });
+  const {
+    name, roll_no, email, phone, department, year, section, college,
+    role, skills, avatar_color, avatar_initials, photo_url, github_url, linkedin_url, bio, assigned_project, status
+  } = req.body;
+  if (!name || !roll_no) return res.status(400).json({ error: 'Name and Register Number are required.' });
 
   const initials = avatar_initials || name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   const color = avatar_color || '#6366f1';
 
   const sql = `
-    INSERT INTO students (name, roll_no, email, department, year, role, skills, avatar_color, avatar_initials, photo_url)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO students (
+      name, roll_no, email, phone, department, year, section, college,
+      role, skills, avatar_color, avatar_initials, photo_url, github_url, linkedin_url, bio, assigned_project, status
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
-  db.run(sql, [name, roll_no, email || '', department || '', year || '', role || 'Member', skills || '', color, initials, photo_url || ''], function(err) {
+  const params = [
+    name, roll_no, email || '', phone || '', department || '', year || '', section || '', college || 'Indra Ganesan College of Engineering',
+    role || 'Member', skills || '', color, initials, photo_url || '', github_url || '', linkedin_url || '', bio || '', assigned_project || '', status || 'Active'
+  ];
+
+  db.run(sql, params, function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.status(201).json({ id: this.lastID, message: 'Student registered successfully' });
+  });
+});
+
+// EDIT / UPDATE STUDENT (ADMIN ONLY)
+app.put('/api/students/:id', requireAuth, (req, res) => {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+  
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Access denied. Only Admins can edit student profiles.' });
+  }
+
+  const {
+    name, roll_no, email, phone, department, year, section, college,
+    role, skills, photo_url, github_url, linkedin_url, bio, assigned_project, status
+  } = req.body;
+
+  if (!name || !roll_no) {
+    return res.status(400).json({ error: 'Student Name and Register Number are required.' });
+  }
+
+  const studentId = req.params.id;
+
+  const sql = `
+    UPDATE students SET
+      name = ?, roll_no = ?, email = ?, phone = ?, department = ?, year = ?,
+      section = ?, college = ?, role = ?, skills = ?, photo_url = ?,
+      github_url = ?, linkedin_url = ?, bio = ?, assigned_project = ?, status = ?
+    WHERE id = ?
+  `;
+
+  const params = [
+    name, roll_no, email || '', phone || '', department || '', year || '',
+    section || '', college || '', role || 'Member', skills || '', photo_url || '',
+    github_url || '', linkedin_url || '', bio || '', assigned_project || '', status || 'Active',
+    studentId
+  ];
+
+  db.run(sql, params, function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) return res.status(404).json({ error: 'Student record not found.' });
+
+    db.get('SELECT * FROM students WHERE id = ?', [studentId], (err, updatedStudent) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Student profile updated successfully', student: updatedStudent });
+    });
   });
 });
 

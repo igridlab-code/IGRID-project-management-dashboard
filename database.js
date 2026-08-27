@@ -80,9 +80,22 @@ function initDb() {
         skills TEXT,
         avatar_color TEXT,
         avatar_initials TEXT,
-        photo_url TEXT
+        photo_url TEXT,
+        phone TEXT,
+        section TEXT,
+        college TEXT,
+        github_url TEXT,
+        linkedin_url TEXT,
+        bio TEXT,
+        assigned_project TEXT,
+        status TEXT DEFAULT 'Active'
       )
     `);
+
+    const studentCols = ['phone', 'section', 'college', 'github_url', 'linkedin_url', 'bio', 'assigned_project', 'status'];
+    studentCols.forEach(col => {
+      db.run(`ALTER TABLE students ADD COLUMN ${col} TEXT`, () => {});
+    });
 
     // BOM Items
     db.run(`
