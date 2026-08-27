@@ -205,6 +205,64 @@ app.get('/api/auth/session', requireAuth, (req, res) => {
 // PROTECTED DASHBOARD API ROUTES
 // ----------------------------------------------------
 
+// GET ALL DOMAINS
+app.get('/api/domains', (req, res) => {
+  db.all('SELECT * FROM domains ORDER BY id ASC', [], (err, domainRows) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    db.all('SELECT DISTINCT domain FROM projects WHERE domain IS NOT NULL AND domain != ""', [], (err2, projectDomains) => {
+      const existingNames = new Set((domainRows || []).map(d => d.name.toLowerCase()));
+      const merged = [...(domainRows || [])];
+
+      (projectDomains || []).forEach(p => {
+        if (p.domain && !existingNames.has(p.domain.toLowerCase())) {
+          existingNames.add(p.domain.toLowerCase());
+          merged.push({ id: Date.now() + Math.random(), name: p.domain, description: '' });
+        }
+      });
+
+      res.json(merged);
+    });
+  });
+});
+
+// POST CREATE NEW DOMAIN
+app.post('/api/domains', (req, res) => {
+  const { name, description } = req.body;
+  const trimmedName = (name || '').trim();
+
+  if (!trimmedName) {
+    return res.status(400).json({ error: 'Please enter a domain name.' });
+  }
+
+  // Check case-insensitive duplicate in domains table
+  db.get('SELECT * FROM domains WHERE LOWER(name) = LOWER(?)', [trimmedName], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (row) {
+      return res.status(400).json({ error: 'Domain name already exists.' });
+    }
+
+    // Insert domain
+    db.run('INSERT INTO domains (name, description) VALUES (?, ?)', [trimmedName, (description || '').trim()], function(err2) {
+      if (err2) {
+        if (err2.message && err2.message.includes('UNIQUE constraint failed')) {
+          return res.status(400).json({ error: 'Domain name already exists.' });
+        }
+        return res.status(500).json({ error: err2.message });
+      }
+
+      res.status(201).json({
+        message: 'Domain added successfully.',
+        domain: {
+          id: this.lastID,
+          name: trimmedName,
+          description: (description || '').trim()
+        }
+      });
+    });
+  });
+});
+
 // GET ALL PROJECTS
 app.get('/api/projects', requireAuth, (req, res) => {
   const { domain, status, tag, search, sort, priority } = req.query;

@@ -601,13 +601,17 @@
 
           <div class="form-row">
             <div class="form-group col-4">
-              <label for="form-domain">Domain *</label>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label for="form-domain" style="margin-bottom: 0;">Domain *</label>
+                <button type="button" id="btn-open-add-domain" style="font-size: 11px; color: var(--primary); background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0;">+ Add New Domain</button>
+              </div>
               <select id="form-domain" required>
                 <option value="AI">AI & Computer Vision</option>
                 <option value="Robotics">Robotics & Manipulators</option>
                 <option value="Drones">Drones & UAVs</option>
                 <option value="IoT">IoT & Smart Grid</option>
                 <option value="Embedded">Embedded Systems & FPGA</option>
+                <option value="__add_new_domain__">➕ + Add New Domain</option>
               </select>
             </div>
             <div class="form-group col-4">
@@ -1058,6 +1062,32 @@
     <div class="filter-drawer-footer">
       <button class="btn btn-secondary" id="btn-reset-filters">Reset Filters</button>
       <button class="btn btn-primary" id="btn-apply-filters">Apply Filters</button>
+    </div>
+  </div>
+
+  <!-- 7. ADD DOMAIN MODAL -->
+  <div class="modal-overlay" id="add-domain-modal">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>➕ Add New Domain</h3>
+        <button class="modal-close" id="close-add-domain-modal">&times;</button>
+      </div>
+      <form id="add-domain-form">
+        <div class="modal-body" style="padding: 20px;">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label for="new-domain-name">Domain Name *</label>
+            <input type="text" id="new-domain-name" placeholder="e.g. Agricultural Robotics" required autocomplete="off" style="width:100%;">
+          </div>
+          <div class="form-group">
+            <label for="new-domain-desc">Optional Domain Description</label>
+            <textarea id="new-domain-desc" rows="3" placeholder="Brief description of the domain technology..." style="width:100%; resize:vertical; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-main); font-family: inherit;"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="position: static; padding: 16px 20px; display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border-color);">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-add-domain">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-add-domain">Add Domain</button>
+        </div>
+      </form>
     </div>
   </div>
 

@@ -135,6 +135,32 @@ function initDb() {
       )
     `);
 
+    // Domains Table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS domains (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Seed default domains if domains table is empty
+    db.get('SELECT COUNT(*) as count FROM domains', (err, row) => {
+      if (!err && (!row || row.count === 0)) {
+        const defaultDomains = [
+          { name: 'AI', description: 'AI & Computer Vision' },
+          { name: 'Robotics', description: 'Robotics & Manipulators' },
+          { name: 'Drones', description: 'Drones & UAVs' },
+          { name: 'IoT', description: 'IoT & Smart Grid' },
+          { name: 'Embedded', description: 'Embedded Systems & FPGA' }
+        ];
+        const stmt = db.prepare('INSERT OR IGNORE INTO domains (name, description) VALUES (?, ?)');
+        defaultDomains.forEach(d => stmt.run(d.name, d.description));
+        stmt.finalize();
+      }
+    });
+
     // Seed Initial Data if empty
     db.get('SELECT COUNT(*) as count FROM projects', (err, row) => {
       if (err) return console.error(err);

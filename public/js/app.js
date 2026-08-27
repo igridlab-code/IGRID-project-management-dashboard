@@ -8,6 +8,7 @@ const state = {
   projects: [],
   students: [],
   boms: [],
+  domains: [],
   currentView: 'board',
   filterDomain: 'All',
   filterTag: '',
@@ -37,6 +38,7 @@ const DOM = {
   viewTabs: document.querySelectorAll('.tab-btn'),
   viewPanels: document.querySelectorAll('.view-panel'),
   domainPills: document.querySelectorAll('.domain-pill'),
+  domainFilterPillsRoot: document.getElementById('domain-filter-pills'),
   hashtagCloud: document.getElementById('hashtag-cloud'),
   sortBtn: document.getElementById('sort-btn'),
   sortDropdown: document.getElementById('sort-dropdown'),
@@ -50,6 +52,15 @@ const DOM = {
   btnApplyFilters: document.getElementById('btn-apply-filters'),
   btnResetFilters: document.getElementById('btn-reset-filters'),
   filterActiveDot: document.getElementById('filter-active-dot'),
+
+  // Domain Management Modal
+  addDomainModal: document.getElementById('add-domain-modal'),
+  btnOpenAddDomain: document.getElementById('btn-open-add-domain'),
+  closeAddDomainModal: document.getElementById('close-add-domain-modal'),
+  btnCancelAddDomain: document.getElementById('btn-cancel-add-domain'),
+  addDomainForm: document.getElementById('add-domain-form'),
+  formDomain: document.getElementById('form-domain'),
+  drawerDomainSelect: document.getElementById('drawer-domain-select'),
 
   // Executive Management Showcase
   execShowcaseGridRoot: document.getElementById('exec-showcase-grid-root'),
@@ -340,6 +351,8 @@ function applyTheme(theme) {
 
 async function loadAllData() {
   try {
+    await fetchDomains();
+    renderDomainsUI();
     await Promise.all([
       fetchProjects(),
       fetchStudents(),
@@ -390,8 +403,199 @@ function initTunnelPoller() {
 }
 
 // ----------------------------------------------------
-// API FETCHERS
+// DOMAIN MANAGEMENT
 // ----------------------------------------------------
+async function fetchDomains() {
+  try {
+    const res = await authFetch('/api/domains');
+    if (res.ok) {
+      const data = await res.json();
+      state.domains = (data || []).map(d => typeof d === 'string' ? { name: d, description: '' } : d);
+      try {
+        localStorage.setItem('igrid_domains', JSON.stringify(state.domains));
+      } catch (e) {}
+      return;
+    }
+  } catch (err) {
+    console.warn('Failed to fetch domains from API:', err);
+  }
+
+  // Fallback to localStorage or defaults
+  try {
+    const local = localStorage.getItem('igrid_domains');
+    if (local) {
+      state.domains = JSON.parse(local);
+      return;
+    }
+  } catch (e) {}
+
+  state.domains = [
+    { name: 'AI', description: 'AI & Computer Vision' },
+    { name: 'Robotics', description: 'Robotics & Manipulators' },
+    { name: 'Drones', description: 'Drones & UAVs' },
+    { name: 'IoT', description: 'IoT & Smart Grid' },
+    { name: 'Embedded', description: 'Embedded Systems & FPGA' }
+  ];
+}
+
+function renderDomainsUI() {
+  if (!state.domains || state.domains.length === 0) return;
+
+  // 1. Form Domain Select (#form-domain)
+  const formDomainSelect = DOM.formDomain || document.getElementById('form-domain');
+  if (formDomainSelect) {
+    const currentVal = formDomainSelect.value;
+    let html = state.domains.map(d => {
+      const name = d.name;
+      let label = name;
+      if (name === 'AI') label = 'AI & Computer Vision';
+      else if (name === 'Robotics') label = 'Robotics & Manipulators';
+      else if (name === 'Drones') label = 'Drones & UAVs';
+      else if (name === 'IoT') label = 'IoT & Smart Grid';
+      else if (name === 'Embedded') label = 'Embedded Systems & FPGA';
+      else if (d.description) label = `${name} (${d.description})`;
+      return `<option value="${escapeHTML(name)}">${escapeHTML(label)}</option>`;
+    }).join('');
+    html += '<option value="__add_new_domain__">➕ + Add New Domain</option>';
+    formDomainSelect.innerHTML = html;
+
+    if (currentVal && currentVal !== '__add_new_domain__' && state.domains.some(d => d.name === currentVal)) {
+      formDomainSelect.value = currentVal;
+    }
+  }
+
+  // 2. Main Domain Filter Pills (#domain-filter-pills)
+  const filterPillsRoot = DOM.domainFilterPillsRoot || document.getElementById('domain-filter-pills');
+  if (filterPillsRoot) {
+    const knownDotClasses = {
+      'AI': 'dot-ai',
+      'Robotics': 'dot-rob',
+      'Drones': 'dot-drn',
+      'IoT': 'dot-iot',
+      'Embedded': 'dot-emb'
+    };
+
+    let pillsHtml = `<button class="domain-pill ${state.filterDomain === 'All' ? 'active' : ''}" data-domain="All">All Domains</button>`;
+    state.domains.forEach(d => {
+      const name = d.name;
+      const dotClass = knownDotClasses[name] || 'dot-ai';
+      pillsHtml += `<button class="domain-pill ${state.filterDomain === name ? 'active' : ''}" data-domain="${escapeHTML(name)}"><span class="${dotClass}"></span> ${escapeHTML(name)}</button>`;
+    });
+    filterPillsRoot.innerHTML = pillsHtml;
+
+    // Re-attach listeners to domain pills
+    DOM.domainPills = document.querySelectorAll('.domain-pill');
+    DOM.domainPills.forEach(pill => {
+      pill.addEventListener('click', async () => {
+        DOM.domainPills.forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        state.filterDomain = pill.getAttribute('data-domain');
+        await fetchProjects();
+        renderAllViews();
+      });
+    });
+  }
+
+  // 3. Advanced Filter Drawer Select (#drawer-domain-select)
+  const drawerSelect = DOM.drawerDomainSelect || document.getElementById('drawer-domain-select');
+  if (drawerSelect) {
+    let drawerHtml = '<option value="All">All Domains</option>';
+    drawerHtml += state.domains.map(d => `<option value="${escapeHTML(d.name)}">${escapeHTML(d.name)}</option>`).join('');
+    drawerSelect.innerHTML = drawerHtml;
+    drawerSelect.value = state.filterDomain || 'All';
+  }
+}
+
+let lastSelectedDomainVal = 'AI';
+
+function openAddDomainModal() {
+  const formDomainSelect = DOM.formDomain || document.getElementById('form-domain');
+  if (formDomainSelect && formDomainSelect.value !== '__add_new_domain__') {
+    lastSelectedDomainVal = formDomainSelect.value;
+  }
+  const modal = DOM.addDomainModal || document.getElementById('add-domain-modal');
+  if (modal) {
+    const nameInput = document.getElementById('new-domain-name');
+    const descInput = document.getElementById('new-domain-desc');
+    if (nameInput) nameInput.value = '';
+    if (descInput) descInput.value = '';
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => {
+      if (nameInput) nameInput.focus();
+    }, 100);
+  }
+}
+
+function closeAddDomainModal(wasAdded = false) {
+  const modal = DOM.addDomainModal || document.getElementById('add-domain-modal');
+  if (modal) {
+    modal.classList.remove('active');
+    if (DOM.projectModal && !DOM.projectModal.classList.contains('active')) {
+      document.body.style.overflow = '';
+    }
+  }
+  const formDomainSelect = DOM.formDomain || document.getElementById('form-domain');
+  if (!wasAdded && formDomainSelect) {
+    if (formDomainSelect.value === '__add_new_domain__') {
+      formDomainSelect.value = lastSelectedDomainVal || (state.domains[0] ? state.domains[0].name : 'AI');
+    }
+  }
+}
+
+async function handleAddDomainSubmit(e) {
+  e.preventDefault();
+  const nameInput = document.getElementById('new-domain-name');
+  const descInput = document.getElementById('new-domain-desc');
+  const name = (nameInput ? nameInput.value : '').trim();
+  const description = (descInput ? descInput.value : '').trim();
+
+  if (!name) {
+    showToast('Please enter a domain name.', 'error');
+    if (nameInput) nameInput.focus();
+    return;
+  }
+
+  // Client-side case-insensitive duplicate check
+  const exists = state.domains.some(d => d.name.toLowerCase() === name.toLowerCase());
+  if (exists) {
+    showToast('Domain name already exists.', 'error');
+    if (nameInput) nameInput.focus();
+    return;
+  }
+
+  try {
+    const res = await authFetch('/api/domains', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      showToast(data.message || 'Domain added successfully.');
+      closeAddDomainModal(true);
+      await fetchDomains();
+      renderDomainsUI();
+
+      // Automatically select newly created domain for current project form
+      const formDomainSelect = DOM.formDomain || document.getElementById('form-domain');
+      if (formDomainSelect) {
+        formDomainSelect.value = name;
+        lastSelectedDomainVal = name;
+      }
+      updateStatsSummary();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || 'Failed to add domain.', 'error');
+    }
+  } catch (err) {
+    console.error('Error adding domain:', err);
+    showToast('Network error while adding domain.', 'error');
+  }
+}
+
+// API FETCHERS
 async function fetchProjects() {
   const params = new URLSearchParams();
   if (state.filterDomain !== 'All') params.append('domain', state.filterDomain);
@@ -595,6 +799,29 @@ function initEventListeners() {
     renderAllViews();
     showToast('Filters reset to default');
   });
+
+  // Domain Management Modal Actions
+  if (DOM.btnOpenAddDomain) {
+    DOM.btnOpenAddDomain.addEventListener('click', openAddDomainModal);
+  }
+  if (DOM.closeAddDomainModal) {
+    DOM.closeAddDomainModal.addEventListener('click', () => closeAddDomainModal(false));
+  }
+  if (DOM.btnCancelAddDomain) {
+    DOM.btnCancelAddDomain.addEventListener('click', () => closeAddDomainModal(false));
+  }
+  if (DOM.addDomainForm) {
+    DOM.addDomainForm.addEventListener('submit', handleAddDomainSubmit);
+  }
+  if (DOM.formDomain) {
+    DOM.formDomain.addEventListener('change', (e) => {
+      if (e.target.value === '__add_new_domain__') {
+        openAddDomainModal();
+      } else {
+        lastSelectedDomainVal = e.target.value;
+      }
+    });
+  }
 
   // Project Modal Actions
   DOM.openAddTaskModal.addEventListener('click', () => openProjectModalForCreate());
