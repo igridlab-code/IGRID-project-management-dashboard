@@ -3222,6 +3222,21 @@ h1, h2, h3, h4, h5, h6, p, span, a, label, .card-title, .card-desc, .action-item
   letter-spacing: 0.2px;
 }
 
+/* Task and Info modals must layer ABOVE the detail-modal */
+#task-modal,
+#task-info-modal {
+  z-index: 200 !important;
+}
+
+/* Missing task-bar status colors */
+.ref-task-bar.bar-not_started {
+  background: linear-gradient(90deg, #94a3b8, #64748b);
+}
+
+.ref-task-bar.bar-on_hold {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
 .gantt-toolbar {
   display: flex;
   justify-content: space-between;

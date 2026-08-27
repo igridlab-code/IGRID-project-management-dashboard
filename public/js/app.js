@@ -899,7 +899,7 @@ function initEventListeners() {
 
   // Global Event Delegation for all Add Task Buttons (Yellow & Blue buttons)
   document.addEventListener('click', (e) => {
-    const addBtn = e.target.closest('.add-task-btn, #btn-add-project-task, .ref-gantt-add-btn, #open-add-task-modal');
+    const addBtn = e.target.closest('.add-task-btn, #btn-add-project-task, .ref-gantt-add-btn');
     if (addBtn) {
       e.preventDefault();
       e.stopPropagation();
@@ -2389,7 +2389,7 @@ async function openProjectDetail(projectId) {
 
     // Fetch & render Project-Specific Timeline Gantt Chart
     try {
-      const tasksRes = await authFetch(`/api/projects/${id}/tasks`);
+      const tasksRes = await authFetch(`/api/projects/${projectId}/tasks`);
       if (tasksRes.ok) {
         state.activeProjectTasks = await tasksRes.json();
       } else {
