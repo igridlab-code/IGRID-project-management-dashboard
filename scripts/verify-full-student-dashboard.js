@@ -100,33 +100,36 @@ async function runTests() {
   const student2Id = reg2Res.json.user.student_id;
   console.log(`✅ PASS: Registered Student 2 "${student2Email}" (ID: ${student2Id}).`);
 
-  // 5️⃣ Security Test: Student 2 blocked from viewing Student 1 profile
-  console.log('\n5️⃣ Security Check: Student 2 reading Student 1 profile (Should be 403 Forbidden)...');
+  // 5. Check: Student 2 reading Student 1 profile (Allowed in Public/Student Read-Only Showcase)
+  console.log('5️⃣ Testing: Student 2 reading Student 1 public showcase profile (Permitted read-only)...');
   const crossReadRes = await makeRequest(`/api/students/${student1Id}`, {
     headers: { 'Authorization': `Bearer ${student2Token}` }
   });
 
-  if (crossReadRes.statusCode === 403) {
-    console.log('✅ PASS: Cross-student read blocked with 403 Forbidden!');
+  if (crossReadRes.statusCode === 200 && crossReadRes.json.name) {
+    console.log(`✅ PASS: Student 2 read Student 1 ("${crossReadRes.json.name}") public showcase profile successfully!`);
   } else {
-    console.error('❌ FAIL: Cross-student read returned status:', crossReadRes.statusCode, crossReadRes.json);
+    console.error('❌ FAIL: Cross-student read failed:', crossReadRes.statusCode, crossReadRes.json);
     process.exit(1);
   }
 
-  // 6️⃣ Security Test: Student 2 blocked from modifying Student 1 profile
-  console.log('\n6️⃣ Security Check: Student 2 modifying Student 1 profile (Should be 403 Forbidden)...');
+  // 6. Security Check: Student 2 modifying Student 1 profile (Should be 403 Forbidden!)
+  console.log('6️⃣ Security Check: Student 2 modifying Student 1 profile (Should be 403 Forbidden)...');
   const crossEditRes = await makeRequest(`/api/students/${student1Id}`, {
     method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${student2Token}`,
-      'Content-Type': 'application/json'
+    headers: { 
+        'Authorization': `Bearer ${student2Token}`,
+        'Content-Type': 'application/json'
     }
-  }, { bio: 'Hacked bio by Student 2' });
+  }, {
+    phone: '+91 99999 99999',
+    bio: 'Malicious modification by unauthorized student'
+  });
 
   if (crossEditRes.statusCode === 403) {
     console.log('✅ PASS: Cross-student edit blocked with 403 Forbidden!');
   } else {
-    console.error('❌ FAIL: Cross-student edit returned status:', crossEditRes.statusCode, crossEditRes.json);
+    console.error('❌ FAIL: Cross-student edit was not blocked:', crossEditRes.statusCode, crossEditRes.json);
     process.exit(1);
   }
 

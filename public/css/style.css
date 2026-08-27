@@ -2035,20 +2035,54 @@ body {
   gap: 16px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+/* Global Smooth Momentum Touch Scrolling for all Scrollable Panels */
+.ref-gantt-scroll-wrapper,
+.gantt-container-outer,
+.students-table-outer,
+.table-wrapper,
+.bom-mini-table-wrapper,
+.filter-drawer-body,
+.notif-list,
+.activity-feed-list,
+.dropdown-menu,
+.kanban-cards-wrapper,
+.kanban-cards {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.ref-gantt-scroll-wrapper {
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
 }
 
 /* Thin Sleek Custom Scrollbar */
-.modal-body::-webkit-scrollbar {
+.modal-body::-webkit-scrollbar,
+.ref-gantt-scroll-wrapper::-webkit-scrollbar,
+.students-table-outer::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
-.modal-body::-webkit-scrollbar-track {
+.modal-body::-webkit-scrollbar-track,
+.ref-gantt-scroll-wrapper::-webkit-scrollbar-track,
+.students-table-outer::-webkit-scrollbar-track {
   background: transparent;
 }
-.modal-body::-webkit-scrollbar-thumb {
+.modal-body::-webkit-scrollbar-thumb,
+.ref-gantt-scroll-wrapper::-webkit-scrollbar-thumb,
+.students-table-outer::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.25);
   border-radius: 3px;
 }
-.modal-body::-webkit-scrollbar-thumb:hover {
+.modal-body::-webkit-scrollbar-thumb:hover,
+.ref-gantt-scroll-wrapper::-webkit-scrollbar-thumb:hover,
+.students-table-outer::-webkit-scrollbar-thumb:hover {
   background: rgba(99, 102, 241, 0.7);
 }
 

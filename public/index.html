@@ -102,14 +102,15 @@
           </div>
         </div>
 
-        <!-- User Profile Pill -->
+        <!-- User Profile / Public Sign-In Pill -->
         <div class="user-profile-pill" id="profile-pill">
-          <img src="https://ui-avatars.com/api/?name=User&background=f59e0b&color=000" alt="User Avatar" class="profile-avatar" id="profile-avatar-img">
+          <img src="https://ui-avatars.com/api/?name=Guest&background=3b82f6&color=fff" alt="User Avatar" class="profile-avatar" id="profile-avatar-img">
           <div class="profile-info">
-            <span class="profile-name" id="user-display-name">Lab User</span>
-            <span class="profile-role" id="user-display-role">Authenticated</span>
+            <span class="profile-name" id="user-display-name">Public Visitor</span>
+            <span class="profile-role" id="user-display-role">🌐 Public Showcase</span>
           </div>
-          <button class="btn-logout" id="btn-logout-nav" title="Sign Out of Session" onclick="localStorage.removeItem('igrid_session'); window.location.href='/login';" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; margin-left: 8px;">Logout 🚪</button>
+          <button class="btn-login" id="btn-login-nav" title="Sign In as Student or Admin" onclick="window.location.href='/login';" style="display:none; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; margin-left: 8px;">🔑 Sign In</button>
+          <button class="btn-logout" id="btn-logout-nav" title="Sign Out of Session" onclick="localStorage.removeItem('igrid_session'); window.location.href='/showcase';" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; margin-left: 8px;">Logout 🚪</button>
         </div>
       </div>
     </header>

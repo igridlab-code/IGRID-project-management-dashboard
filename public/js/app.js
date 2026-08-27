@@ -186,11 +186,28 @@ function getSessionToken() {
   return localStorage.getItem('igrid_session');
 }
 
+function isUserAdmin() {
+  if (!state.currentUser) return false;
+  const role = (state.currentUser.role || '').toLowerCase();
+  const email = (state.currentUser.email || '').toLowerCase();
+  return role === 'admin' || email === 'kaviyaarumugam541@gmail.com' || email.includes('admin');
+}
+
+function isUserStudent() {
+  if (!state.currentUser) return false;
+  return state.currentUser.role === 'student' || !isUserAdmin();
+}
+
+function isUserPublic() {
+  return !state.currentUser;
+}
+
 async function checkSessionOrRedirect() {
   const token = getSessionToken();
   if (!token) {
-    window.location.href = '/login';
-    return false;
+    state.currentUser = null;
+    updateUserNavbarUI();
+    return true; // Allows public showcase view without forced login redirect!
   }
   try {
     const res = await fetch('/api/auth/session', {
@@ -198,34 +215,34 @@ async function checkSessionOrRedirect() {
     });
     if (!res.ok) {
       localStorage.removeItem('igrid_session');
-      window.location.href = '/login';
-      return false;
+      state.currentUser = null;
+      updateUserNavbarUI();
+      return true; // Fall back to public showcase mode
     }
     const data = await res.json();
     state.currentUser = data.user;
     updateUserNavbarUI();
     return true;
   } catch (err) {
-    window.location.href = '/login';
-    return false;
+    localStorage.removeItem('igrid_session');
+    state.currentUser = null;
+    updateUserNavbarUI();
+    return true;
   }
 }
 
 async function authFetch(url, options = {}) {
   const token = getSessionToken();
-  if (!token) {
-    window.location.href = '/login';
-    throw new Error('Unauthenticated');
-  }
-
   const headers = options.headers || {};
-  headers['Authorization'] = `Bearer ${token}`;
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   options.headers = headers;
 
   const res = await fetch(url, options);
-  if (res.status === 401) {
-    localStorage.removeItem('igrid_session');
-    window.location.href = '/login';
+  if (res.status === 401 && options.method && options.method !== 'GET') {
+    showToast('Please sign in as a student or administrator to make changes.', 'error');
+    setTimeout(() => { window.location.href = '/login'; }, 1200);
     throw new Error('Unauthorized');
   }
   return res;
@@ -234,6 +251,9 @@ async function authFetch(url, options = {}) {
 function updateUserNavbarUI() {
   const userRoleBadge = document.getElementById('user-display-role');
   const userNameText = document.getElementById('user-display-name');
+  const avatarImg = document.getElementById('profile-avatar-img');
+  const loginBtn = document.getElementById('btn-login-nav');
+  const logoutBtn = document.getElementById('btn-logout-nav');
   const openAddStudentBtn = document.getElementById('open-add-student-modal');
   const openAddProjectBtn = document.getElementById('open-project-modal');
 
@@ -242,10 +262,14 @@ function updateUserNavbarUI() {
     const displayName = state.currentUser.name || state.currentUser.email.split('@')[0];
 
     if (userNameText) userNameText.textContent = displayName;
+    if (avatarImg) avatarImg.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=${isAdmin ? '6366f1' : '10b981'}&color=fff`;
     if (userRoleBadge) {
       userRoleBadge.textContent = isAdmin ? '👑 Admin Coordinator' : '🎓 Student Innovator';
       userRoleBadge.className = `badge ${isAdmin ? 'badge-primary' : 'badge-success'}`;
     }
+
+    if (loginBtn) loginBtn.style.display = 'none';
+    if (logoutBtn) logoutBtn.style.display = 'inline-block';
 
     if (!isAdmin) {
       if (openAddStudentBtn) openAddStudentBtn.style.display = 'none';
@@ -254,6 +278,18 @@ function updateUserNavbarUI() {
       if (openAddStudentBtn) openAddStudentBtn.style.display = 'inline-block';
       if (openAddProjectBtn) openAddProjectBtn.style.display = 'inline-block';
     }
+  } else {
+    // PUBLIC SHOWCASE (READ-ONLY)
+    if (userNameText) userNameText.textContent = 'Public Visitor';
+    if (avatarImg) avatarImg.src = `https://ui-avatars.com/api/?name=Public+Visitor&background=3b82f6&color=fff`;
+    if (userRoleBadge) {
+      userRoleBadge.textContent = '🌐 Public Showcase (Read-Only)';
+      userRoleBadge.className = 'badge badge-primary';
+    }
+    if (loginBtn) loginBtn.style.display = 'inline-block';
+    if (logoutBtn) logoutBtn.style.display = 'none';
+    if (openAddStudentBtn) openAddStudentBtn.style.display = 'none';
+    if (openAddProjectBtn) openAddProjectBtn.style.display = 'none';
   }
 }
 
@@ -2950,11 +2986,39 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
 }
 
 function openProjectModalForEdit(project) {
-  DOM.modalProjectTitle.textContent = `✏️ Edit Project: ${project.project_code || ''}`;
+  if (isUserPublic()) {
+    showToast('Please sign in to edit project links and deliverables.', 'error');
+    setTimeout(() => { window.location.href = '/login'; }, 1000);
+    return;
+  }
+
+  const isAdmin = isUserAdmin();
+
+  if (DOM.modalProjectTitle) {
+    DOM.modalProjectTitle.textContent = isAdmin
+      ? `✏️ Admin Edit Project: ${project.project_code || ''}`
+      : `✏️ Student Edit Links & Deliverables: ${project.project_code || ''}`;
+  }
+
   document.getElementById('form-project-id').value = project.id || '';
-  document.getElementById('form-code').value = project.project_code || '';
-  document.getElementById('form-title').value = project.title || '';
-  document.getElementById('form-description').value = project.description || '';
+  
+  const codeEl = document.getElementById('form-code');
+  if (codeEl) {
+    codeEl.value = project.project_code || '';
+    codeEl.disabled = !isAdmin;
+  }
+
+  const titleEl = document.getElementById('form-title');
+  if (titleEl) {
+    titleEl.value = project.title || '';
+    titleEl.disabled = !isAdmin;
+  }
+
+  const descEl = document.getElementById('form-description');
+  if (descEl) {
+    descEl.value = project.description || '';
+    descEl.disabled = !isAdmin;
+  }
   
   const domainSelect = document.getElementById('form-domain');
   if (domainSelect) {
@@ -2972,31 +3036,74 @@ function openProjectModalForEdit(project) {
       domainSelect.insertBefore(opt, domainSelect.firstChild);
     }
     domainSelect.value = project.domain || (domainSelect.options[0] ? domainSelect.options[0].value : 'AI');
+    domainSelect.disabled = !isAdmin;
   }
 
-  document.getElementById('form-priority').value = project.priority || 'Normal';
-  document.getElementById('form-status').value = project.status || 'in_progress';
-  document.getElementById('form-tags').value = project.tags || '';
-  document.getElementById('form-progress').value = project.progress !== undefined ? project.progress : 0;
+  const priorityEl = document.getElementById('form-priority');
+  if (priorityEl) {
+    priorityEl.value = project.priority || 'Normal';
+    priorityEl.disabled = !isAdmin;
+  }
+
+  const statusEl = document.getElementById('form-status');
+  if (statusEl) {
+    statusEl.value = project.status || 'in_progress';
+    statusEl.disabled = !isAdmin;
+  }
+
+  const tagsEl = document.getElementById('form-tags');
+  if (tagsEl) {
+    tagsEl.value = project.tags || '';
+    tagsEl.disabled = !isAdmin;
+  }
+
+  const progressEl = document.getElementById('form-progress');
+  if (progressEl) {
+    progressEl.value = project.progress !== undefined ? project.progress : 0;
+    progressEl.disabled = !isAdmin;
+  }
   
   let formattedStartDate = project.start_date || '';
   if (formattedStartDate.includes('T')) formattedStartDate = formattedStartDate.split('T')[0];
   const startDateInput = document.getElementById('form-start-date');
-  if (startDateInput) startDateInput.value = formattedStartDate;
+  if (startDateInput) {
+    startDateInput.value = formattedStartDate;
+    startDateInput.disabled = !isAdmin;
+  }
 
   let formattedDueDate = project.due_date || '';
   if (formattedDueDate.includes('T')) formattedDueDate = formattedDueDate.split('T')[0];
   const dueDateInput = document.getElementById('form-due-date');
-  if (dueDateInput) dueDateInput.value = formattedDueDate;
+  if (dueDateInput) {
+    dueDateInput.value = formattedDueDate;
+    dueDateInput.disabled = !isAdmin;
+  }
 
-  document.getElementById('form-action-item').value = project.immediate_action || '';
+  const actionEl = document.getElementById('form-action-item');
+  if (actionEl) {
+    actionEl.value = project.immediate_action || '';
+    actionEl.disabled = !isAdmin;
+  }
+
+  // Student editable fields (Media, links, deliverables)
   document.getElementById('form-github').value = project.github_repo || '';
   document.getElementById('form-youtube').value = project.youtube_url || '';
   document.getElementById('form-doc-url').value = project.doc_url || '';
   document.getElementById('form-linkedin').value = project.linkedin_url || '';
   document.getElementById('form-image-url').value = project.image_url || '';
-  document.getElementById('form-team-name').value = project.team_name || '';
-  document.getElementById('form-team-lead').value = project.team_lead || '';
+  
+  const teamNameEl = document.getElementById('form-team-name');
+  if (teamNameEl) {
+    teamNameEl.value = project.team_name || '';
+    teamNameEl.disabled = !isAdmin;
+  }
+
+  const teamLeadEl = document.getElementById('form-team-lead');
+  if (teamLeadEl) {
+    teamLeadEl.value = project.team_lead || '';
+    teamLeadEl.disabled = !isAdmin;
+  }
+
   document.getElementById('form-team-lead-photo').value = project.team_lead_photo || '';
   document.getElementById('form-deliverables').value = project.deliverables || '';
 
@@ -3396,21 +3503,28 @@ function renderRecentActivityFeed() {
 // ----------------------------------------------------
 // UTILITIES & HELPERS
 // ----------------------------------------------------
+function syncBodyScrollLock() {
+  const activeModals = document.querySelectorAll('.modal-overlay.active, .drawer-open');
+  if (activeModals.length === 0) {
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+  } else {
+    document.body.style.overflow = 'hidden';
+  }
+}
+
 function openModal(modal) {
   if (modal) {
     modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
   }
+  syncBodyScrollLock();
 }
 
 function closeModal(modal) {
   if (modal) {
     modal.classList.remove('active');
   }
-  const activeModals = document.querySelectorAll('.modal-overlay.active');
-  if (activeModals.length === 0) {
-    document.body.style.overflow = '';
-  }
+  syncBodyScrollLock();
 }
 
 // Global ESC key handler to close topmost active modal and restore body scroll
@@ -3421,6 +3535,13 @@ document.addEventListener('keydown', (e) => {
       const topModal = activeModals[activeModals.length - 1];
       closeModal(topModal);
     }
+  }
+});
+
+// Global outside-click listener for modal backdrops
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+    closeModal(e.target);
   }
 });
 

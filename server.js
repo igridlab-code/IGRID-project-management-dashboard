@@ -23,27 +23,53 @@ app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 // AUTHENTICATION MIDDLEWARE & GATING
 // ----------------------------------------------------
 
+function optionalAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = (authHeader && authHeader.split(' ')[1]) || req.headers['x-access-token'] || req.query.token;
+
+  if (!token) {
+    req.user = { id: null, role: 'public', isPublic: true };
+    return next();
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err || !user) {
+      req.user = { id: null, role: 'public', isPublic: true };
+    } else {
+      req.user = user;
+    }
+    next();
+  });
+}
+
 function requireAuth(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = (authHeader && authHeader.split(' ')[1]) || req.headers['x-access-token'] || req.query.token;
 
   if (!token) {
     if (req.path.startsWith('/api/')) {
-      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+      return res.status(401).json({ error: 'Authentication required. Please sign in as a student or administrator.' });
     }
     return res.redirect('/login');
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
+    if (err || !user) {
       if (req.path.startsWith('/api/')) {
-        return res.status(401).json({ error: 'Session expired or invalid token.' });
+        return res.status(401).json({ error: 'Session expired or invalid token. Please sign in again.' });
       }
       return res.redirect('/login');
     }
     req.user = user;
     next();
   });
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
+  }
+  next();
 }
 
 // ----------------------------------------------------
@@ -316,8 +342,8 @@ app.post('/api/domains', (req, res) => {
   });
 });
 
-// GET ALL PROJECTS
-app.get('/api/projects', requireAuth, (req, res) => {
+// GET ALL PROJECTS (PUBLIC SHOWCASE & AUTHENTICATED)
+app.get('/api/projects', optionalAuth, (req, res) => {
   const { domain, status, tag, search, sort, priority } = req.query;
   let sql = 'SELECT * FROM projects WHERE 1=1';
   const params = [];
@@ -378,8 +404,21 @@ app.get('/api/projects', requireAuth, (req, res) => {
   });
 });
 
-// GET SINGLE PROJECT WITH BOM & ACTIVITIES
-app.get('/api/projects/:id', requireAuth, (req, res) => {
+// PUBLIC SHOWCASE DIRECT ALIAS
+app.get('/api/public/projects', (req, res) => {
+  db.all('SELECT * FROM projects ORDER BY updated_at DESC', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    const projects = rows.map(r => {
+      let members = [];
+      try { members = r.team_members ? JSON.parse(r.team_members) : []; } catch(e) { members = []; }
+      return { ...r, team_members: members };
+    });
+    res.json(projects);
+  });
+});
+
+// GET SINGLE PROJECT WITH BOM & ACTIVITIES (PUBLIC & AUTHENTICATED)
+app.get('/api/projects/:id', optionalAuth, (req, res) => {
   const { id } = req.params;
   db.get('SELECT * FROM projects WHERE id = ?', [id], (err, project) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -408,7 +447,7 @@ app.get('/api/projects/:id', requireAuth, (req, res) => {
   });
 });
 
-// CREATE PROJECT
+// CREATE PROJECT (ADMIN OR STUDENT)
 app.post('/api/projects', requireAuth, (req, res) => {
   const {
     project_code, title, description, domain, tags, status, priority,
@@ -421,8 +460,9 @@ app.post('/api/projects', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Title and Domain are required.' });
   }
 
-  const code = project_code || `IGRID-${(domain || 'GEN').substring(0,3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
+  const code = project_code || `IGRID-${(domain || 'GEN').substring(0,3).toUpperCase()}-${Date.now().toString().slice(-4)}${Math.floor(10 + Math.random() * 90)}`;
   const membersJson = typeof team_members === 'string' ? team_members : JSON.stringify(team_members || []);
+  const leadName = (req.user && req.user.role === 'student') ? (req.user.name || team_lead || '') : (team_lead || '');
 
   const sql = `
     INSERT INTO projects (
@@ -439,7 +479,7 @@ app.post('/api/projects', requireAuth, (req, res) => {
       code, title, description || '', domain, tags || '', status || 'in_queue', priority || 'Normal',
       Number(progress) || 0, start_date || '', due_date || '', immediate_action || '', github_repo || '',
       youtube_url || '', linkedin_url || '', doc_url || '', image_url || '',
-      bom_status || 'Not Required', team_name || '', team_lead || '', team_lead_photo || '', membersJson, deliverables || ''
+      bom_status || 'Not Required', team_name || '', leadName, team_lead_photo || '', membersJson, deliverables || ''
     ],
     function(err) {
       if (err) return res.status(500).json({ error: err.message });
@@ -448,72 +488,127 @@ app.post('/api/projects', requireAuth, (req, res) => {
   );
 });
 
-// UPDATE PROJECT
+// UPDATE PROJECT (ROLE-BASED: ADMIN HAS FULL ACCESS; STUDENT CAN ONLY EDIT OWN MEDIA & LINKS)
 app.put('/api/projects/:id', requireAuth, (req, res) => {
   const { id } = req.params;
-  const {
-    project_code,
-    title, description, domain, tags, status, priority,
-    progress, start_date, due_date, immediate_action, github_repo,
-    youtube_url, linkedin_url, doc_url, image_url,
-    bom_status, team_name, team_lead, team_lead_photo, team_members, deliverables
-  } = req.body;
+  const user = req.user;
+  const isAdmin = user && user.role === 'admin';
 
-  const membersJson = team_members !== undefined
-    ? (typeof team_members === 'string' ? team_members : JSON.stringify(team_members || []))
-    : null;
+  db.get('SELECT * FROM projects WHERE id = ?', [id], (err, project) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!project) return res.status(404).json({ error: 'Project not found' });
 
-  const progressNum = (progress !== undefined && progress !== null && progress !== '')
-    ? Number(progress)
-    : null;
+    // If Student: Verify row-level ownership
+    if (!isAdmin) {
+      const userEmail = (user.email || '').toLowerCase();
+      const userName = (user.name || '').toLowerCase();
+      const isLead = project.team_lead && project.team_lead.toLowerCase().includes(userName);
+      const isMember = project.team_members && (project.team_members.toLowerCase().includes(userEmail) || project.team_members.toLowerCase().includes(userName));
+      
+      // Also check student table
+      db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ?', [user.id, userEmail], (err2, student) => {
+        const isAssigned = student && (student.assigned_project === project.project_code || student.project_title === project.title);
+        
+        if (!isLead && !isMember && !isAssigned) {
+          return res.status(403).json({ error: 'Access denied: Students can only edit their own project links and deliverables.' });
+        }
 
-  const sql = `
-    UPDATE projects SET
-      project_code = COALESCE(?, project_code),
-      title = COALESCE(?, title),
-      description = COALESCE(?, description),
-      domain = COALESCE(?, domain),
-      tags = COALESCE(?, tags),
-      status = COALESCE(?, status),
-      priority = COALESCE(?, priority),
-      progress = COALESCE(?, progress),
-      start_date = COALESCE(?, start_date),
-      due_date = COALESCE(?, due_date),
-      immediate_action = COALESCE(?, immediate_action),
-      github_repo = COALESCE(?, github_repo),
-      youtube_url = COALESCE(?, youtube_url),
-      linkedin_url = COALESCE(?, linkedin_url),
-      doc_url = COALESCE(?, doc_url),
-      image_url = COALESCE(?, image_url),
-      bom_status = COALESCE(?, bom_status),
-      team_name = COALESCE(?, team_name),
-      team_lead = COALESCE(?, team_lead),
-      team_lead_photo = COALESCE(?, team_lead_photo),
-      team_members = COALESCE(?, team_members),
-      deliverables = COALESCE(?, deliverables),
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `;
+        // Student is permitted to update ONLY media and deliverable links
+        const {
+          github_repo, youtube_url, linkedin_url, doc_url, image_url,
+          team_lead_photo, deliverables
+        } = req.body;
 
-  db.run(
-    sql,
-    [
+        const updateSql = `
+          UPDATE projects SET
+            github_repo = COALESCE(?, github_repo),
+            youtube_url = COALESCE(?, youtube_url),
+            linkedin_url = COALESCE(?, linkedin_url),
+            doc_url = COALESCE(?, doc_url),
+            image_url = COALESCE(?, image_url),
+            team_lead_photo = COALESCE(?, team_lead_photo),
+            deliverables = COALESCE(?, deliverables),
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `;
+
+        db.run(
+          updateSql,
+          [github_repo, youtube_url, linkedin_url, doc_url, image_url, team_lead_photo, deliverables, id],
+          function(err3) {
+            if (err3) return res.status(500).json({ error: err3.message });
+            res.json({ message: 'Project links and deliverables updated successfully.', changes: this.changes });
+          }
+        );
+      });
+      return;
+    }
+
+    // Admin has full CRUD access to all fields
+    const {
       project_code,
       title, description, domain, tags, status, priority,
-      progressNum,
-      start_date, due_date, immediate_action, github_repo,
+      progress, start_date, due_date, immediate_action, github_repo,
       youtube_url, linkedin_url, doc_url, image_url,
-      bom_status, team_name, team_lead, team_lead_photo, membersJson, deliverables, id
-    ],
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: 'Project updated successfully.', changes: this.changes });
-    }
-  );
+      bom_status, team_name, team_lead, team_lead_photo, team_members, deliverables
+    } = req.body;
+
+    const membersJson = team_members !== undefined
+      ? (typeof team_members === 'string' ? team_members : JSON.stringify(team_members || []))
+      : null;
+
+    const progressNum = (progress !== undefined && progress !== null && progress !== '')
+      ? Number(progress)
+      : null;
+
+    const sql = `
+      UPDATE projects SET
+        project_code = COALESCE(?, project_code),
+        title = COALESCE(?, title),
+        description = COALESCE(?, description),
+        domain = COALESCE(?, domain),
+        tags = COALESCE(?, tags),
+        status = COALESCE(?, status),
+        priority = COALESCE(?, priority),
+        progress = COALESCE(?, progress),
+        start_date = COALESCE(?, start_date),
+        due_date = COALESCE(?, due_date),
+        immediate_action = COALESCE(?, immediate_action),
+        github_repo = COALESCE(?, github_repo),
+        youtube_url = COALESCE(?, youtube_url),
+        linkedin_url = COALESCE(?, linkedin_url),
+        doc_url = COALESCE(?, doc_url),
+        image_url = COALESCE(?, image_url),
+        bom_status = COALESCE(?, bom_status),
+        team_name = COALESCE(?, team_name),
+        team_lead = COALESCE(?, team_lead),
+        team_lead_photo = COALESCE(?, team_lead_photo),
+        team_members = COALESCE(?, team_members),
+        deliverables = COALESCE(?, deliverables),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `;
+
+    db.run(
+      sql,
+      [
+        project_code,
+        title, description, domain, tags, status, priority,
+        progressNum,
+        start_date, due_date, immediate_action, github_repo,
+        youtube_url, linkedin_url, doc_url, image_url,
+        bom_status, team_name, team_lead, team_lead_photo, membersJson, deliverables, id
+      ],
+      function(err4) {
+        if (err4) return res.status(500).json({ error: err4.message });
+        res.json({ message: 'Project updated successfully by Administrator.', changes: this.changes });
+      }
+    );
+  });
 });
 
-// UPDATE PROJECT STATUS
-app.put('/api/projects/:id/status', requireAuth, (req, res) => {
+// UPDATE PROJECT STATUS (ADMIN ONLY)
+app.put('/api/projects/:id/status', requireAuth, requireAdmin, (req, res) => {
   const { id } = req.params;
   const { status, progress } = req.body;
 
@@ -549,8 +644,8 @@ app.put('/api/projects/:id/status', requireAuth, (req, res) => {
   });
 });
 
-// DELETE PROJECT
-app.delete('/api/projects/:id', requireAuth, (req, res) => {
+// DELETE PROJECT (ADMIN ONLY)
+app.delete('/api/projects/:id', requireAuth, requireAdmin, (req, res) => {
   const { id } = req.params;
   db.run('DELETE FROM projects WHERE id = ?', [id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
@@ -558,34 +653,21 @@ app.delete('/api/projects/:id', requireAuth, (req, res) => {
   });
 });
 
-// GET STUDENTS
-app.get('/api/students', requireAuth, (req, res) => {
+// GET STUDENTS (PUBLIC SHOWCASE & AUTHENTICATED)
+app.get('/api/students', optionalAuth, (req, res) => {
   db.all('SELECT * FROM students ORDER BY name ASC', [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
 });
 
-// GET SINGLE STUDENT PROFILE (ADMIN OR SELF ONLY)
-app.get('/api/students/:id', requireAuth, (req, res) => {
+// GET SINGLE STUDENT PROFILE (PUBLIC SHOWCASE & AUTHENTICATED)
+app.get('/api/students/:id', optionalAuth, (req, res) => {
   const reqStudentId = Number(req.params.id);
-  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
-  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
-  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
-
-  db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err, studentRow) => {
+  db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err, student) => {
     if (err) return res.status(500).json({ error: err.message });
-    if (!studentRow) return res.status(404).json({ error: 'Student profile not found.' });
-
-    const isSelf = (req.user.student_id && Number(req.user.student_id) === reqStudentId) ||
-                   (studentRow.user_id && Number(studentRow.user_id) === Number(req.user.id)) ||
-                   (studentRow.email && studentRow.email.toLowerCase() === userEmail);
-
-    if (!isAdmin && !isSelf) {
-      return res.status(403).json({ error: 'Access denied. You can only view your own student profile.' });
-    }
-
-    res.json(studentRow);
+    if (!student) return res.status(404).json({ error: 'Student not found.' });
+    res.json(student);
   });
 });
 
@@ -841,8 +923,16 @@ app.put('/api/bom/:id/status', requireAuth, (req, res) => {
 // PROJECT-SPECIFIC TIMELINE TASKS ENDPOINTS
 // ----------------------------------------------------
 
-// GET TASKS FOR SPECIFIC PROJECT
-app.get('/api/projects/:id/tasks', requireAuth, (req, res) => {
+// GET TASKS FOR SPECIFIC PROJECT (PUBLIC SHOWCASE & AUTHENTICATED)
+app.get('/api/projects/:id/tasks', optionalAuth, (req, res) => {
+  const { id } = req.params;
+  db.all('SELECT * FROM project_tasks WHERE project_id = ? ORDER BY start_date ASC, id ASC', [id], (err, tasks) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(tasks || []);
+  });
+});
+
+app.get('/api/public/projects/:id/tasks', (req, res) => {
   const { id } = req.params;
   db.all('SELECT * FROM project_tasks WHERE project_id = ? ORDER BY start_date ASC, id ASC', [id], (err, tasks) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -1043,22 +1133,17 @@ app.get('/api/export/csv', requireAuth, (req, res) => {
   });
 });
 
-// Gated SPA Route Catch-All
+// PUBLIC SPA ROUTES (/showcase, /public-view, /)
+app.get(['/', '/showcase', '/public-view'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// SPA Route Catch-All
 app.get('*', (req, res) => {
-  // Check authorization header, cookie, or token parameter
-  const authHeader = req.headers['authorization'];
-  const token = (authHeader && authHeader.split(' ')[1]) || req.headers['x-access-token'] || req.query.token;
-
-  if (!token) {
-    return res.redirect('/login');
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API route not found' });
   }
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.redirect('/login');
-    }
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-  });
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Levenshtein distance helper for fuzzy project name matching
