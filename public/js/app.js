@@ -135,12 +135,20 @@ const DOM = {
   bomForm: document.getElementById('bom-form'),
   bomProjectCodeSelect: document.getElementById('bom-project-code'),
 
-  // Student Modal
+  // Student Modals
   studentModal: document.getElementById('student-modal'),
   openAddStudentModal: document.getElementById('open-add-student-modal'),
   closeStudentModal: document.getElementById('close-student-modal'),
   cancelStudentBtn: document.getElementById('cancel-student-btn'),
   studentForm: document.getElementById('student-form'),
+  editStudentModal: document.getElementById('edit-student-modal'),
+  closeEditStudentModal: document.getElementById('close-edit-student-modal'),
+  cancelEditStudentBtn: document.getElementById('cancel-edit-student-btn'),
+  editStudentForm: document.getElementById('edit-student-form'),
+  viewStudentModal: document.getElementById('view-student-modal'),
+  closeViewStudentModal: document.getElementById('close-view-student-modal'),
+  closeViewStudentBtn: document.getElementById('close-view-student-btn'),
+  btnAdminEditStudentProfile: document.getElementById('btn-admin-edit-student-profile'),
 
   // Analytics Modal
   analyticsModal: document.getElementById('analytics-modal'),
@@ -905,6 +913,14 @@ function initEventListeners() {
   DOM.cancelStudentBtn.addEventListener('click', () => closeModal(DOM.studentModal));
   DOM.studentForm.addEventListener('submit', handleStudentFormSubmit);
 
+  // Edit & View Student Modal Actions
+  if (DOM.closeEditStudentModal) DOM.closeEditStudentModal.addEventListener('click', () => closeModal(DOM.editStudentModal));
+  if (DOM.cancelEditStudentBtn) DOM.cancelEditStudentBtn.addEventListener('click', () => closeModal(DOM.editStudentModal));
+  if (DOM.editStudentForm) DOM.editStudentForm.addEventListener('submit', handleEditStudentSubmit);
+
+  if (DOM.closeViewStudentModal) DOM.closeViewStudentModal.addEventListener('click', () => closeModal(DOM.viewStudentModal));
+  if (DOM.closeViewStudentBtn) DOM.closeViewStudentBtn.addEventListener('click', () => closeModal(DOM.viewStudentModal));
+
   // Analytics Modal Actions
   DOM.labAnalyticsBtn.addEventListener('click', () => openAnalyticsModal());
   DOM.closeAnalyticsModal.addEventListener('click', () => closeModal(DOM.analyticsModal));
@@ -1539,7 +1555,7 @@ function renderCompleted() {
   DOM.showcaseGridRoot.innerHTML = html;
 }
 
-// 9. RENDER STUDENTS DIRECTORY
+// 9. RENDER STUDENTS DIRECTORY & ADMIN MANAGEMENT
 function renderStudents() {
   if (!DOM.studentsGridRoot) return;
   if (state.students.length === 0) {
@@ -1547,39 +1563,202 @@ function renderStudents() {
     return;
   }
 
+  const isAdmin = state.currentUser.email === 'kaviyaarumugam541@gmail.com' || state.currentUser.role === 'admin';
+
   let html = '';
   state.students.forEach(s => {
     const skillsList = (s.skills || '').split(',').map(sk => sk.trim()).filter(Boolean);
-    const skillsHTML = skillsList.map(sk => `<span class="card-tag-pill" style="color:#c7d2fe;">${sk}</span>`).join('');
+    const skillsHTML = skillsList.map(sk => `<span class="card-tag-pill" style="color:#c7d2fe;">${escapeHTML(sk)}</span>`).join('');
     const photo = s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=${(s.avatar_color || '6366f1').replace('#','')}&color=fff`;
 
+    const statusVal = s.status || 'Active';
+    const statusBg = statusVal === 'Active' ? 'rgba(16,185,129,0.15)' : (statusVal === 'Graduated' ? 'rgba(59,130,246,0.15)' : 'rgba(245,158,11,0.15)');
+    const statusColor = statusVal === 'Active' ? '#10b981' : (statusVal === 'Graduated' ? '#60a5fa' : '#fbbf24');
+
     html += `
-      <div class="student-card">
-        <div class="student-card-top">
-          <img src="${photo}" alt="${escapeHTML(s.name)}" class="student-avatar-big" style="border:2px solid ${s.avatar_color || '#6366f1'};">
-          <div class="student-info-main">
-            <h4>${escapeHTML(s.name)}</h4>
-            <span class="student-roll">${s.roll_no} • ${s.year || 'Student'}</span>
+      <div class="student-card" style="display:flex; flex-direction:column; justify-content:space-between; height:100%;">
+        <div>
+          <div class="student-card-top" style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+            <img src="${photo}" alt="${escapeHTML(s.name)}" class="student-avatar-big" style="border:2px solid ${s.avatar_color || '#6366f1'}; width:52px; height:52px; border-radius:50%; object-fit:cover;">
+            <div class="student-info-main" style="flex:1;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <h4 style="margin:0; font-size:15px; font-weight:700; color:var(--text-main);">${escapeHTML(s.name)}</h4>
+                <span class="badge" style="background:${statusBg}; color:${statusColor}; border:1px solid ${statusColor}; font-size:10px; padding:2px 6px; border-radius:10px;">${escapeHTML(statusVal)}</span>
+              </div>
+              <span class="student-roll" style="font-size:12px; color:var(--text-dim); font-weight:600;">Reg No: ${escapeHTML(s.roll_no)}</span>
+            </div>
           </div>
+
+          <div style="font-size:12px; color:var(--text-muted); display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+            <div><strong>Dept:</strong> ${escapeHTML(s.department || 'IGRID Lab')} &bull; ${escapeHTML(s.year || 'Student')}</div>
+            <div><strong>Email:</strong> <a href="mailto:${s.email}" style="color:#60a5fa;">${escapeHTML(s.email || 'N/A')}</a></div>
+            ${s.phone ? `<div><strong>Phone:</strong> ${escapeHTML(s.phone)}</div>` : ''}
+            ${s.team_name ? `<div><strong>Team:</strong> ${escapeHTML(s.team_name)}</div>` : ''}
+          </div>
+
+          ${skillsHTML ? `
+            <div style="margin-bottom:14px;">
+              <div style="font-size:10px; font-weight:700; color:var(--text-dim); margin-bottom:4px; text-transform:uppercase;">Skills:</div>
+              <div class="card-tags">${skillsHTML}</div>
+            </div>
+          ` : ''}
         </div>
 
-        <div style="font-size:12px; color:var(--text-muted);">
-          <div><strong>Role:</strong> ${escapeHTML(s.role || 'Innovator')}</div>
-          <div><strong>Dept:</strong> ${escapeHTML(s.department || 'IGRID Lab')}</div>
-          <div><strong>Email:</strong> <a href="mailto:${s.email}" style="color:#60a5fa;">${s.email}</a></div>
+        <div class="student-card-actions" style="display:flex; gap:8px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color);">
+          <button class="btn btn-sm btn-secondary" onclick="openViewStudentModal(${s.id})" style="flex:1;">👁️ View Profile</button>
+          ${isAdmin ? `<button class="btn btn-sm btn-primary" onclick="openEditStudentModal(${s.id})" style="flex:1; background:#2563eb; border:none;">✏️ Edit</button>` : ''}
         </div>
-
-        ${skillsHTML ? `
-          <div style="margin-top:auto;">
-            <div style="font-size:10px; font-weight:700; color:var(--text-dim); margin-bottom:4px;">SKILLS:</div>
-            <div class="card-tags">${skillsHTML}</div>
-          </div>
-        ` : ''}
       </div>
     `;
   });
 
   DOM.studentsGridRoot.innerHTML = html;
+}
+
+function openViewStudentModal(studentId) {
+  const student = state.students.find(s => String(s.id) === String(studentId));
+  if (!student) return;
+
+  const isAdmin = state.currentUser.email === 'kaviyaarumugam541@gmail.com' || state.currentUser.role === 'admin';
+  const photo = student.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&background=${(student.avatar_color || '6366f1').replace('#','')}&color=fff`;
+  const skillsList = (student.skills || '').split(',').map(sk => sk.trim()).filter(Boolean);
+  const skillsHTML = skillsList.length > 0 ? skillsList.map(sk => `<span class="card-tag-pill" style="color:#c7d2fe; background:rgba(99,102,241,0.2); padding:4px 8px; border-radius:6px; font-size:11px; margin-right:4px;">${escapeHTML(sk)}</span>`).join('') : '<span style="color:var(--text-dim); font-size:12px;">No skills specified</span>';
+
+  const statusColor = student.status === 'Active' ? '#10b981' : (student.status === 'Graduated' ? '#60a5fa' : '#fbbf24');
+
+  const bodyEl = document.getElementById('view-student-modal-body');
+  if (bodyEl) {
+    bodyEl.innerHTML = `
+      <div style="display:flex; gap:20px; align-items:flex-start; margin-bottom:20px;">
+        <img src="${photo}" alt="${escapeHTML(student.name)}" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:3px solid ${student.avatar_color || '#6366f1'}; flex-shrink:0;">
+        <div>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <h3 style="margin:0; font-size:20px; font-weight:700; color:var(--text-main);">${escapeHTML(student.name)}</h3>
+            <span style="background:rgba(16,185,129,0.15); color:${statusColor}; border:1px solid ${statusColor}; font-size:11px; font-weight:700; padding:2px 8px; border-radius:12px;">${escapeHTML(student.status || 'Active')}</span>
+          </div>
+          <p style="margin:4px 0 0 0; color:var(--text-muted); font-size:13px;">
+            Register Number: <strong>${escapeHTML(student.roll_no)}</strong> &bull; ${escapeHTML(student.role || 'Student Innovator')}
+          </p>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; background:var(--bg-card-sub); padding:16px; border-radius:8px; border:1px solid var(--border-color); margin-bottom:20px;">
+        <div><strong style="color:var(--text-dim); font-size:11px;">EMAIL:</strong><br><a href="mailto:${student.email}" style="color:#60a5fa; font-weight:600;">${escapeHTML(student.email || 'N/A')}</a></div>
+        <div><strong style="color:var(--text-dim); font-size:11px;">PHONE:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.phone || 'N/A')}</span></div>
+        <div><strong style="color:var(--text-dim); font-size:11px;">DEPARTMENT:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.department || 'N/A')}</span></div>
+        <div><strong style="color:var(--text-dim); font-size:11px;">ACADEMIC YEAR:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.year || 'N/A')}</span></div>
+        <div><strong style="color:var(--text-dim); font-size:11px;">SECTION:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.section || 'N/A')}</span></div>
+        <div><strong style="color:var(--text-dim); font-size:11px;">COLLEGE / INSTITUTION:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.college || 'Indra Ganesan College of Engineering')}</span></div>
+        <div><strong style="color:var(--text-dim); font-size:11px;">TEAM / PROJECT:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.team_name || 'N/A')}</span></div>
+      </div>
+
+      ${student.bio ? `
+        <div style="margin-bottom:20px;">
+          <h4 style="font-size:12px; font-weight:700; color:var(--text-dim); margin-bottom:6px; text-transform:uppercase;">Bio / Summary</h4>
+          <p style="font-size:13px; color:var(--text-main); line-height:1.5; margin:0;">${escapeHTML(student.bio)}</p>
+        </div>
+      ` : ''}
+
+      <div style="margin-bottom:20px;">
+        <h4 style="font-size:12px; font-weight:700; color:var(--text-dim); margin-bottom:8px; text-transform:uppercase;">Technical Skills</h4>
+        <div>${skillsHTML}</div>
+      </div>
+
+      <div style="display:flex; gap:12px; margin-top:16px;">
+        ${student.github_url ? `<a href="${escapeHTML(student.github_url)}" target="_blank" class="btn btn-sm btn-secondary">🐙 GitHub Profile</a>` : ''}
+        ${student.linkedin_url ? `<a href="${escapeHTML(student.linkedin_url)}" target="_blank" class="btn btn-sm btn-secondary">💼 LinkedIn Profile</a>` : ''}
+      </div>
+    `;
+  }
+
+  const editBtn = document.getElementById('btn-admin-edit-student-profile');
+  if (editBtn) {
+    if (isAdmin) {
+      editBtn.style.display = 'inline-block';
+      editBtn.onclick = () => {
+        closeModal(DOM.viewStudentModal);
+        openEditStudentModal(studentId);
+      };
+    } else {
+      editBtn.style.display = 'none';
+    }
+  }
+
+  openModal(DOM.viewStudentModal);
+}
+
+function openEditStudentModal(studentId) {
+  const student = state.students.find(s => String(s.id) === String(studentId));
+  if (!student) return;
+
+  document.getElementById('edit-student-id').value = student.id;
+  document.getElementById('edit-student-name').value = student.name || '';
+  document.getElementById('edit-student-roll').value = student.roll_no || '';
+  document.getElementById('edit-student-email').value = student.email || '';
+  document.getElementById('edit-student-phone').value = student.phone || '';
+  document.getElementById('edit-student-dept').value = student.department || '';
+  document.getElementById('edit-student-year').value = student.year || '';
+  document.getElementById('edit-student-section').value = student.section || '';
+  document.getElementById('edit-student-college').value = student.college || '';
+  document.getElementById('edit-student-status').value = student.status || 'Active';
+  document.getElementById('edit-student-team').value = student.team_name || '';
+  document.getElementById('edit-student-photo').value = student.photo_url || '';
+  document.getElementById('edit-student-skills').value = student.skills || '';
+  document.getElementById('edit-student-github').value = student.github_url || '';
+  document.getElementById('edit-student-linkedin').value = student.linkedin_url || '';
+  document.getElementById('edit-student-bio').value = student.bio || '';
+
+  openModal(DOM.editStudentModal);
+}
+
+async function handleEditStudentSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('edit-student-id').value;
+  if (!id) return;
+
+  const payload = {
+    name: document.getElementById('edit-student-name').value,
+    roll_no: document.getElementById('edit-student-roll').value,
+    email: document.getElementById('edit-student-email').value,
+    phone: document.getElementById('edit-student-phone').value,
+    department: document.getElementById('edit-student-dept').value,
+    year: document.getElementById('edit-student-year').value,
+    section: document.getElementById('edit-student-section').value,
+    college: document.getElementById('edit-student-college').value,
+    status: document.getElementById('edit-student-status').value,
+    team_name: document.getElementById('edit-student-team').value,
+    photo_url: document.getElementById('edit-student-photo').value,
+    skills: document.getElementById('edit-student-skills').value,
+    github_url: document.getElementById('edit-student-github').value,
+    linkedin_url: document.getElementById('edit-student-linkedin').value,
+    bio: document.getElementById('edit-student-bio').value
+  };
+
+  try {
+    const res = await authFetch(`/api/students/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.error || 'Failed to update student profile');
+    }
+
+    showToast('Student profile updated successfully.', 'success');
+    closeModal(DOM.editStudentModal);
+
+    // Refresh students list
+    const studentsRes = await authFetch('/api/students');
+    if (studentsRes.ok) {
+      state.students = await studentsRes.json();
+      renderStudents();
+      updateStatsSummary();
+    }
+  } catch (err) {
+    showToast(err.message || 'Failed to save student profile', 'error');
+  }
 }
 
 function populateBomProjectSelect() {

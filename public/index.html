@@ -1053,6 +1053,126 @@
     </div>
   </div>
 
+  <!-- EDIT STUDENT PROFILE MODAL (ADMIN ONLY) -->
+  <div class="modal-overlay" id="edit-student-modal">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3>✏️ Edit Student Profile</h3>
+        <button class="modal-close" id="close-edit-student-modal">&times;</button>
+      </div>
+      <form id="edit-student-form">
+        <input type="hidden" id="edit-student-id">
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="edit-student-name">Student Full Name *</label>
+              <input type="text" id="edit-student-name" required placeholder="e.g. Priya Sundaram">
+            </div>
+            <div class="form-group col-6">
+              <label for="edit-student-roll">Register Number / Roll No *</label>
+              <input type="text" id="edit-student-roll" required placeholder="e.g. 811121104045">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="edit-student-email">Email Address</label>
+              <input type="email" id="edit-student-email" placeholder="e.g. priya@igridlab.com">
+            </div>
+            <div class="form-group col-6">
+              <label for="edit-student-phone">Phone Number</label>
+              <input type="text" id="edit-student-phone" placeholder="e.g. +91 98765 43210">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-4">
+              <label for="edit-student-dept">Department</label>
+              <input type="text" id="edit-student-dept" placeholder="e.g. ECE / Robotics">
+            </div>
+            <div class="form-group col-4">
+              <label for="edit-student-year">Academic Year</label>
+              <input type="text" id="edit-student-year" placeholder="e.g. 3rd Year">
+            </div>
+            <div class="form-group col-4">
+              <label for="edit-student-section">Section</label>
+              <input type="text" id="edit-student-section" placeholder="e.g. Section A">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="edit-student-college">College / Institution</label>
+              <input type="text" id="edit-student-college" placeholder="e.g. Indra Ganesan College of Engineering">
+            </div>
+            <div class="form-group col-6">
+              <label for="edit-student-status">Status</label>
+              <select id="edit-student-status" class="form-select" style="background:var(--bg-input); color:var(--text-main); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px; width:100%;">
+                <option value="Active">Active</option>
+                <option value="Graduated">Graduated</option>
+                <option value="On Leave">On Leave</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="edit-student-team">Team / Project Information</label>
+              <input type="text" id="edit-student-team" placeholder="e.g. Team VisionCore / Autonomous Harvester">
+            </div>
+            <div class="form-group col-6">
+              <label for="edit-student-photo">Profile Photo URL</label>
+              <input type="url" id="edit-student-photo" placeholder="https://images.unsplash.com/...">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-student-skills">Skills (Comma-separated)</label>
+            <input type="text" id="edit-student-skills" placeholder="e.g. ROS2, Embedded C, Python, PCB Design">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="edit-student-github">GitHub Profile URL</label>
+              <input type="url" id="edit-student-github" placeholder="https://github.com/username">
+            </div>
+            <div class="form-group col-6">
+              <label for="edit-student-linkedin">LinkedIn Profile URL</label>
+              <input type="url" id="edit-student-linkedin" placeholder="https://linkedin.com/in/username">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-student-bio">Bio / Summary</label>
+            <textarea id="edit-student-bio" rows="3" placeholder="Brief technical background, lab contributions, and interest areas..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancel-edit-student-btn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- VIEW STUDENT PROFILE DETAILS MODAL -->
+  <div class="modal-overlay" id="view-student-modal">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3>👤 Registered Student Profile</h3>
+        <button class="modal-close" id="close-view-student-modal">&times;</button>
+      </div>
+      <div class="modal-body" id="view-student-modal-body">
+        <!-- Rendered dynamically -->
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <button class="btn btn-primary" id="btn-admin-edit-student-profile" style="display:none; background:#2563eb; border:none;">✏️ Edit Profile</button>
+        <button class="btn btn-secondary" id="close-view-student-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 6. LAB ANALYTICS MODAL -->
   <div class="modal-overlay" id="analytics-modal">
     <div class="modal-card modal-lg">
