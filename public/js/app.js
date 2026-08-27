@@ -1819,156 +1819,122 @@ function formatDateShort(dateStr) {
 }
 
 function renderProjectGanttTimeline(project, tasks = []) {
-  const container = document.getElementById('detail-gantt-container');
-  const summaryEl = document.getElementById('detail-timeline-summary');
-  if (!container) return;
+  const tableEl = document.getElementById('ref-gantt-table');
+  const subtitleEl = document.getElementById('ref-gantt-subtitle');
+  if (!tableEl) return;
 
-  let minDate = new Date();
-  let maxDate = new Date();
-
+  let targetYear = 2026;
   if (project.start_date) {
     const d = new Date(project.start_date);
-    if (!isNaN(d.getTime())) minDate = new Date(d);
-  } else {
-    minDate.setMonth(minDate.getMonth() - 1);
+    if (!isNaN(d.getFullYear())) targetYear = d.getFullYear();
   }
 
-  if (project.due_date) {
-    const d = new Date(project.due_date);
-    if (!isNaN(d.getTime())) maxDate = new Date(d);
-  } else {
-    maxDate.setMonth(maxDate.getMonth() + 2);
-  }
-
-  tasks.forEach(t => {
-    if (t.start_date) {
-      const d = new Date(t.start_date);
-      if (!isNaN(d.getTime()) && d < minDate) minDate = new Date(d);
-    }
-    if (t.end_date) {
-      const d = new Date(t.end_date);
-      if (!isNaN(d.getTime()) && d > maxDate) maxDate = new Date(d);
-    }
-  });
-
-  const startYear = minDate.getFullYear();
-  const startMonth = minDate.getMonth();
-  const endYear = maxDate.getFullYear();
-  const endMonth = maxDate.getMonth();
-
-  const months = [];
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthFullNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+  const monthFullNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-  let curY = startYear;
-  let curM = startMonth;
-  while (curY < endYear || (curY === endYear && curM <= endMonth)) {
-    const daysInM = new Date(curY, curM + 1, 0).getDate();
-    months.push({ year: curY, month: curM, name: monthNames[curM], fullName: monthFullNames[curM], days: daysInM });
-    curM++;
-    if (curM > 11) {
-      curM = 0;
-      curY++;
-    }
+  const monthsData = monthNames.map((name, i) => {
+    const days = new Date(targetYear, i + 1, 0).getDate();
+    return { index: i, name, fullName: monthFullNames[i], days };
+  });
+
+  const totalDaysInYear = monthsData.reduce((acc, m) => acc + m.days, 0);
+
+  if (subtitleEl) {
+    const activeTasksCount = tasks.length;
+    subtitleEl.textContent = `${project.title} • ${targetYear} Calendar Schedule • ${activeTasksCount} Task${activeTasksCount === 1 ? '' : 's'}`;
   }
 
-  const gridStartDate = new Date(months[0].year, months[0].month, 1);
-  const lastM = months[months.length - 1];
-  const gridEndDate = new Date(lastM.year, lastM.month, lastM.days);
-
-  const overallDurationDays = Math.round((gridEndDate - gridStartDate) / (1000 * 60 * 60 * 24)) + 1;
-
-  if (summaryEl) {
-    summaryEl.innerHTML = `
-      <strong style="color:var(--text-main); font-weight:700;">${escapeHTML(project.title)}</strong> &bull; 
-      Start: <span style="color:#60a5fa;">${formatDateShort(gridStartDate.toISOString().split('T')[0])}</span> &bull; 
-      End: <span style="color:#60a5fa;">${formatDateShort(gridEndDate.toISOString().split('T')[0])}</span> &bull; 
-      Overall Duration: <span class="gantt-dur-pill" style="font-size:11px; background:rgba(76,201,240,0.2); color:#4cc9f0; padding:2px 8px; border-radius:12px; font-weight:700;">${overallDurationDays} days</span>
+  let monthsHdrHTML = '';
+  monthsData.forEach((m, idx) => {
+    const colorClass = idx % 2 === 0 ? 'hdr-blue' : 'hdr-orange';
+    const pct = ((m.days / totalDaysInYear) * 100).toFixed(4);
+    monthsHdrHTML += `
+      <div class="ref-gantt-month-hdr ${colorClass}" style="flex: 0 0 ${pct}%;">
+        ${m.name}
+      </div>
     `;
+  });
+
+  const headerRowHTML = `
+    <div class="ref-gantt-header-row">
+      <div class="ref-gantt-header-taskname">Task Name</div>
+      <div class="ref-gantt-months-container">
+        ${monthsHdrHTML}
+      </div>
+    </div>
+  `;
+
+  function getDayOfYear(dateObj) {
+    const start = new Date(targetYear, 0, 0);
+    const diff = dateObj - start;
+    const oneDay = 1000 * 60 * 60 * 24;
+    return Math.floor(diff / oneDay);
   }
 
-  const DAY_WIDTH = 34;
-  const todayStr = new Date().toISOString().split('T')[0];
+  const today = new Date();
+  const isCurrentYear = today.getFullYear() === targetYear;
+  const todayDayOfYear = isCurrentYear ? getDayOfYear(today) : -1;
+  const todayLeftPct = todayDayOfYear > 0 ? (((todayDayOfYear - 1) / totalDaysInYear) * 100).toFixed(4) : -1;
 
-  let monthsHeaderHTML = '';
-  months.forEach(m => {
-    const widthPx = m.days * DAY_WIDTH;
-    monthsHeaderHTML += `<div class="gantt-month-cell" style="width:${widthPx}px; min-width:${widthPx}px;">${m.fullName} ${m.year} (${m.days}d)</div>`;
-  });
-
-  let daysHeaderHTML = '';
-  const dayCols = [];
-
-  months.forEach(m => {
-    for (let day = 1; day <= m.days; day++) {
-      const dateObj = new Date(m.year, m.month, day);
-      const dayOfWeek = dateObj.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      const dateStr = `${m.year}-${String(m.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const isToday = dateStr === todayStr;
-      const isMonthEnd = day === m.days;
-
-      dayCols.push({ dateStr, isWeekend, isToday, isMonthEnd });
-
-      const cellClasses = ['gantt-day-cell'];
-      if (isWeekend) cellClasses.push('is-weekend');
-      if (isToday) cellClasses.push('is-today');
-      if (isMonthEnd) cellClasses.push('gantt-month-separator');
-
-      daysHeaderHTML += `<div class="${cellClasses.join(' ')}" title="${dateStr}">${day}</div>`;
-    }
-  });
-
-  let taskRowsHTML = '';
+  let rowsHTML = '';
 
   if (tasks.length === 0) {
-    taskRowsHTML = `
-      <div class="gantt-row gantt-task-row" style="padding:20px; text-align:center; color:var(--text-dim);">
-        <div class="gantt-fixed-col" style="justify-content:center;">No timeline tasks created yet</div>
-        <div class="gantt-timeline-track" style="padding:15px; color:var(--text-dim);">
-          Click "+ Add Task" button above to add tasks to ${escapeHTML(project.title)}'s timeline.
-        </div>
+    rowsHTML = `
+      <div class="ref-gantt-task-row" style="padding:20px; justify-content:center; color:#64748b; font-size:13px;">
+        No timeline tasks scheduled for ${escapeHTML(project.title)} yet. Click "+ Add Task" to schedule a task.
       </div>
     `;
   } else {
     tasks.forEach(task => {
-      const tStart = new Date(task.start_date);
-      const tEnd = new Date(task.end_date);
-      
-      const startDiffDays = Math.round((tStart - gridStartDate) / (1000 * 60 * 60 * 24));
-      const durationDays = Math.round((tEnd - tStart) / (1000 * 60 * 60 * 24)) + 1;
+      const sDate = new Date(task.start_date);
+      const eDate = new Date(task.end_date);
 
-      const leftPx = Math.max(0, startDiffDays * DAY_WIDTH);
-      const widthPx = Math.max(durationDays * DAY_WIDTH - 4, 20);
+      let startDay = 1;
+      let endDay = totalDaysInYear;
 
-      let trackColsHTML = '';
-      dayCols.forEach(col => {
-        const colClasses = ['gantt-track-day-col'];
-        if (col.isWeekend) colClasses.push('is-weekend');
-        if (col.isToday) colClasses.push('is-today');
-        if (col.isMonthEnd) colClasses.push('gantt-month-separator');
-        trackColsHTML += `<div class="${colClasses.join(' ')}"></div>`;
+      if (!isNaN(sDate.getTime())) {
+        startDay = getDayOfYear(sDate);
+      }
+      if (!isNaN(eDate.getTime())) {
+        endDay = getDayOfYear(eDate);
+      }
+
+      startDay = Math.max(1, Math.min(totalDaysInYear, startDay));
+      endDay = Math.max(1, Math.min(totalDaysInYear, endDay));
+      if (endDay < startDay) endDay = startDay;
+
+      const durDays = (endDay - startDay) + 1;
+      const leftPct = (((startDay - 1) / totalDaysInYear) * 100).toFixed(4);
+      const widthPct = Math.max(((durDays / totalDaysInYear) * 100), 1.5).toFixed(4);
+
+      let gridColsHTML = '';
+      monthsData.forEach(m => {
+        const pct = ((m.days / totalDaysInYear) * 100).toFixed(4);
+        gridColsHTML += `<div class="ref-gantt-month-grid-col" style="flex: 0 0 ${pct}%;"></div>`;
       });
 
-      const statusLabel = task.status === 'completed' ? 'Completed' : (task.status === 'pending' ? 'Pending' : 'In Progress');
+      const todayLineHTML = todayLeftPct > 0 ? `<div class="ref-gantt-today-line" style="left:${todayLeftPct}%;" title="Today (${today.toDateString()})"></div>` : '';
 
-      taskRowsHTML += `
-        <div class="gantt-row gantt-task-row">
-          <div class="gantt-fixed-col">
-            <div class="gantt-task-name" title="${escapeHTML(task.task_name)}">${escapeHTML(task.task_name)}</div>
-            <div class="gantt-task-sub">
-              <span>${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)}</span>
-              <span class="gantt-dur-pill" style="color:#60a5fa; font-weight:700;">${durationDays}d</span>
-            </div>
+      const statusClass = task.status === 'completed' ? 'bar-completed' : (task.status === 'pending' ? 'bar-pending' : '');
+      const statusText = task.status === 'completed' ? 'Completed' : (task.status === 'pending' ? 'Pending' : 'In Progress');
+
+      const dateLabelText = `${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)}`;
+
+      rowsHTML += `
+        <div class="ref-gantt-task-row">
+          <div class="ref-gantt-task-name-cell" title="${escapeHTML(task.task_name)}">
+            ${escapeHTML(task.task_name)}
           </div>
-          <div class="gantt-timeline-track">
-            ${trackColsHTML}
-            <div class="gantt-bar bar-${task.status || 'in_progress'}" 
-                 style="left:${leftPx}px; width:${widthPx}px;" 
+          <div class="ref-gantt-calendar-track">
+            ${gridColsHTML}
+            ${todayLineHTML}
+            <div class="ref-gantt-bar ${statusClass}" 
+                 style="left: ${leftPct}%; width: ${widthPct}%;" 
                  onclick="openTaskInfoModal(${task.id})"
-                 title="${escapeHTML(task.task_name)} | ${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)} (${durationDays} days) | Status: ${statusLabel}">
-              <span class="gantt-bar-title">${escapeHTML(task.task_name)}</span>
-              <span class="gantt-bar-dur">${durationDays}d</span>
+                 title="${escapeHTML(task.task_name)} | ${dateLabelText} (${durDays} days) | Status: ${statusText} | Assigned: ${escapeHTML(task.assigned_member || 'Unassigned')}">
+              <span class="ref-gantt-marker">✓</span>
+              <span class="ref-gantt-bar-dates">${dateLabelText} (${durDays}d)</span>
+              <span class="ref-gantt-marker">✓</span>
             </div>
           </div>
         </div>
@@ -1976,28 +1942,7 @@ function renderProjectGanttTimeline(project, tasks = []) {
     });
   }
 
-  container.innerHTML = `
-    <div class="gantt-toolbar">
-      <div class="gantt-legend">
-        <span class="legend-item"><span class="legend-dot status-completed"></span> Completed</span>
-        <span class="legend-item"><span class="legend-dot status-in_progress"></span> In Progress</span>
-        <span class="legend-item"><span class="legend-dot status-pending"></span> Pending</span>
-      </div>
-    </div>
-    <div class="gantt-scroll-wrap">
-      <div class="gantt-table">
-        <div class="gantt-row gantt-months-row">
-          <div class="gantt-fixed-col gantt-header-fixed">Task Name & Details</div>
-          <div style="display:flex;">${monthsHeaderHTML}</div>
-        </div>
-        <div class="gantt-row gantt-days-row">
-          <div class="gantt-fixed-col gantt-header-fixed" style="font-size:10px; color:var(--text-muted);">Schedule (Dates)</div>
-          <div style="display:flex;">${daysHeaderHTML}</div>
-        </div>
-        ${taskRowsHTML}
-      </div>
-    </div>
-  `;
+  tableEl.innerHTML = headerRowHTML + rowsHTML;
 }
 
 function openTaskModalForCreate() {
