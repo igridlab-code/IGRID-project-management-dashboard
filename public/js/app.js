@@ -388,7 +388,6 @@ async function loadAllData() {
     renderDomainsUI();
     await Promise.all([
       fetchProjects(),
-      fetchTasks(),
       fetchStudents(),
       fetchBoms(),
       fetchNotifications(),
@@ -858,7 +857,7 @@ function initEventListeners() {
   }
 
   // Project Modal Actions
-  DOM.openAddTaskModal.addEventListener('click', () => openTaskModal());
+  DOM.openAddTaskModal.addEventListener('click', () => openProjectModalForCreate());
   DOM.closeProjectModal.addEventListener('click', () => closeModal(DOM.projectModal));
   DOM.cancelProjectBtn.addEventListener('click', () => closeModal(DOM.projectModal));
   DOM.projectForm.addEventListener('submit', handleProjectFormSubmit);
@@ -899,10 +898,7 @@ function initEventListeners() {
   DOM.addCommentForm.addEventListener('submit', handleCommentSubmit);
 
   // Project Task Management Modal Actions
-  if (DOM.btnAddProjectTask) DOM.btnAddProjectTask.addEventListener('click', () => openTaskModal(state.activeProjectId));
-  const btnTimelineAddTask = document.getElementById('btn-timeline-add-task');
-  if (btnTimelineAddTask) btnTimelineAddTask.addEventListener('click', () => openTaskModal());
-
+  if (DOM.btnAddProjectTask) DOM.btnAddProjectTask.addEventListener('click', openTaskModalForCreate);
   if (DOM.closeTaskModal) DOM.closeTaskModal.addEventListener('click', () => closeModal(DOM.taskModal));
   if (DOM.btnCancelTask) DOM.btnCancelTask.addEventListener('click', () => closeModal(DOM.taskModal));
   if (DOM.taskForm) DOM.taskForm.addEventListener('submit', handleTaskFormSubmit);
@@ -2390,174 +2386,7 @@ function formatDateShort(dateStr) {
   return `${day} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-// 4. RENDER TIMELINE (MASTER GANTT CHART ACROSS ALL PROJECTS)
-function renderTimeline() {
-  if (!DOM.timelineChartRoot) return;
-
-  const currentYear = new Date().getFullYear();
-  const startOfYear = new Date(currentYear, 0, 1);
-  const endOfYear = new Date(currentYear, 11, 31);
-  const totalYearDays = (endOfYear - startOfYear) / (1000 * 60 * 60 * 24) + 1;
-
-  const todayObj = new Date();
-  let todayLeftPct = null;
-  if (todayObj.getFullYear() === currentYear) {
-    const todayDay = Math.round((todayObj - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
-    todayLeftPct = ((todayDay - 1) / totalYearDays) * 100;
-  }
-
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  let headerMonthsHTML = '';
-  monthNames.forEach((m, idx) => {
-    const colorClass = (idx % 2 === 0) ? 'th-blue' : 'th-orange';
-    headerMonthsHTML += `<th class="ref-gantt-th-month ${colorClass}">${m}</th>`;
-  });
-
-  let monthGridBgHTML = '';
-  monthNames.forEach(() => {
-    monthGridBgHTML += `<div class="ref-grid-month-col"></div>`;
-  });
-
-  // Prepare display items: use project tasks if available, otherwise project dates
-  let displayTasks = [];
-  if (state.allTasks && state.allTasks.length > 0) {
-    displayTasks = state.allTasks;
-  } else {
-    // Build default task rows from projects if no custom tasks added yet
-    displayTasks = state.projects.map(p => ({
-      id: null,
-      is_project_level: true,
-      project_id: p.id,
-      project_code: p.project_code,
-      task_name: p.title,
-      start_date: p.start_date || `${currentYear}-01-15`,
-      end_date: p.due_date || `${currentYear}-06-30`,
-      status: p.status,
-      priority: p.priority,
-      progress: p.progress || 0,
-      assigned_member: p.team_lead || ''
-    }));
-  }
-
-  let rowsHTML = '';
-
-  if (displayTasks.length === 0) {
-    rowsHTML = `
-      <tr>
-        <td class="ref-gantt-td-taskname" style="font-weight:700; color:var(--text-dim);">No Tasks</td>
-        <td colspan="12" class="ref-gantt-td-grid">
-          <div class="ref-grid-bg">${monthGridBgHTML}</div>
-          <div style="padding:30px 15px; text-align:center; color:var(--text-muted); font-size:13px;">
-            <div style="font-size:28px; margin-bottom:6px;">📋</div>
-            <h4 style="margin:0 0 4px 0; color:var(--text-main); font-weight:700;">No Tasks</h4>
-            <div>No timeline tasks added for this project. Click <strong>"+ Add Task"</strong> to create one.</div>
-            <div style="margin-top:12px;">
-              <button class="btn btn-sm btn-primary" onclick="openTaskModal()">➕ + Add Task</button>
-            </div>
-          </div>
-        </td>
-      </tr>
-    `;
-  } else {
-    displayTasks.forEach(task => {
-      let tStart = task.start_date ? new Date(task.start_date) : new Date(currentYear, 0, 15);
-      let tEnd = task.end_date ? new Date(task.end_date) : new Date(currentYear, 5, 30);
-
-      if (isNaN(tStart.getTime())) tStart = new Date(currentYear, 0, 15);
-      if (isNaN(tEnd.getTime())) tEnd = new Date(currentYear, 5, 30);
-
-      const clampedStart = new Date(Math.max(startOfYear, Math.min(endOfYear, tStart)));
-      const clampedEnd = new Date(Math.max(startOfYear, Math.min(endOfYear, tEnd)));
-
-      const startDayOfYear = Math.round((clampedStart - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
-      const endDayOfYear = Math.round((clampedEnd - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
-
-      const leftPct = Math.max(0, Math.min(99, ((startDayOfYear - 1) / totalYearDays) * 100));
-      const widthPct = Math.max(2, Math.min(100 - leftPct, ((endDayOfYear - startDayOfYear + 1) / totalYearDays) * 100));
-
-      const durationDays = Math.round((tEnd - tStart) / (1000 * 60 * 60 * 24)) + 1;
-      const statusClass = task.status === 'completed' ? 'bar-completed' : (task.status === 'testing' || task.status === 'on_hold' ? 'bar-pending' : 'bar-in_progress');
-
-      const dateLabel = `${formatDateShort(task.start_date || '')} → ${formatDateShort(task.end_date || '')}`;
-      const priorityClass = task.priority === 'High' ? 'badge-high' : (task.priority === 'Normal' ? 'badge-normal' : 'badge-low');
-
-      const actionButtonsHTML = task.is_project_level ? `
-        <button class="btn btn-xs btn-primary" onclick="event.stopPropagation(); openTaskModal(${task.project_id})" style="padding:2px 8px; font-size:11px;" title="Add Task">+ Add Task</button>
-      ` : `
-        <button class="btn btn-xs btn-secondary" onclick="event.stopPropagation(); openTaskModal(${task.project_id}, ${task.id})" style="padding:2px 6px; font-size:11px; margin-right:4px;" title="Edit Task">✏️ Edit</button>
-        <button class="btn btn-xs btn-danger" onclick="event.stopPropagation(); deleteTask(${task.id}, ${task.project_id})" style="padding:2px 6px; font-size:11px;" title="Delete Task">🗑️</button>
-      `;
-
-      rowsHTML += `
-        <tr>
-          <td class="ref-gantt-td-taskname">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-              <div style="min-width:0; flex:1;">
-                <div style="font-weight:700; color:var(--text-main); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHTML(task.task_name)}">
-                  <span style="color:var(--primary); font-size:10px; font-weight:800; margin-right:4px;">[${escapeHTML(task.project_code || 'LAB')}]</span>
-                  ${escapeHTML(task.task_name)}
-                </div>
-                <div style="display:flex; gap:4px; align-items:center; margin-top:2px; font-size:10px; color:var(--text-dim);">
-                  <span class="badge ${priorityClass}" style="padding:1px 5px; font-size:9px;">${task.priority || 'Medium'}</span>
-                  <span style="color:#34d399; font-weight:700;">${task.progress || 0}%</span>
-                </div>
-              </div>
-              <div style="flex-shrink:0;">
-                ${actionButtonsHTML}
-              </div>
-            </div>
-          </td>
-          <td colspan="12" class="ref-gantt-td-grid">
-            <div class="ref-grid-bg">${monthGridBgHTML}</div>
-            ${todayLeftPct !== null ? `<div class="ref-today-line" style="left:${todayLeftPct}%;" title="Today"></div>` : ''}
-            <div class="ref-task-bar ${statusClass}" 
-                 style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%;"
-                 onclick="${task.is_project_level ? `openProjectDetail(${task.project_id})` : `openTaskInfoModal(${task.id})`}"
-                 title="${escapeHTML(task.task_name)} | ${dateLabel} (${durationDays} days)">
-              <div style="position:absolute; left:0; top:0; bottom:0; width:${task.progress || 0}%; background:rgba(255,255,255,0.25); border-radius:inherit;"></div>
-              <span class="ref-bar-marker">✓</span>
-              <span class="ref-bar-label">${escapeHTML(task.task_name)} (${task.progress || 0}%)</span>
-              <span class="ref-bar-marker">✓</span>
-            </div>
-          </td>
-        </tr>
-      `;
-    });
-  }
-
-  DOM.timelineChartRoot.innerHTML = `
-    <div class="ref-gantt-panel">
-      <div class="ref-gantt-header" style="display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <h3 class="ref-gantt-title">Project Management Timeline</h3>
-          <p class="ref-gantt-subtitle">IGRID Innovation Lab Master Project Schedule & Milestone Gantt Chart (${currentYear})</p>
-        </div>
-        <button class="btn btn-primary" onclick="openTaskModal()" style="padding:6px 14px; font-size:12px;">
-          ➕ + Add Task
-        </button>
-      </div>
-
-      <div class="ref-gantt-scroll-wrapper">
-        <table class="ref-gantt-table">
-          <thead>
-            <tr>
-              <th class="ref-gantt-th-taskname">Task Name & Actions</th>
-              ${headerMonthsHTML}
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHTML}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-// ----------------------------------------------------
-// PROJECT-SPECIFIC INDIVIDUAL GANTT TIMELINE
-// ----------------------------------------------------
-function renderProjectGanttTimeline(project, tasks) {
+function renderProjectGanttTimeline(project, tasks = []) {
   const container = document.getElementById('detail-gantt-container');
   const summaryEl = document.getElementById('detail-timeline-summary');
   if (!container) return;
@@ -2597,18 +2426,14 @@ function renderProjectGanttTimeline(project, tasks) {
 
   let taskRowsHTML = '';
 
-  if (!tasks || tasks.length === 0) {
+  if (tasks.length === 0) {
     taskRowsHTML = `
       <tr>
-        <td class="ref-gantt-td-taskname" style="font-weight:700; color:var(--text-dim);">No Tasks</td>
+        <td class="ref-gantt-td-taskname">No Tasks</td>
         <td colspan="12" class="ref-gantt-td-grid">
           <div class="ref-grid-bg">${monthGridBgHTML}</div>
-          <div style="padding:24px 15px; text-align:center; color:var(--text-muted); font-size:13px;">
-            <div style="font-size:24px; margin-bottom:4px;">📋 No Tasks</div>
-            No timeline tasks added for <strong>${escapeHTML(project.title)}</strong>. Click <strong>"+ Add Task"</strong> to create one.
-            <div style="margin-top:10px;">
-              <button class="btn btn-sm btn-primary" onclick="openTaskModal(${project.id})">➕ + Add Task</button>
-            </div>
+          <div style="padding:15px; text-align:center; color:#64748b; font-size:13px;">
+            No timeline tasks added for ${escapeHTML(project.title)}. Click "+ Add Task" to create a task.
           </div>
         </td>
       </tr>
@@ -2634,27 +2459,10 @@ function renderProjectGanttTimeline(project, tasks) {
       const statusClass = `bar-${task.status || 'in_progress'}`;
 
       const dateLabel = `${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)}`;
-      const priorityClass = task.priority === 'High' ? 'badge-high' : (task.priority === 'Normal' ? 'badge-normal' : 'badge-low');
 
       taskRowsHTML += `
         <tr>
-          <td class="ref-gantt-td-taskname">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-              <div style="min-width:0; flex:1;">
-                <div style="font-weight:700; color:var(--text-main); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHTML(task.task_name)}">
-                  ${escapeHTML(task.task_name)}
-                </div>
-                <div style="display:flex; gap:4px; align-items:center; margin-top:2px; font-size:10px; color:var(--text-dim);">
-                  <span class="badge ${priorityClass}" style="padding:1px 5px; font-size:9px;">${task.priority || 'Medium'}</span>
-                  <span style="color:#34d399; font-weight:700;">${task.progress || 0}%</span>
-                </div>
-              </div>
-              <div style="flex-shrink:0;">
-                <button class="btn btn-xs btn-secondary" onclick="event.stopPropagation(); openTaskModal(${project.id}, ${task.id})" style="padding:2px 6px; font-size:11px; margin-right:4px;" title="Edit Task">✏️ Edit</button>
-                <button class="btn btn-xs btn-danger" onclick="event.stopPropagation(); deleteTask(${task.id}, ${project.id})" style="padding:2px 6px; font-size:11px;" title="Delete Task">🗑️</button>
-              </div>
-            </div>
-          </td>
+          <td class="ref-gantt-td-taskname" onclick="openTaskInfoModal(${task.id})" style="cursor:pointer;" title="${escapeHTML(task.task_name)}">${escapeHTML(task.task_name)}</td>
           <td colspan="12" class="ref-gantt-td-grid">
             <div class="ref-grid-bg">${monthGridBgHTML}</div>
             ${todayLeftPct !== null ? `<div class="ref-today-line" style="left:${todayLeftPct}%;" title="Today"></div>` : ''}
@@ -2662,7 +2470,6 @@ function renderProjectGanttTimeline(project, tasks) {
                  style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%;"
                  onclick="openTaskInfoModal(${task.id})"
                  title="${escapeHTML(task.task_name)} | ${dateLabel} (${durationDays} days)">
-              <div style="position:absolute; left:0; top:0; bottom:0; width:${task.progress || 0}%; background:rgba(255,255,255,0.25); border-radius:inherit;"></div>
               <span class="ref-bar-marker">✓</span>
               <span class="ref-bar-label">${escapeHTML(task.task_name)} (${dateLabel})</span>
               <span class="ref-bar-marker">✓</span>
@@ -2675,19 +2482,19 @@ function renderProjectGanttTimeline(project, tasks) {
 
   container.innerHTML = `
     <div class="ref-gantt-panel">
-      <div class="ref-gantt-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="ref-gantt-header">
         <div>
           <h3 class="ref-gantt-title">Project Management Timeline</h3>
           <p class="ref-gantt-subtitle">${escapeHTML(project.title)} • ${currentYear} Milestone Schedule</p>
         </div>
-        <button class="ref-gantt-add-btn" onclick="openTaskModal(${project.id})">➕ + Add Task</button>
+        <button class="ref-gantt-add-btn" onclick="openTaskModalForCreate()">➕ + Add Task</button>
       </div>
 
       <div class="ref-gantt-scroll-wrapper">
         <table class="ref-gantt-table">
           <thead>
             <tr>
-              <th class="ref-gantt-th-taskname">Task Name & Actions</th>
+              <th class="ref-gantt-th-taskname">Task Name</th>
               ${headerMonthsHTML}
             </tr>
           </thead>
@@ -2700,77 +2507,35 @@ function renderProjectGanttTimeline(project, tasks) {
   `;
 }
 
-// ----------------------------------------------------
-// TASK MODAL & FORM HANDLERS
-// ----------------------------------------------------
-async function fetchTasks() {
-  try {
-    const res = await authFetch('/api/tasks');
-    if (res.ok) {
-      state.allTasks = await res.json();
-    }
-  } catch(e) {}
-}
-
-function openTaskModal(projectId = null, taskId = null) {
-  const targetProjectId = projectId || state.activeProjectId || (state.projects[0] ? state.projects[0].id : null);
-  
-  const selectGroup = document.getElementById('task-project-select-group');
-  const projectSelect = document.getElementById('task-project-id-select');
-  if (projectSelect) {
-    projectSelect.innerHTML = state.projects.map(p => `
-      <option value="${p.id}" ${p.id === targetProjectId ? 'selected' : ''}>${p.project_code} - ${escapeHTML(p.title)}</option>
-    `).join('');
+function openTaskModalForCreate() {
+  if (!state.activeProjectId) {
+    showToast('Please open a project first', 'error');
+    return;
   }
-
-  if (selectGroup) {
-    selectGroup.style.display = 'block';
-  }
-
   const modalTitle = document.getElementById('modal-task-title');
+  if (modalTitle) modalTitle.textContent = '➕ Add Project Task';
+
   const form = document.getElementById('task-form');
   if (form) form.reset();
 
-  if (taskId) {
-    // EDIT MODE
-    if (modalTitle) modalTitle.textContent = '✏️ Edit Project Task';
-    
-    const task = (state.activeProjectTasks || []).find(t => t.id === taskId) || (state.allTasks || []).find(t => t.id === taskId);
-    if (task) {
-      document.getElementById('task-id-input').value = task.id;
-      document.getElementById('task-name-input').value = task.task_name || '';
-      document.getElementById('task-start-input').value = task.start_date || '';
-      document.getElementById('task-end-input').value = task.end_date || '';
-      document.getElementById('task-status-input').value = task.status || 'in_progress';
-      document.getElementById('task-priority-input').value = task.priority || 'Medium';
-      document.getElementById('task-assigned-input').value = task.assigned_member || '';
-      document.getElementById('task-progress-input').value = task.progress || 0;
-      document.getElementById('task-desc-input').value = task.description || '';
-      if (projectSelect && task.project_id) projectSelect.value = task.project_id;
-    }
+  document.getElementById('task-id-input').value = '';
+
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  
+  const end = new Date();
+  end.setDate(end.getDate() + 5);
+  const endStr = end.toISOString().split('T')[0];
+
+  document.getElementById('task-start-input').value = todayStr;
+  document.getElementById('task-end-input').value = endStr;
+  document.getElementById('task-status-input').value = 'in_progress';
+
+  const activeProj = state.projects.find(p => p.id === state.activeProjectId);
+  if (activeProj && activeProj.team_lead) {
+    document.getElementById('task-assigned-input').value = activeProj.team_lead;
   } else {
-    // CREATE MODE
-    if (modalTitle) modalTitle.textContent = '➕ Add Project Task';
-    document.getElementById('task-id-input').value = '';
-    
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    const endDateObj = new Date();
-    endDateObj.setDate(endDateObj.getDate() + 14);
-    const endStr = endDateObj.toISOString().split('T')[0];
-
-    document.getElementById('task-start-input').value = todayStr;
-    document.getElementById('task-end-input').value = endStr;
-    document.getElementById('task-status-input').value = 'in_progress';
-    document.getElementById('task-priority-input').value = 'Medium';
-    document.getElementById('task-progress-input').value = 0;
-
-    const activeProj = state.projects.find(p => p.id === targetProjectId);
-    if (activeProj && activeProj.team_lead) {
-      document.getElementById('task-assigned-input').value = activeProj.team_lead;
-    } else {
-      document.getElementById('task-assigned-input').value = '';
-    }
+    document.getElementById('task-assigned-input').value = '';
   }
 
   updateTaskDurationPreview();
@@ -2783,22 +2548,17 @@ function updateTaskDurationPreview() {
   const preview = document.getElementById('task-duration-preview');
   if (!preview) return;
 
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
   if (startVal && endVal) {
     const s = new Date(startVal);
     const e = new Date(endVal);
     if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
       const dur = Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
-      const startMonth = monthNames[s.getMonth()];
-      const endMonth = monthNames[e.getMonth()];
-
       if (dur < 1) {
         preview.style.color = '#ef4444';
-        preview.textContent = '⚠️ End Date cannot be earlier than Start Date';
+        preview.textContent = '⚠️ End Date must be on or after Start Date';
       } else {
         preview.style.color = 'var(--primary)';
-        preview.textContent = `Calculated Duration: ${dur} day${dur === 1 ? '' : 's'} (${startMonth} → ${endMonth})`;
+        preview.textContent = `Calculated Duration: ${dur} day${dur === 1 ? '' : 's'}`;
       }
       return;
     }
@@ -2809,34 +2569,24 @@ function updateTaskDurationPreview() {
 async function handleTaskFormSubmit(e) {
   e.preventDefault();
   const taskId = document.getElementById('task-id-input').value;
-  const projectSelect = document.getElementById('task-project-id-select');
-  const targetProjectId = Number(projectSelect ? projectSelect.value : state.activeProjectId);
-
   const task_name = document.getElementById('task-name-input').value.trim();
   const start_date = document.getElementById('task-start-input').value;
   const end_date = document.getElementById('task-end-input').value;
   const status = document.getElementById('task-status-input').value;
-  const priority = document.getElementById('task-priority-input').value;
-  const progress = Number(document.getElementById('task-progress-input').value) || 0;
   const assigned_member = document.getElementById('task-assigned-input').value.trim();
   const description = document.getElementById('task-desc-input').value.trim();
 
   if (!task_name || !start_date || !end_date) {
-    showToast('Task Name, Start Date, and End Date are required.', 'error');
+    showToast('Please fill in all required task fields.', 'error');
     return;
   }
 
   if (new Date(end_date) < new Date(start_date)) {
-    showToast('End Date cannot be earlier than Start Date.', 'error');
+    showToast('End Date must be on or after Start Date.', 'error');
     return;
   }
 
-  if (!targetProjectId) {
-    showToast('Please select a valid target project.', 'error');
-    return;
-  }
-
-  const payload = { task_name, start_date, end_date, status, priority, progress, assigned_member, description };
+  const payload = { task_name, start_date, end_date, status, assigned_member, description };
 
   try {
     let res;
@@ -2847,7 +2597,7 @@ async function handleTaskFormSubmit(e) {
         body: JSON.stringify(payload)
       });
     } else {
-      res = await authFetch(`/api/projects/${targetProjectId}/tasks`, {
+      res = await authFetch(`/api/projects/${state.activeProjectId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -2858,21 +2608,16 @@ async function handleTaskFormSubmit(e) {
       closeModal(DOM.taskModal);
       showToast(taskId ? 'Task updated successfully' : 'Task added successfully');
       
-      await fetchTasks();
-
-      if (state.activeProjectId) {
-        const tasksRes = await authFetch(`/api/projects/${state.activeProjectId}/tasks`);
-        if (tasksRes.ok) {
-          state.activeProjectTasks = await tasksRes.json();
-        }
-        const activeProj = state.projects.find(p => p.id === state.activeProjectId);
-        if (activeProj) {
-          renderProjectGanttTimeline(activeProj, state.activeProjectTasks);
-        }
+      const tasksRes = await authFetch(`/api/projects/${state.activeProjectId}/tasks`);
+      if (tasksRes.ok) {
+        state.activeProjectTasks = await tasksRes.json();
       }
-      renderTimeline();
+      const activeProj = state.projects.find(p => p.id === state.activeProjectId);
+      if (activeProj) {
+        renderProjectGanttTimeline(activeProj, state.activeProjectTasks);
+      }
     } else {
-      const json = await res.json().catch(() => ({}));
+      const json = await res.json();
       showToast(json.error || 'Failed to save task', 'error');
     }
   } catch (err) {
@@ -2881,37 +2626,8 @@ async function handleTaskFormSubmit(e) {
   }
 }
 
-async function deleteTask(taskId, projectId) {
-  if (!confirm('Are you sure you want to delete this task?')) return;
-
-  try {
-    const res = await authFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-    if (res.ok) {
-      showToast('Task deleted successfully');
-      await fetchTasks();
-
-      if (state.activeProjectId) {
-        const tasksRes = await authFetch(`/api/projects/${state.activeProjectId}/tasks`);
-        if (tasksRes.ok) {
-          state.activeProjectTasks = await tasksRes.json();
-        }
-        const activeProj = state.projects.find(p => p.id === state.activeProjectId);
-        if (activeProj) {
-          renderProjectGanttTimeline(activeProj, state.activeProjectTasks);
-        }
-      }
-      renderTimeline();
-    } else {
-      showToast('Failed to delete task', 'error');
-    }
-  } catch (err) {
-    console.error('Error deleting task:', err);
-    showToast('Network error while deleting task', 'error');
-  }
-}
-
 function openTaskInfoModal(taskId) {
-  const task = (state.activeProjectTasks || []).find(t => t.id === taskId) || (state.allTasks || []).find(t => t.id === taskId);
+  const task = state.activeProjectTasks.find(t => t.id === taskId);
   if (!task) return;
 
   const titleEl = document.getElementById('task-info-title');
@@ -2925,9 +2641,9 @@ function openTaskInfoModal(taskId) {
 
   if (titleEl) titleEl.textContent = task.task_name;
   if (badgeEl) {
-    const statusLabel = task.status === 'completed' ? 'Completed' : (task.status === 'on_hold' ? 'On Hold' : (task.status === 'not_started' ? 'Not Started' : 'In Progress'));
+    const statusLabel = task.status === 'completed' ? 'Completed' : (task.status === 'pending' ? 'Pending' : 'In Progress');
     badgeEl.textContent = statusLabel;
-    badgeEl.className = `badge ${task.status === 'completed' ? 'badge-normal' : (task.status === 'on_hold' ? 'badge-high' : 'badge-blue')}`;
+    badgeEl.className = `badge ${task.status === 'completed' ? 'badge-normal' : (task.status === 'pending' ? 'badge-date' : 'badge-blue')}`;
   }
   if (pillEl) pillEl.textContent = `${dur} day${dur === 1 ? '' : 's'}`;
   if (datesEl) datesEl.textContent = `${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)}`;

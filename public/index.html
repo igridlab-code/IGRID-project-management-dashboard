@@ -437,20 +437,15 @@
       <!-- 3. TIMELINE (GANTT) VIEW -->
       <div class="view-panel" id="view-timeline">
         <div class="timeline-container">
-          <div class="timeline-controls-bar" style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="timeline-controls-bar">
             <div class="timeline-legend">
               <span class="legend-item"><span class="legend-dot high-dot"></span> High Priority</span>
               <span class="legend-item"><span class="legend-dot normal-dot"></span> Normal Priority</span>
               <span class="legend-item"><span class="legend-dot low-dot"></span> Low Priority</span>
               <span class="legend-item"><span class="legend-dot completed-dot"></span> Completed</span>
             </div>
-            <div style="display:flex; align-items:center; gap:12px;">
-              <div class="timeline-zoom-info">
-                <span>📅 Innovation Sprint 2026 (Jan - Dec)</span>
-              </div>
-              <button class="btn btn-primary" id="btn-timeline-add-task" style="padding:6px 14px; font-size:12px;">
-                ➕ + Add Task
-              </button>
+            <div class="timeline-zoom-info">
+              <span>📅 Innovation Sprint 2026 (Jan - May)</span>
             </div>
           </div>
           <div class="timeline-chart" id="timeline-chart-root"></div>
@@ -1492,7 +1487,7 @@
     </div>
   <!-- 8. ADD / EDIT PROJECT TASK MODAL -->
   <div class="modal-overlay" id="task-modal">
-    <div class="modal-card" style="max-width: 540px;">
+    <div class="modal-card" style="max-width: 500px;">
       <div class="modal-header">
         <h3 id="modal-task-title">➕ Add Project Task</h3>
         <button class="modal-close" id="close-task-modal">&times;</button>
@@ -1500,13 +1495,6 @@
       <form id="task-form">
         <input type="hidden" id="task-id-input">
         <div class="modal-body" style="padding: 20px;">
-          <div class="form-group" id="task-project-select-group" style="margin-bottom: 16px;">
-            <label for="task-project-id-select">Target Project *</label>
-            <select id="task-project-id-select" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-input); color:var(--text-main); font-size:13px;">
-              <!-- Dynamically populated -->
-            </select>
-          </div>
-
           <div class="form-group" style="margin-bottom: 16px;">
             <label for="task-name-input">Task Name *</label>
             <input type="text" id="task-name-input" placeholder="e.g. Hardware Setup & Motor Calibration" required style="width:100%;">
@@ -1525,7 +1513,7 @@
 
           <div class="form-group" style="margin-bottom: 16px;">
             <div style="font-size: 12px; font-weight: 600; color: var(--primary);" id="task-duration-preview">
-              Calculated Duration: 1 day (Jan → Jan)
+              Calculated Duration: 1 day
             </div>
           </div>
 
@@ -1533,36 +1521,20 @@
             <div class="form-group col-6">
               <label for="task-status-input">Status *</label>
               <select id="task-status-input" style="width:100%;">
-                <option value="not_started">Not Started</option>
                 <option value="in_progress" selected>In Progress</option>
                 <option value="completed">Completed</option>
-                <option value="on_hold">On Hold</option>
+                <option value="pending">Pending</option>
               </select>
             </div>
             <div class="form-group col-6">
-              <label for="task-priority-input">Priority *</label>
-              <select id="task-priority-input" style="width:100%;">
-                <option value="Low">Low</option>
-                <option value="Medium" selected>Medium</option>
-                <option value="High">High</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-row" style="margin-bottom: 16px;">
-            <div class="form-group col-6">
-              <label for="task-assigned-input">Assigned To</label>
+              <label for="task-assigned-input">Assigned Team Member</label>
               <input type="text" id="task-assigned-input" placeholder="e.g. Aarav Sharma" style="width:100%;">
-            </div>
-            <div class="form-group col-6">
-              <label for="task-progress-input">Progress Percentage (%)</label>
-              <input type="number" id="task-progress-input" min="0" max="100" value="0" placeholder="0 - 100" style="width:100%;">
             </div>
           </div>
 
           <div class="form-group">
             <label for="task-desc-input">Task Description</label>
-            <textarea id="task-desc-input" rows="3" placeholder="Brief description of task deliverables, hardware assembly, or software milestones..." style="width:100%; resize:vertical; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-input); color:var(--text-main); font-family:inherit;"></textarea>
+            <textarea id="task-desc-input" rows="3" placeholder="Brief description of task deliverables or milestones..." style="width:100%; resize:vertical; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-input); color:var(--text-main); font-family:inherit;"></textarea>
           </div>
         </div>
         <div class="modal-footer" style="position: static; padding: 16px 20px; display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border-color);">

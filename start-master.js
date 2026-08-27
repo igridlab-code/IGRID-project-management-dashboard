@@ -103,23 +103,33 @@ function startServer() {
 
 // 2. Start Ngrok via official SDK
 let ngrokListener = null;
+let ngrokSession = null;
+
 async function startNgrokSdk() {
+  if (ngrokListener) return;
   try {
     const ngrok = require('@ngrok/ngrok');
     log(`Connecting to Ngrok cloud for domain ${config.ngrok_domain}...`);
-    
-    ngrokListener = await ngrok.connect({
-      addr: config.port || 3000,
-      authtoken: config.ngrok_token,
-      domain: config.ngrok_domain
-    });
+
+    ngrokSession = await new ngrok.SessionBuilder()
+      .authtoken(config.ngrok_token)
+      .connect();
+
+    ngrokListener = await ngrokSession.httpEndpoint()
+      .domain(config.ngrok_domain)
+      .listen();
 
     const liveUrl = ngrokListener.url();
     log(`🎉 NGROK CONNECTED SUCCESSFULLY! Live URL: ${liveUrl}`);
+    
+    // Forward traffic to local server on port 3000
+    ngrokListener.forward(`http://localhost:${config.port || 3000}`);
+
     savePublicUrl(liveUrl, true);
   } catch (err) {
     log(`[Ngrok Error] ${err.message || err}`);
-    savePublicUrl(PERMANENT_PUBLIC_URL, true);
+    // If failed, retry in 5s
+    setTimeout(startNgrokSdk, 5000);
   }
 }
 
