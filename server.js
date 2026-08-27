@@ -832,6 +832,20 @@ app.put('/api/bom/:id/status', requireAuth, (req, res) => {
 // PROJECT-SPECIFIC TIMELINE TASKS ENDPOINTS
 // ----------------------------------------------------
 
+// GET ALL TASKS ACROSS PROJECTS (FOR MAIN TIMELINE DASHBOARD TAB)
+app.get('/api/tasks', requireAuth, (req, res) => {
+  const sql = `
+    SELECT t.*, p.title as project_title, p.domain
+    FROM project_tasks t
+    LEFT JOIN projects p ON t.project_id = p.id
+    ORDER BY t.start_date ASC, t.id ASC
+  `;
+  db.all(sql, [], (err, tasks) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(tasks || []);
+  });
+});
+
 // GET TASKS FOR SPECIFIC PROJECT
 app.get('/api/projects/:id/tasks', requireAuth, (req, res) => {
   const { id } = req.params;
@@ -841,10 +855,18 @@ app.get('/api/projects/:id/tasks', requireAuth, (req, res) => {
   });
 });
 
-// CREATE TASK FOR SPECIFIC PROJECT
+// CREATE TASK FOR SPECIFIC PROJECT (ADMIN ONLY)
 app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Access denied. Only Admins can add timeline tasks.' });
+  }
+
   const { id } = req.params;
-  const { task_name, start_date, end_date, status, description, assigned_member } = req.body;
+  const { task_name, start_date, end_date, status, priority, is_milestone, description, assigned_member } = req.body;
 
   if (!task_name || !start_date || !end_date) {
     return res.status(400).json({ error: 'Task Name, Start Date, and End Date are required.' });
@@ -854,13 +876,22 @@ app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
     if (err || !proj) return res.status(404).json({ error: 'Project not found' });
 
     const sql = `
-      INSERT INTO project_tasks (project_id, project_code, task_name, start_date, end_date, status, description, assigned_member)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO project_tasks (
+        project_id, project_code, task_name, start_date, end_date,
+        status, priority, is_milestone, description, assigned_member
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
+
+    const milestoneVal = is_milestone ? 1 : 0;
 
     db.run(
       sql,
-      [id, proj.project_code, task_name.trim(), start_date, end_date, status || 'in_progress', (description || '').trim(), (assigned_member || '').trim()],
+      [
+        id, proj.project_code, task_name.trim(), start_date, end_date,
+        status || 'in_progress', priority || 'Medium', milestoneVal,
+        (description || '').trim(), (assigned_member || '').trim()
+      ],
       function(err2) {
         if (err2) return res.status(500).json({ error: err2.message });
         res.status(201).json({ id: this.lastID, message: 'Task created successfully.' });
@@ -869,29 +900,47 @@ app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
   });
 });
 
-// UPDATE TASK
+// UPDATE TASK (ADMIN ONLY)
 app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
-  const { taskId } = req.params;
-  const { task_name, start_date, end_date, status, description, assigned_member } = req.body;
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
 
-  if (!task_name || !start_date || !end_date) {
-    return res.status(400).json({ error: 'Task Name, Start Date, and End Date are required.' });
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Access denied. Only Admins can edit timeline tasks.' });
   }
+
+  const { taskId } = req.params;
+  const { task_name, start_date, end_date, status, priority, is_milestone, description, assigned_member } = req.body;
+
+  if (!start_date || !end_date) {
+    return res.status(400).json({ error: 'Start Date and End Date are required.' });
+  }
+
+  const milestoneVal = is_milestone ? 1 : 0;
 
   const sql = `
     UPDATE project_tasks SET
-      task_name = ?,
+      task_name = COALESCE(?, task_name),
       start_date = ?,
       end_date = ?,
-      status = ?,
-      description = ?,
-      assigned_member = ?
+      status = COALESCE(?, status),
+      priority = COALESCE(?, priority),
+      is_milestone = COALESCE(?, is_milestone),
+      description = COALESCE(?, description),
+      assigned_member = COALESCE(?, assigned_member)
     WHERE id = ?
   `;
 
   db.run(
     sql,
-    [task_name.trim(), start_date, end_date, status || 'in_progress', (description || '').trim(), (assigned_member || '').trim(), taskId],
+    [
+      task_name ? task_name.trim() : null, start_date, end_date,
+      status || null, priority || null, milestoneVal,
+      description !== undefined ? description.trim() : null,
+      assigned_member !== undefined ? assigned_member.trim() : null,
+      taskId
+    ],
     function(err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ message: 'Task updated successfully.' });
@@ -899,8 +948,16 @@ app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
   );
 });
 
-// DELETE TASK
+// DELETE TASK (ADMIN ONLY)
 app.delete('/api/tasks/:taskId', requireAuth, (req, res) => {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Access denied. Only Admins can delete timeline tasks.' });
+  }
+
   const { taskId } = req.params;
   db.run('DELETE FROM project_tasks WHERE id = ?', [taskId], function(err) {
     if (err) return res.status(500).json({ error: err.message });

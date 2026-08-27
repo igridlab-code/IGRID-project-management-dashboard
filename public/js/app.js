@@ -388,6 +388,7 @@ async function loadAllData() {
       fetchNotifications(),
       fetchTunnelInfo()
     ]);
+    await loadTimelineTasks();
     renderAllViews();
     updateStatsSummary();
   } catch (err) {
@@ -963,6 +964,22 @@ function initEventListeners() {
   const calForm = document.getElementById('calendar-activity-form');
   if (calForm) calForm.addEventListener('submit', handleCalendarActivityFormSubmit);
 
+  // Gantt Task Modal Listeners
+  const closeTaskEditor = document.getElementById('close-task-editor-modal');
+  if (closeTaskEditor) closeTaskEditor.addEventListener('click', () => closeModal(document.getElementById('task-editor-modal')));
+
+  const cancelTaskEditor = document.getElementById('cancel-task-editor-btn');
+  if (cancelTaskEditor) cancelTaskEditor.addEventListener('click', () => closeModal(document.getElementById('task-editor-modal')));
+
+  const taskForm = document.getElementById('task-editor-form');
+  if (taskForm) taskForm.addEventListener('submit', handleTaskEditorFormSubmit);
+
+  const closeTaskDetail = document.getElementById('close-task-details-modal');
+  if (closeTaskDetail) closeTaskDetail.addEventListener('click', () => closeModal(document.getElementById('task-details-modal')));
+
+  const btnCloseTaskDetail = document.getElementById('btn-close-task-detail');
+  if (btnCloseTaskDetail) btnCloseTaskDetail.addEventListener('click', () => closeModal(document.getElementById('task-details-modal')));
+
   // Analytics Modal Actions
   DOM.labAnalyticsBtn.addEventListener('click', () => openAnalyticsModal());
   DOM.closeAnalyticsModal.addEventListener('click', () => closeModal(DOM.analyticsModal));
@@ -1365,15 +1382,79 @@ function createCardHTML(p) {
   `;
 }
 
-// 4. RENDER TIMELINE
-function renderTimeline() {
+let stateTimelineTasks = [];
+
+async function loadTimelineTasks() {
   if (!DOM.timelineChartRoot) return;
-  if (state.projects.length === 0) {
-    DOM.timelineChartRoot.innerHTML = '<div style="padding:20px; color:var(--text-dim);">No projects to display on timeline.</div>';
+
+  DOM.timelineChartRoot.innerHTML = `
+    <div id="timeline-loading" style="padding: 40px; text-align: center; color: var(--text-dim);">
+      <div style="display:inline-block; width:28px; height:28px; border:3px solid rgba(255,255,255,0.1); border-radius:50%; border-top-color:#3b82f6; animation:spin 0.8s linear infinite; margin-bottom:12px;"></div>
+      <div>Loading Gantt timeline schedule from database...</div>
+    </div>
+  `;
+
+  try {
+    const res = await authFetch('/api/tasks');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    stateTimelineTasks = await res.json();
+    renderTimeline(stateTimelineTasks);
+  } catch (err) {
+    console.error('Error fetching timeline tasks:', err);
+    DOM.timelineChartRoot.innerHTML = `
+      <div id="timeline-error" style="padding: 30px; text-align: center; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; margin-top: 16px;">
+        <p style="color: #ef4444; font-weight: 600; margin-bottom: 12px;">⚠️ Failed to load timeline tasks from database.</p>
+        <button class="btn btn-sm btn-secondary" onclick="loadTimelineTasks()">🔄 Retry Loading</button>
+      </div>
+    `;
+  }
+}
+
+// 4. RENDER TIMELINE
+function renderTimeline(tasks = stateTimelineTasks) {
+  if (!DOM.timelineChartRoot) return;
+
+  const isAdmin = isUserAdmin();
+
+  const btnAdd = document.getElementById('open-add-timeline-task-btn');
+  if (btnAdd) {
+    if (isAdmin) {
+      btnAdd.style.display = 'inline-block';
+      btnAdd.onclick = () => openTaskEditorModal();
+    } else {
+      btnAdd.style.display = 'none';
+    }
+  }
+
+  // Calculate Metrics (Requirement #11)
+  const totalCount = tasks.length;
+  const completedCount = tasks.filter(t => (t.status || '').toLowerCase() === 'completed').length;
+  const inProgressCount = tasks.filter(t => (t.status || '').toLowerCase() === 'in_progress').length;
+  const delayedCount = tasks.filter(t => (t.status || '').toLowerCase() === 'delayed').length;
+
+  const statTotal = document.getElementById('timeline-stat-total');
+  if (statTotal) statTotal.textContent = totalCount;
+  const statCompleted = document.getElementById('timeline-stat-completed');
+  if (statCompleted) statCompleted.textContent = completedCount;
+  const statProgress = document.getElementById('timeline-stat-progress');
+  if (statProgress) statProgress.textContent = inProgressCount;
+  const statDelayed = document.getElementById('timeline-stat-delayed');
+  if (statDelayed) statDelayed.textContent = delayedCount;
+
+  // Empty state check (Requirement #12)
+  if (tasks.length === 0) {
+    DOM.timelineChartRoot.innerHTML = `
+      <div id="timeline-empty" style="padding: 40px; text-align: center; background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: 12px; margin-top: 16px;">
+        <div style="font-size: 36px; margin-bottom: 8px;">📅</div>
+        <h4 style="margin: 0 0 6px 0; color: var(--text-main); font-size: 16px;">No Timeline Tasks Added</h4>
+        <p style="margin: 0; color: var(--text-dim); font-size: 13px;">There are no project milestone tasks in the database yet.</p>
+        ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openTaskEditorModal()" style="margin-top: 14px;">+ Add First Task</button>` : ''}
+      </div>
+    `;
     return;
   }
 
-  const currentYear = new Date().getFullYear();
+  const currentYear = 2026;
   const startOfYear = new Date(currentYear, 0, 1);
   const endOfYear = new Date(currentYear, 11, 31);
   const totalYearDays = (endOfYear - startOfYear) / (1000 * 60 * 60 * 24) + 1;
@@ -1398,15 +1479,15 @@ function renderTimeline() {
   });
 
   let rowsHTML = '';
-  state.projects.forEach(p => {
-    let pStart = p.start_date ? new Date(p.start_date) : new Date(currentYear, 0, 15);
-    let pEnd = p.due_date ? new Date(p.due_date) : new Date(currentYear, 5, 30);
+  tasks.forEach(t => {
+    let tStart = t.start_date ? new Date(t.start_date) : new Date(currentYear, 0, 15);
+    let tEnd = t.end_date ? new Date(t.end_date) : new Date(currentYear, 1, 15);
 
-    if (isNaN(pStart.getTime())) pStart = new Date(currentYear, 0, 15);
-    if (isNaN(pEnd.getTime())) pEnd = new Date(currentYear, 5, 30);
+    if (isNaN(tStart.getTime())) tStart = new Date(currentYear, 0, 15);
+    if (isNaN(tEnd.getTime())) tEnd = new Date(currentYear, 1, 15);
 
-    const clampedStart = new Date(Math.max(startOfYear, Math.min(endOfYear, pStart)));
-    const clampedEnd = new Date(Math.max(startOfYear, Math.min(endOfYear, pEnd)));
+    const clampedStart = new Date(Math.max(startOfYear, Math.min(endOfYear, tStart)));
+    const clampedEnd = new Date(Math.max(startOfYear, Math.min(endOfYear, tEnd)));
 
     const startDayOfYear = Math.round((clampedStart - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
     const endDayOfYear = Math.round((clampedEnd - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
@@ -1414,23 +1495,44 @@ function renderTimeline() {
     const leftPct = Math.max(0, Math.min(99, ((startDayOfYear - 1) / totalYearDays) * 100));
     const widthPct = Math.max(2, Math.min(100 - leftPct, ((endDayOfYear - startDayOfYear + 1) / totalYearDays) * 100));
 
-    const statusClass = p.status === 'completed' ? 'bar-completed' : (p.status === 'testing' ? 'bar-pending' : 'bar-in_progress');
+    let statusClass = 'bar-in_progress';
+    const statusLower = (t.status || '').toLowerCase();
+    if (statusLower === 'completed') statusClass = 'bar-completed';
+    else if (statusLower === 'delayed') statusClass = 'bar-delayed';
+    else if (statusLower === 'not_started') statusClass = 'bar-pending';
+
+    const milestoneBadge = t.is_milestone ? '🚩 ' : '';
+    const prio = t.priority || 'Medium';
 
     rowsHTML += `
       <tr>
-        <td class="ref-gantt-td-taskname" onclick="openProjectDetail(${p.id})" style="cursor:pointer;" title="${escapeHTML(p.title)}">
-          ${escapeHTML(p.project_code)} - ${escapeHTML(p.title)}
+        <td class="ref-gantt-td-taskname">
+          <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            <div style="overflow:hidden; text-overflow:ellipsis; cursor:pointer;" onclick="openTaskDetailsModal(${t.id})" title="${escapeHTML(t.task_name)}">
+              <div style="font-weight:700; color:#0f172a;">${milestoneBadge}${escapeHTML(t.task_name)}</div>
+              <div style="font-size:11px; color:#64748b;">${escapeHTML(t.project_code || 'PRJ')} • ${escapeHTML(t.assigned_member || 'Unassigned')}</div>
+            </div>
+            ${isAdmin ? `
+              <div style="display:flex; gap:4px; margin-left:6px; flex-shrink:0;">
+                <button class="btn btn-sm btn-secondary" onclick="openTaskEditorModal(${t.id})" style="padding:2px 6px; font-size:11px;" title="Edit Task">✏️</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteTimelineTask(${t.id})" style="padding:2px 6px; font-size:11px;" title="Delete Task">🗑️</button>
+              </div>
+            ` : ''}
+          </div>
         </td>
         <td colspan="12" class="ref-gantt-td-grid">
           <div class="ref-grid-bg">${monthGridBgHTML}</div>
           ${todayLeftPct !== null ? `<div class="ref-today-line" style="left:${todayLeftPct}%;" title="Today"></div>` : ''}
-          <div class="ref-task-bar ${statusClass}" 
+          <div class="ref-task-bar ${statusClass} task-bar-draggable" 
+               data-task-id="${t.id}"
                style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%;"
-               onclick="openProjectDetail(${p.id})"
-               title="${escapeHTML(p.title)} | ${formatDateShort(pStart.toISOString().split('T')[0])} → ${formatDateShort(pEnd.toISOString().split('T')[0])}">
+               onclick="openTaskDetailsModal(${t.id})"
+               title="${escapeHTML(t.task_name)} (${prio} Priority) | ${t.start_date} → ${t.end_date}">
+            ${isAdmin ? `<div class="drag-handle-left" data-task-id="${t.id}"></div>` : ''}
             <span class="ref-bar-marker">✓</span>
-            <span class="ref-bar-label">${escapeHTML(p.title)} (${p.progress || 0}%)</span>
+            <span class="ref-bar-label">${milestoneBadge}${escapeHTML(t.task_name)}</span>
             <span class="ref-bar-marker">✓</span>
+            ${isAdmin ? `<div class="drag-handle-right" data-task-id="${t.id}"></div>` : ''}
           </div>
         </td>
       </tr>
@@ -1439,13 +1541,6 @@ function renderTimeline() {
 
   DOM.timelineChartRoot.innerHTML = `
     <div class="ref-gantt-panel">
-      <div class="ref-gantt-header">
-        <div>
-          <h3 class="ref-gantt-title">Project Management Timeline</h3>
-          <p class="ref-gantt-subtitle">IGRID Innovation Lab Master Project Schedule & Milestone Gantt Chart</p>
-        </div>
-      </div>
-
       <div class="ref-gantt-scroll-wrapper">
         <table class="ref-gantt-table">
           <thead>
@@ -1461,6 +1556,280 @@ function renderTimeline() {
       </div>
     </div>
   `;
+
+  if (isAdmin) {
+    attachGanttDragListeners();
+  }
+}
+
+function openTaskEditorModal(taskId = null, projectId = null) {
+  if (!isUserAdmin()) {
+    showToast('Only Admins can manage timeline tasks', 'error');
+    return;
+  }
+
+  const projSelect = document.getElementById('task-editor-project-select');
+  if (projSelect) {
+    projSelect.innerHTML = state.projects.map(p => `
+      <option value="${p.id}">${p.project_code} - ${escapeHTML(p.title)}</option>
+    `).join('');
+  }
+
+  document.getElementById('task-editor-id').value = taskId || '';
+  document.getElementById('task-editor-project-id').value = projectId || '';
+
+  if (taskId) {
+    document.getElementById('task-editor-title').textContent = '✏️ Edit Gantt Timeline Task';
+    const task = stateTimelineTasks.find(t => Number(t.id) === Number(taskId));
+    if (task) {
+      if (projSelect) projSelect.value = task.project_id || (state.projects[0] ? state.projects[0].id : '');
+      document.getElementById('task-editor-name').value = task.task_name || '';
+      document.getElementById('task-editor-start-date').value = task.start_date || '';
+      document.getElementById('task-editor-end-date').value = task.end_date || '';
+      document.getElementById('task-editor-status').value = task.status || 'in_progress';
+      document.getElementById('task-editor-priority').value = task.priority || 'Medium';
+      document.getElementById('task-editor-member').value = task.assigned_member || '';
+      document.getElementById('task-editor-desc').value = task.description || '';
+      document.getElementById('task-editor-milestone').checked = Boolean(task.is_milestone);
+    }
+  } else {
+    document.getElementById('task-editor-title').textContent = '📅 Add Gantt Timeline Task';
+    if (projSelect && projectId) projSelect.value = projectId;
+    document.getElementById('task-editor-name').value = '';
+    const todayStr = '2026-01-15';
+    const monthLater = '2026-04-30';
+    document.getElementById('task-editor-start-date').value = todayStr;
+    document.getElementById('task-editor-end-date').value = monthLater;
+    document.getElementById('task-editor-status').value = 'in_progress';
+    document.getElementById('task-editor-priority').value = 'Medium';
+    document.getElementById('task-editor-member').value = '';
+    document.getElementById('task-editor-desc').value = '';
+    document.getElementById('task-editor-milestone').checked = false;
+  }
+
+  openModal(document.getElementById('task-editor-modal'));
+}
+
+async function handleTaskEditorFormSubmit(e) {
+  e.preventDefault();
+  if (!isUserAdmin()) {
+    showToast('Only Admins can manage timeline tasks', 'error');
+    return;
+  }
+
+  const taskId = document.getElementById('task-editor-id').value;
+  const projSelect = document.getElementById('task-editor-project-select');
+  const projectId = projSelect ? projSelect.value : document.getElementById('task-editor-project-id').value;
+
+  const task_name = document.getElementById('task-editor-name').value.trim();
+  const start_date = document.getElementById('task-editor-start-date').value;
+  const end_date = document.getElementById('task-editor-end-date').value;
+
+  if (!task_name || !start_date || !end_date) {
+    showToast('Task Name, Start Date, and End Date are required', 'error');
+    return;
+  }
+
+  const payload = {
+    task_name,
+    start_date,
+    end_date,
+    status: document.getElementById('task-editor-status').value,
+    priority: document.getElementById('task-editor-priority').value,
+    assigned_member: document.getElementById('task-editor-member').value.trim(),
+    description: document.getElementById('task-editor-desc').value.trim(),
+    is_milestone: document.getElementById('task-editor-milestone').checked ? 1 : 0
+  };
+
+  const url = taskId ? `/api/tasks/${taskId}` : `/api/projects/${projectId}/tasks`;
+  const method = taskId ? 'PUT' : 'POST';
+
+  try {
+    const res = await authFetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || `Server returned ${res.status}`);
+    }
+
+    showToast(taskId ? 'Task updated successfully' : 'Task created successfully', 'success');
+    closeModal(document.getElementById('task-editor-modal'));
+    loadTimelineTasks();
+  } catch (err) {
+    showToast(`Error saving task: ${err.message}`, 'error');
+  }
+}
+
+async function deleteTimelineTask(taskId) {
+  if (!isUserAdmin()) {
+    showToast('Only Admins can delete tasks', 'error');
+    return;
+  }
+
+  if (!confirm('Are you sure you want to delete this task?')) return;
+
+  try {
+    const res = await authFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    showToast('Task deleted successfully', 'success');
+    loadTimelineTasks();
+  } catch (err) {
+    showToast(`Error deleting task: ${err.message}`, 'error');
+  }
+}
+
+function openTaskDetailsModal(taskId) {
+  const task = stateTimelineTasks.find(t => Number(t.id) === Number(taskId));
+  if (!task) return;
+
+  document.getElementById('task-detail-name').textContent = task.task_name;
+
+  const milestoneBadge = document.getElementById('task-detail-milestone-badge');
+  if (milestoneBadge) milestoneBadge.style.display = task.is_milestone ? 'inline-block' : 'none';
+
+  const statusEl = document.getElementById('task-detail-status');
+  if (statusEl) {
+    statusEl.textContent = (task.status || 'in_progress').replace('_', ' ').toUpperCase();
+    statusEl.className = `badge ${task.status === 'completed' ? 'badge-success' : (task.status === 'delayed' ? 'badge-danger' : 'badge-primary')}`;
+  }
+
+  const prioEl = document.getElementById('task-detail-priority');
+  if (prioEl) {
+    prioEl.textContent = task.priority || 'Medium';
+    prioEl.className = `badge ${task.priority === 'High' ? 'badge-danger' : 'badge-normal'}`;
+  }
+
+  document.getElementById('task-detail-start').textContent = task.start_date || '-';
+  document.getElementById('task-detail-end').textContent = task.end_date || '-';
+
+  if (task.start_date && task.end_date) {
+    const d1 = new Date(task.start_date);
+    const d2 = new Date(task.end_date);
+    const diffDays = Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
+    document.getElementById('task-detail-duration').textContent = `${diffDays} Days (${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)})`;
+  } else {
+    document.getElementById('task-detail-duration').textContent = '-';
+  }
+
+  document.getElementById('task-detail-member').textContent = task.assigned_member || 'Unassigned';
+  document.getElementById('task-detail-desc').textContent = task.description || 'No description provided.';
+
+  const btnEditPopup = document.getElementById('btn-admin-edit-task-from-popup');
+  if (btnEditPopup) {
+    if (isUserAdmin()) {
+      btnEditPopup.style.display = 'inline-block';
+      btnEditPopup.onclick = () => {
+        closeModal(document.getElementById('task-details-modal'));
+        openTaskEditorModal(task.id);
+      };
+    } else {
+      btnEditPopup.style.display = 'none';
+    }
+  }
+
+  openModal(document.getElementById('task-details-modal'));
+}
+
+function attachGanttDragListeners() {
+  const bars = document.querySelectorAll('.task-bar-draggable');
+
+  bars.forEach(bar => {
+    const taskId = bar.getAttribute('data-task-id');
+    const leftHandle = bar.querySelector('.drag-handle-left');
+    const rightHandle = bar.querySelector('.drag-handle-right');
+
+    if (leftHandle) {
+      leftHandle.onmousedown = (e) => {
+        e.stopPropagation();
+        const startX = e.clientX;
+        const gridCell = bar.closest('.ref-gantt-td-grid');
+        const gridWidth = gridCell ? gridCell.clientWidth : 800;
+
+        const onMouseMove = (moveEvent) => {
+          const deltaX = moveEvent.clientX - startX;
+          const deltaDays = Math.round((deltaX / gridWidth) * 365);
+          const task = stateTimelineTasks.find(t => Number(t.id) === Number(taskId));
+          if (task && deltaDays !== 0) {
+            bar.style.opacity = '0.7';
+          }
+        };
+
+        const onMouseUp = async (upEvent) => {
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+          bar.style.opacity = '1';
+          const deltaX = upEvent.clientX - startX;
+          const deltaDays = Math.round((deltaX / gridWidth) * 365);
+          const task = stateTimelineTasks.find(t => Number(t.id) === Number(taskId));
+          if (task && deltaDays !== 0) {
+            const origStart = new Date(task.start_date);
+            const newStart = new Date(origStart.getTime() + deltaDays * 24 * 60 * 60 * 1000);
+            const newStartStr = newStart.toISOString().split('T')[0];
+            if (newStart <= new Date(task.end_date)) {
+              await authFetch(`/api/tasks/${taskId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ start_date: newStartStr, end_date: task.end_date })
+              });
+              showToast('Task start date updated', 'success');
+              loadTimelineTasks();
+            }
+          }
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      };
+    }
+
+    if (rightHandle) {
+      rightHandle.onmousedown = (e) => {
+        e.stopPropagation();
+        const startX = e.clientX;
+        const gridCell = bar.closest('.ref-gantt-td-grid');
+        const gridWidth = gridCell ? gridCell.clientWidth : 800;
+
+        const onMouseMove = (moveEvent) => {
+          const deltaX = moveEvent.clientX - startX;
+          const deltaDays = Math.round((deltaX / gridWidth) * 365);
+          const task = stateTimelineTasks.find(t => Number(t.id) === Number(taskId));
+          if (task && deltaDays !== 0) {
+            bar.style.opacity = '0.7';
+          }
+        };
+
+        const onMouseUp = async (upEvent) => {
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+          bar.style.opacity = '1';
+          const deltaX = upEvent.clientX - startX;
+          const deltaDays = Math.round((deltaX / gridWidth) * 365);
+          const task = stateTimelineTasks.find(t => Number(t.id) === Number(taskId));
+          if (task && deltaDays !== 0) {
+            const origEnd = new Date(task.end_date);
+            const newEnd = new Date(origEnd.getTime() + deltaDays * 24 * 60 * 60 * 1000);
+            const newEndStr = newEnd.toISOString().split('T')[0];
+            if (newEnd >= new Date(task.start_date)) {
+              await authFetch(`/api/tasks/${taskId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ start_date: task.start_date, end_date: newEndStr })
+              });
+              showToast('Task end date updated', 'success');
+              loadTimelineTasks();
+            }
+          }
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      };
+    }
+  });
 }
 
 // 5. RENDER LIST VIEW
