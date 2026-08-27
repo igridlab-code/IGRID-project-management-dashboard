@@ -114,6 +114,7 @@ const DOM = {
   openAddTaskModal: document.getElementById('open-add-task-modal'),
   closeProjectModal: document.getElementById('close-project-modal'),
   cancelProjectBtn: document.getElementById('cancel-project-btn'),
+  saveProjectBtn: document.getElementById('save-project-btn'),
   projectForm: document.getElementById('project-form'),
   modalProjectTitle: document.getElementById('modal-project-title'),
 
@@ -893,10 +894,20 @@ function initEventListeners() {
   }
 
   // Project Modal Actions
-  DOM.openAddTaskModal.addEventListener('click', () => openProjectModalForCreate());
-  DOM.closeProjectModal.addEventListener('click', () => closeModal(DOM.projectModal));
-  DOM.cancelProjectBtn.addEventListener('click', () => closeModal(DOM.projectModal));
-  DOM.projectForm.addEventListener('submit', handleProjectFormSubmit);
+  if (DOM.openAddTaskModal) DOM.openAddTaskModal.addEventListener('click', () => openProjectModalForCreate());
+  if (DOM.closeProjectModal) DOM.closeProjectModal.addEventListener('click', () => closeModal(DOM.projectModal));
+  if (DOM.cancelProjectBtn) DOM.cancelProjectBtn.addEventListener('click', () => closeModal(DOM.projectModal));
+  if (DOM.projectForm) DOM.projectForm.addEventListener('submit', handleProjectFormSubmit);
+  
+  const saveProjBtn = document.getElementById('save-project-btn');
+  if (saveProjBtn) {
+    saveProjBtn.addEventListener('click', (e) => {
+      // If clicked inside form, submit handler will fire; if not, invoke handler
+      if (e.target.type !== 'submit' && DOM.projectForm) {
+        handleProjectFormSubmit(e);
+      }
+    });
+  }
   initEditFormLinkProtection();
 
   // Column quick add buttons
@@ -3117,7 +3128,9 @@ function openProjectModalForEdit(project) {
 }
 
 async function handleProjectFormSubmit(e) {
-  e.preventDefault();
+  if (e && e.preventDefault) e.preventDefault();
+  
+  console.log('[PROJECT-SAVE] 1. Save button clicked / form submit triggered');
   const saveBtn = document.getElementById('save-project-btn');
   const originalBtnText = saveBtn ? saveBtn.innerHTML : '💾 Save Project Details';
   if (saveBtn) {
@@ -3126,51 +3139,79 @@ async function handleProjectFormSubmit(e) {
   }
 
   try {
-    const id = document.getElementById('form-project-id').value;
+    const id = document.getElementById('form-project-id') ? document.getElementById('form-project-id').value : '';
 
-    const start_date = document.getElementById('form-start-date') ? document.getElementById('form-start-date').value : '';
-    const due_date = document.getElementById('form-due-date') ? document.getElementById('form-due-date').value : '';
-
-    if (start_date && due_date && new Date(due_date) < new Date(start_date)) {
-      showToast('To Date cannot be earlier than From Date.', 'error');
+    const titleInput = document.getElementById('form-title');
+    const title = titleInput ? titleInput.value.trim() : '';
+    if (!title) {
+      console.warn('[PROJECT-SAVE] Validation failed: Missing Project Title');
+      showToast('Project Title is required.', 'error');
+      if (titleInput) titleInput.focus();
       return;
     }
 
-    let docUrl = normalizeUrl(document.getElementById('form-doc-url').value);
+    const domainSelect = document.getElementById('form-domain');
+    const domain = domainSelect ? domainSelect.value : 'AI';
+
+    const startDateInput = document.getElementById('form-start-date');
+    const dueDateInput = document.getElementById('form-due-date');
+    const start_date = startDateInput ? startDateInput.value : '';
+    const due_date = dueDateInput ? dueDateInput.value : '';
+
+    if (!start_date || !due_date) {
+      console.warn('[PROJECT-SAVE] Validation failed: Missing From Date or To Date');
+      showToast('Both From Date and To Date are required.', 'error');
+      if (!start_date && startDateInput) startDateInput.focus();
+      else if (!due_date && dueDateInput) dueDateInput.focus();
+      return;
+    }
+
+    if (new Date(due_date) < new Date(start_date)) {
+      console.warn('[PROJECT-SAVE] Validation failed: To Date earlier than From Date');
+      showToast('To Date cannot be earlier than From Date.', 'error');
+      if (dueDateInput) dueDateInput.focus();
+      return;
+    }
+
+    let docUrl = normalizeUrl(document.getElementById('form-doc-url') ? document.getElementById('form-doc-url').value : '');
     if (docUrl) {
       const isDriveLink = docUrl.includes('drive.google.com') ||
                           docUrl.includes('docs.google.com') ||
                           docUrl.includes('google.com/drive');
       if (!isDriveLink) {
+        console.warn('[PROJECT-SAVE] Validation failed: Invalid Google Drive/Docs URL');
         showToast('Please paste a valid Google Drive or Docs link (e.g. drive.google.com)', 'error');
+        const docInput = document.getElementById('form-doc-url');
+        if (docInput) docInput.focus();
         return;
       }
     }
 
     const payload = {
-      project_code: document.getElementById('form-code').value.trim(),
-      title: document.getElementById('form-title').value.trim(),
-      description: document.getElementById('form-description').value.trim(),
-      domain: document.getElementById('form-domain').value,
-      priority: document.getElementById('form-priority').value,
-      status: document.getElementById('form-status').value,
-      tags: document.getElementById('form-tags').value.trim(),
-      progress: Number(document.getElementById('form-progress').value) || 0,
+      project_code: (document.getElementById('form-code') ? document.getElementById('form-code').value : '').trim(),
+      title: title,
+      description: (document.getElementById('form-description') ? document.getElementById('form-description').value : '').trim(),
+      domain: domain,
+      priority: document.getElementById('form-priority') ? document.getElementById('form-priority').value : 'Normal',
+      status: document.getElementById('form-status') ? document.getElementById('form-status').value : 'in_progress',
+      tags: (document.getElementById('form-tags') ? document.getElementById('form-tags').value : '').trim(),
+      progress: Number(document.getElementById('form-progress') ? document.getElementById('form-progress').value : 0) || 0,
       start_date: start_date,
       due_date: due_date,
-      immediate_action: document.getElementById('form-action-item').value.trim(),
-      github_repo: normalizeUrl(document.getElementById('form-github').value),
-      youtube_url: normalizeUrl(document.getElementById('form-youtube').value),
+      immediate_action: (document.getElementById('form-action-item') ? document.getElementById('form-action-item').value : '').trim(),
+      github_repo: normalizeUrl(document.getElementById('form-github') ? document.getElementById('form-github').value : ''),
+      youtube_url: normalizeUrl(document.getElementById('form-youtube') ? document.getElementById('form-youtube').value : ''),
       doc_url: docUrl,
-      linkedin_url: normalizeUrl(document.getElementById('form-linkedin').value),
-      image_url: normalizeUrl(document.getElementById('form-image-url').value),
-      team_name: document.getElementById('form-team-name').value.trim(),
-      team_lead: document.getElementById('form-team-lead').value.trim(),
-      team_lead_photo: normalizeUrl(document.getElementById('form-team-lead-photo').value),
-      deliverables: document.getElementById('form-deliverables').value.trim()
+      linkedin_url: normalizeUrl(document.getElementById('form-linkedin') ? document.getElementById('form-linkedin').value : ''),
+      image_url: normalizeUrl(document.getElementById('form-image-url') ? document.getElementById('form-image-url').value : ''),
+      team_name: (document.getElementById('form-team-name') ? document.getElementById('form-team-name').value : '').trim(),
+      team_lead: (document.getElementById('form-team-lead') ? document.getElementById('form-team-lead').value : '').trim(),
+      team_lead_photo: normalizeUrl(document.getElementById('form-team-lead-photo') ? document.getElementById('form-team-lead-photo').value : ''),
+      deliverables: (document.getElementById('form-deliverables') ? document.getElementById('form-deliverables').value : '').trim()
     };
 
-    console.log('💾 Submitting Project Form Payload:', payload);
+    console.log('[PROJECT-SAVE] 2. Form validation passed. Payload:', payload);
+    console.log('[PROJECT-SAVE] 3. Sending API request:', id ? `PUT /api/projects/${id}` : 'POST /api/projects');
 
     let res;
     if (id) {
@@ -3187,33 +3228,39 @@ async function handleProjectFormSubmit(e) {
       });
     }
 
+    console.log('[PROJECT-SAVE] 4. API response received. Status:', res.status);
+
     if (res.ok) {
-      console.log('✅ Project saved successfully!');
+      console.log('[PROJECT-SAVE] 5. Refreshing state & Timeline/Gantt view...');
       closeModal(DOM.projectModal);
       showToast(id ? 'Project details updated successfully' : 'New project created successfully');
+
+      // Immediate state refresh
       await Promise.all([fetchProjects(), fetchNotifications()]);
       renderAllViews();
       updateStatsSummary();
-      if (id && String(state.activeProjectId) === String(id)) {
+
+      // If this project is currently opened in Detail Modal or is active
+      const detailModalActive = DOM.detailModal && DOM.detailModal.classList.contains('active');
+      if (id && (String(state.activeProjectId) === String(id) || detailModalActive)) {
         await openProjectDetail(id);
       }
+
+      console.log('[PROJECT-SAVE] 6. Save flow completed successfully!');
     } else {
       const errData = await res.json().catch(() => ({}));
-      console.error('❌ Server rejection when saving project:', res.status, errData);
-      showToast(errData.error || `Failed to save project (HTTP ${res.status})`, 'error');
+      console.error('[PROJECT-SAVE] Server error response:', res.status, errData);
+      showToast(errData.error || `Failed to save project: Server returned HTTP ${res.status}`, 'error');
     }
   } catch (err) {
-    console.error('❌ Error saving project:', err);
-    showToast(`Failed to save project: ${err.message || 'Network error'}`, 'error');
+    console.error('[PROJECT-SAVE] Exception during save flow:', err);
+    showToast(`Failed to save project: ${err.message || 'Connection error'}`, 'error');
   } finally {
     if (saveBtn) {
       saveBtn.disabled = false;
       saveBtn.innerHTML = originalBtnText;
     }
-    const activeModals = document.querySelectorAll('.modal-overlay.active');
-    if (activeModals.length === 0) {
-      document.body.style.overflow = '';
-    }
+    syncBodyScrollLock();
   }
 }
 
