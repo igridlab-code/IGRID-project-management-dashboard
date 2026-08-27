@@ -87,18 +87,6 @@ app.post('/api/auth/signup', (req, res) => {
     const userId = this.lastID;
     const token = jwt.sign({ id: userId, email: cleanEmail, auth_provider: 'email' }, JWT_SECRET, { expiresIn: '7d' });
 
-    // Auto-create student profile if email doesn't exist in students
-    db.get('SELECT id FROM students WHERE email = ?', [cleanEmail], (errS, sRow) => {
-      if (!sRow) {
-        const defaultName = cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        const defaultRollNo = `STU-${userId}`;
-        db.run(
-          `INSERT INTO students (name, roll_no, email, department, year, role, status) VALUES (?, ?, ?, 'General', 'Year 1', 'Student Researcher', 'Active')`,
-          [defaultName, defaultRollNo, cleanEmail]
-        );
-      }
-    });
-
     res.status(201).json({
       message: 'Account created successfully',
       token,
@@ -535,89 +523,6 @@ app.post('/api/students', requireAuth, (req, res) => {
   });
 });
 
-// GET SINGLE STUDENT BY ID
-app.get('/api/students/:id', requireAuth, (req, res) => {
-  const { id } = req.params;
-  db.get('SELECT * FROM students WHERE id = ?', [id], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: 'Student record not found.' });
-    res.json(row);
-  });
-});
-
-// UPDATE EXISTING STUDENT (ADMIN ONLY)
-app.put('/api/students/:id', requireAuth, (req, res) => {
-  const isAdmin = req.user.email === 'kaviyaarumugam541@gmail.com' || req.user.email.includes('admin') || req.user.role === 'admin';
-  if (!isAdmin) {
-    return res.status(403).json({ error: 'Only administrators can edit student profiles.' });
-  }
-
-  const { id } = req.params;
-  const { 
-    name, roll_no, email, phone, department, year, section, college, 
-    role, status, photo_url, skills, github_url, linkedin_url, bio, team_name 
-  } = req.body;
-
-  if (!name || !roll_no) {
-    return res.status(400).json({ error: 'Student name and register number are required.' });
-  }
-
-  // Verify URL fields if provided
-  const urlRegex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/i;
-  if (github_url && github_url.trim() && !urlRegex.test(github_url.trim())) {
-    return res.status(400).json({ error: 'Please enter a valid GitHub URL.' });
-  }
-  if (linkedin_url && linkedin_url.trim() && !urlRegex.test(linkedin_url.trim())) {
-    return res.status(400).json({ error: 'Please enter a valid LinkedIn URL.' });
-  }
-
-  db.get('SELECT id FROM students WHERE id = ?', [id], (err, student) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!student) return res.status(404).json({ error: 'Student record not found.' });
-
-    const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-
-    const sql = `
-      UPDATE students SET 
-        name = ?, roll_no = ?, email = ?, phone = ?, department = ?, year = ?, 
-        section = ?, college = ?, role = ?, status = ?, photo_url = ?, skills = ?, 
-        github_url = ?, linkedin_url = ?, bio = ?, team_name = ?, avatar_initials = ?
-      WHERE id = ?
-    `;
-
-    const params = [
-      name.trim(),
-      roll_no.trim(),
-      (email || '').trim(),
-      (phone || '').trim(),
-      (department || '').trim(),
-      (year || '').trim(),
-      (section || '').trim(),
-      (college || '').trim(),
-      (role || 'Innovator').trim(),
-      (status || 'Active').trim(),
-      (photo_url || '').trim(),
-      (skills || '').trim(),
-      (github_url || '').trim(),
-      (linkedin_url || '').trim(),
-      (bio || '').trim(),
-      (team_name || '').trim(),
-      initials,
-      id
-    ];
-
-    db.run(sql, params, function(err2) {
-      if (err2) {
-        if (err2.message.includes('UNIQUE')) {
-          return res.status(400).json({ error: 'Another student already has this Register Number.' });
-        }
-        return res.status(500).json({ error: err2.message });
-      }
-      res.json({ message: 'Student profile updated successfully.', studentId: id });
-    });
-  });
-});
-
 // GET BOM ITEMS
 app.get('/api/bom', requireAuth, (req, res) => {
   const { status, project_code } = req.query;
@@ -955,7 +860,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Message is required.' });
   }
 
-  const isAdmin = req.user.email === 'kaviyaarumugam541@gmail.com' || req.user.email.includes('admin') || req.user.role === 'admin';
+  const isAdmin = req.user.email === 'kaviyaarumugam541@gmail.com' || req.user.role === 'admin';
 
   // 1. ALWAYS query ALL projects from database for project index lookup
   db.all('SELECT * FROM projects', [], async (err, projects) => {

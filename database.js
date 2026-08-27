@@ -84,23 +84,6 @@ function initDb() {
       )
     `);
 
-    const studentCols = [
-      { name: 'photo_url', type: 'TEXT' },
-      { name: 'phone', type: 'TEXT' },
-      { name: 'section', type: 'TEXT' },
-      { name: 'college', type: 'TEXT' },
-      { name: 'github_url', type: 'TEXT' },
-      { name: 'linkedin_url', type: 'TEXT' },
-      { name: 'bio', type: 'TEXT' },
-      { name: 'team_name', type: 'TEXT' },
-      { name: 'status', type: 'TEXT DEFAULT "Active"' }
-    ];
-    studentCols.forEach(col => {
-      db.run(`ALTER TABLE students ADD COLUMN ${col.name} ${col.type}`, (err) => {
-        // Silently ignore if column already exists
-      });
-    });
-
     // BOM Items
     db.run(`
       CREATE TABLE IF NOT EXISTS bom_items (

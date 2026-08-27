@@ -59,7 +59,23 @@ savePublicUrl(PERMANENT_PUBLIC_URL, true);
 
 // 1. Start Express Server
 let serverProcess = null;
+let isExiting = false;
+
+function cleanPort3000() {
+  try {
+    if (process.platform === 'win32') {
+      execSync('powershell -Command "$p = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue; if ($p) { $p | ForEach-Object { if ($_.OwningProcess -ne $PID -and $_.OwningProcess -gt 0) { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } } }"', { stdio: 'ignore' });
+    }
+  } catch(e) {}
+}
+
 function startServer() {
+  if (isExiting) return;
+  if (serverProcess && !serverProcess.killed) {
+    return;
+  }
+
+  cleanPort3000();
   log('Starting Express backend server (server.js)...');
   serverProcess = spawn('node', ['server.js'], {
     cwd: projectDir,
@@ -77,8 +93,11 @@ function startServer() {
   });
 
   serverProcess.on('exit', (code) => {
-    log(`[Server] Exited with code ${code}. Restarting in 3s...`);
-    setTimeout(startServer, 3000);
+    serverProcess = null;
+    if (!isExiting) {
+      log(`[Server] Exited with code ${code}. Restarting in 3s...`);
+      setTimeout(startServer, 3000);
+    }
   });
 }
 
@@ -147,6 +166,7 @@ startServer();
 setTimeout(startNgrokSdk, 2000);
 
 process.on('SIGINT', async () => {
+  isExiting = true;
   if (serverProcess) serverProcess.kill();
   if (ngrokListener) {
     try {
@@ -158,6 +178,7 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
+  isExiting = true;
   if (serverProcess) serverProcess.kill();
   if (ngrokListener) {
     try {

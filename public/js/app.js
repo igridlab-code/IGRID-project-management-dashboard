@@ -135,20 +135,12 @@ const DOM = {
   bomForm: document.getElementById('bom-form'),
   bomProjectCodeSelect: document.getElementById('bom-project-code'),
 
-  // Student Modals
+  // Student Modal
   studentModal: document.getElementById('student-modal'),
   openAddStudentModal: document.getElementById('open-add-student-modal'),
   closeStudentModal: document.getElementById('close-student-modal'),
   cancelStudentBtn: document.getElementById('cancel-student-btn'),
   studentForm: document.getElementById('student-form'),
-  editStudentModal: document.getElementById('edit-student-modal'),
-  closeEditStudentModal: document.getElementById('close-edit-student-modal'),
-  cancelEditStudentBtn: document.getElementById('cancel-edit-student-btn'),
-  editStudentForm: document.getElementById('edit-student-form'),
-  viewStudentModal: document.getElementById('view-student-modal'),
-  closeViewStudentModal: document.getElementById('close-view-student-modal'),
-  closeViewStudentBtn: document.getElementById('close-view-student-btn'),
-  btnAdminEditStudentProfile: document.getElementById('btn-admin-edit-student-profile'),
 
   // Analytics Modal
   analyticsModal: document.getElementById('analytics-modal'),
@@ -913,14 +905,6 @@ function initEventListeners() {
   DOM.cancelStudentBtn.addEventListener('click', () => closeModal(DOM.studentModal));
   DOM.studentForm.addEventListener('submit', handleStudentFormSubmit);
 
-  // Edit & View Student Modal Actions
-  if (DOM.closeEditStudentModal) DOM.closeEditStudentModal.addEventListener('click', () => closeModal(DOM.editStudentModal));
-  if (DOM.cancelEditStudentBtn) DOM.cancelEditStudentBtn.addEventListener('click', () => closeModal(DOM.editStudentModal));
-  if (DOM.editStudentForm) DOM.editStudentForm.addEventListener('submit', handleEditStudentSubmit);
-
-  if (DOM.closeViewStudentModal) DOM.closeViewStudentModal.addEventListener('click', () => closeModal(DOM.viewStudentModal));
-  if (DOM.closeViewStudentBtn) DOM.closeViewStudentBtn.addEventListener('click', () => closeModal(DOM.viewStudentModal));
-
   // Analytics Modal Actions
   DOM.labAnalyticsBtn.addEventListener('click', () => openAnalyticsModal());
   DOM.closeAnalyticsModal.addEventListener('click', () => closeModal(DOM.analyticsModal));
@@ -1555,7 +1539,7 @@ function renderCompleted() {
   DOM.showcaseGridRoot.innerHTML = html;
 }
 
-// 9. RENDER STUDENTS DIRECTORY & ADMIN MANAGEMENT
+// 9. RENDER STUDENTS DIRECTORY
 function renderStudents() {
   if (!DOM.studentsGridRoot) return;
   if (state.students.length === 0) {
@@ -1563,202 +1547,39 @@ function renderStudents() {
     return;
   }
 
-  const isAdmin = state.currentUser.email === 'kaviyaarumugam541@gmail.com' || state.currentUser.role === 'admin';
-
   let html = '';
   state.students.forEach(s => {
     const skillsList = (s.skills || '').split(',').map(sk => sk.trim()).filter(Boolean);
-    const skillsHTML = skillsList.map(sk => `<span class="card-tag-pill" style="color:#c7d2fe;">${escapeHTML(sk)}</span>`).join('');
+    const skillsHTML = skillsList.map(sk => `<span class="card-tag-pill" style="color:#c7d2fe;">${sk}</span>`).join('');
     const photo = s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=${(s.avatar_color || '6366f1').replace('#','')}&color=fff`;
 
-    const statusVal = s.status || 'Active';
-    const statusBg = statusVal === 'Active' ? 'rgba(16,185,129,0.15)' : (statusVal === 'Graduated' ? 'rgba(59,130,246,0.15)' : 'rgba(245,158,11,0.15)');
-    const statusColor = statusVal === 'Active' ? '#10b981' : (statusVal === 'Graduated' ? '#60a5fa' : '#fbbf24');
-
     html += `
-      <div class="student-card" style="display:flex; flex-direction:column; justify-content:space-between; height:100%;">
-        <div>
-          <div class="student-card-top" style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-            <img src="${photo}" alt="${escapeHTML(s.name)}" class="student-avatar-big" style="border:2px solid ${s.avatar_color || '#6366f1'}; width:52px; height:52px; border-radius:50%; object-fit:cover;">
-            <div class="student-info-main" style="flex:1;">
-              <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                <h4 style="margin:0; font-size:15px; font-weight:700; color:var(--text-main);">${escapeHTML(s.name)}</h4>
-                <span class="badge" style="background:${statusBg}; color:${statusColor}; border:1px solid ${statusColor}; font-size:10px; padding:2px 6px; border-radius:10px;">${escapeHTML(statusVal)}</span>
-              </div>
-              <span class="student-roll" style="font-size:12px; color:var(--text-dim); font-weight:600;">Reg No: ${escapeHTML(s.roll_no)}</span>
-            </div>
+      <div class="student-card">
+        <div class="student-card-top">
+          <img src="${photo}" alt="${escapeHTML(s.name)}" class="student-avatar-big" style="border:2px solid ${s.avatar_color || '#6366f1'};">
+          <div class="student-info-main">
+            <h4>${escapeHTML(s.name)}</h4>
+            <span class="student-roll">${s.roll_no} • ${s.year || 'Student'}</span>
           </div>
-
-          <div style="font-size:12px; color:var(--text-muted); display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
-            <div><strong>Dept:</strong> ${escapeHTML(s.department || 'IGRID Lab')} &bull; ${escapeHTML(s.year || 'Student')}</div>
-            <div><strong>Email:</strong> <a href="mailto:${s.email}" style="color:#60a5fa;">${escapeHTML(s.email || 'N/A')}</a></div>
-            ${s.phone ? `<div><strong>Phone:</strong> ${escapeHTML(s.phone)}</div>` : ''}
-            ${s.team_name ? `<div><strong>Team:</strong> ${escapeHTML(s.team_name)}</div>` : ''}
-          </div>
-
-          ${skillsHTML ? `
-            <div style="margin-bottom:14px;">
-              <div style="font-size:10px; font-weight:700; color:var(--text-dim); margin-bottom:4px; text-transform:uppercase;">Skills:</div>
-              <div class="card-tags">${skillsHTML}</div>
-            </div>
-          ` : ''}
         </div>
 
-        <div class="student-card-actions" style="display:flex; gap:8px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color);">
-          <button class="btn btn-sm btn-secondary" onclick="openViewStudentModal(${s.id})" style="flex:1;">👁️ View Profile</button>
-          ${isAdmin ? `<button class="btn btn-sm btn-primary" onclick="openEditStudentModal(${s.id})" style="flex:1; background:#2563eb; border:none;">✏️ Edit</button>` : ''}
+        <div style="font-size:12px; color:var(--text-muted);">
+          <div><strong>Role:</strong> ${escapeHTML(s.role || 'Innovator')}</div>
+          <div><strong>Dept:</strong> ${escapeHTML(s.department || 'IGRID Lab')}</div>
+          <div><strong>Email:</strong> <a href="mailto:${s.email}" style="color:#60a5fa;">${s.email}</a></div>
         </div>
+
+        ${skillsHTML ? `
+          <div style="margin-top:auto;">
+            <div style="font-size:10px; font-weight:700; color:var(--text-dim); margin-bottom:4px;">SKILLS:</div>
+            <div class="card-tags">${skillsHTML}</div>
+          </div>
+        ` : ''}
       </div>
     `;
   });
 
   DOM.studentsGridRoot.innerHTML = html;
-}
-
-function openViewStudentModal(studentId) {
-  const student = state.students.find(s => String(s.id) === String(studentId));
-  if (!student) return;
-
-  const isAdmin = state.currentUser.email === 'kaviyaarumugam541@gmail.com' || state.currentUser.role === 'admin';
-  const photo = student.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&background=${(student.avatar_color || '6366f1').replace('#','')}&color=fff`;
-  const skillsList = (student.skills || '').split(',').map(sk => sk.trim()).filter(Boolean);
-  const skillsHTML = skillsList.length > 0 ? skillsList.map(sk => `<span class="card-tag-pill" style="color:#c7d2fe; background:rgba(99,102,241,0.2); padding:4px 8px; border-radius:6px; font-size:11px; margin-right:4px;">${escapeHTML(sk)}</span>`).join('') : '<span style="color:var(--text-dim); font-size:12px;">No skills specified</span>';
-
-  const statusColor = student.status === 'Active' ? '#10b981' : (student.status === 'Graduated' ? '#60a5fa' : '#fbbf24');
-
-  const bodyEl = document.getElementById('view-student-modal-body');
-  if (bodyEl) {
-    bodyEl.innerHTML = `
-      <div style="display:flex; gap:20px; align-items:flex-start; margin-bottom:20px;">
-        <img src="${photo}" alt="${escapeHTML(student.name)}" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:3px solid ${student.avatar_color || '#6366f1'}; flex-shrink:0;">
-        <div>
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <h3 style="margin:0; font-size:20px; font-weight:700; color:var(--text-main);">${escapeHTML(student.name)}</h3>
-            <span style="background:rgba(16,185,129,0.15); color:${statusColor}; border:1px solid ${statusColor}; font-size:11px; font-weight:700; padding:2px 8px; border-radius:12px;">${escapeHTML(student.status || 'Active')}</span>
-          </div>
-          <p style="margin:4px 0 0 0; color:var(--text-muted); font-size:13px;">
-            Register Number: <strong>${escapeHTML(student.roll_no)}</strong> &bull; ${escapeHTML(student.role || 'Student Innovator')}
-          </p>
-        </div>
-      </div>
-
-      <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; background:var(--bg-card-sub); padding:16px; border-radius:8px; border:1px solid var(--border-color); margin-bottom:20px;">
-        <div><strong style="color:var(--text-dim); font-size:11px;">EMAIL:</strong><br><a href="mailto:${student.email}" style="color:#60a5fa; font-weight:600;">${escapeHTML(student.email || 'N/A')}</a></div>
-        <div><strong style="color:var(--text-dim); font-size:11px;">PHONE:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.phone || 'N/A')}</span></div>
-        <div><strong style="color:var(--text-dim); font-size:11px;">DEPARTMENT:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.department || 'N/A')}</span></div>
-        <div><strong style="color:var(--text-dim); font-size:11px;">ACADEMIC YEAR:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.year || 'N/A')}</span></div>
-        <div><strong style="color:var(--text-dim); font-size:11px;">SECTION:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.section || 'N/A')}</span></div>
-        <div><strong style="color:var(--text-dim); font-size:11px;">COLLEGE / INSTITUTION:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.college || 'Indra Ganesan College of Engineering')}</span></div>
-        <div><strong style="color:var(--text-dim); font-size:11px;">TEAM / PROJECT:</strong><br><span style="color:var(--text-main); font-weight:600;">${escapeHTML(student.team_name || 'N/A')}</span></div>
-      </div>
-
-      ${student.bio ? `
-        <div style="margin-bottom:20px;">
-          <h4 style="font-size:12px; font-weight:700; color:var(--text-dim); margin-bottom:6px; text-transform:uppercase;">Bio / Summary</h4>
-          <p style="font-size:13px; color:var(--text-main); line-height:1.5; margin:0;">${escapeHTML(student.bio)}</p>
-        </div>
-      ` : ''}
-
-      <div style="margin-bottom:20px;">
-        <h4 style="font-size:12px; font-weight:700; color:var(--text-dim); margin-bottom:8px; text-transform:uppercase;">Technical Skills</h4>
-        <div>${skillsHTML}</div>
-      </div>
-
-      <div style="display:flex; gap:12px; margin-top:16px;">
-        ${student.github_url ? `<a href="${escapeHTML(student.github_url)}" target="_blank" class="btn btn-sm btn-secondary">🐙 GitHub Profile</a>` : ''}
-        ${student.linkedin_url ? `<a href="${escapeHTML(student.linkedin_url)}" target="_blank" class="btn btn-sm btn-secondary">💼 LinkedIn Profile</a>` : ''}
-      </div>
-    `;
-  }
-
-  const editBtn = document.getElementById('btn-admin-edit-student-profile');
-  if (editBtn) {
-    if (isAdmin) {
-      editBtn.style.display = 'inline-block';
-      editBtn.onclick = () => {
-        closeModal(DOM.viewStudentModal);
-        openEditStudentModal(studentId);
-      };
-    } else {
-      editBtn.style.display = 'none';
-    }
-  }
-
-  openModal(DOM.viewStudentModal);
-}
-
-function openEditStudentModal(studentId) {
-  const student = state.students.find(s => String(s.id) === String(studentId));
-  if (!student) return;
-
-  document.getElementById('edit-student-id').value = student.id;
-  document.getElementById('edit-student-name').value = student.name || '';
-  document.getElementById('edit-student-roll').value = student.roll_no || '';
-  document.getElementById('edit-student-email').value = student.email || '';
-  document.getElementById('edit-student-phone').value = student.phone || '';
-  document.getElementById('edit-student-dept').value = student.department || '';
-  document.getElementById('edit-student-year').value = student.year || '';
-  document.getElementById('edit-student-section').value = student.section || '';
-  document.getElementById('edit-student-college').value = student.college || '';
-  document.getElementById('edit-student-status').value = student.status || 'Active';
-  document.getElementById('edit-student-team').value = student.team_name || '';
-  document.getElementById('edit-student-photo').value = student.photo_url || '';
-  document.getElementById('edit-student-skills').value = student.skills || '';
-  document.getElementById('edit-student-github').value = student.github_url || '';
-  document.getElementById('edit-student-linkedin').value = student.linkedin_url || '';
-  document.getElementById('edit-student-bio').value = student.bio || '';
-
-  openModal(DOM.editStudentModal);
-}
-
-async function handleEditStudentSubmit(e) {
-  e.preventDefault();
-  const id = document.getElementById('edit-student-id').value;
-  if (!id) return;
-
-  const payload = {
-    name: document.getElementById('edit-student-name').value,
-    roll_no: document.getElementById('edit-student-roll').value,
-    email: document.getElementById('edit-student-email').value,
-    phone: document.getElementById('edit-student-phone').value,
-    department: document.getElementById('edit-student-dept').value,
-    year: document.getElementById('edit-student-year').value,
-    section: document.getElementById('edit-student-section').value,
-    college: document.getElementById('edit-student-college').value,
-    status: document.getElementById('edit-student-status').value,
-    team_name: document.getElementById('edit-student-team').value,
-    photo_url: document.getElementById('edit-student-photo').value,
-    skills: document.getElementById('edit-student-skills').value,
-    github_url: document.getElementById('edit-student-github').value,
-    linkedin_url: document.getElementById('edit-student-linkedin').value,
-    bio: document.getElementById('edit-student-bio').value
-  };
-
-  try {
-    const res = await authFetch(`/api/students/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json.error || 'Failed to update student profile');
-    }
-
-    showToast('Student profile updated successfully.', 'success');
-    closeModal(DOM.editStudentModal);
-
-    // Refresh students list
-    const studentsRes = await authFetch('/api/students');
-    if (studentsRes.ok) {
-      state.students = await studentsRes.json();
-      renderStudents();
-      updateStatsSummary();
-    }
-  } catch (err) {
-    showToast(err.message || 'Failed to save student profile', 'error');
-  }
 }
 
 function populateBomProjectSelect() {
@@ -1998,122 +1819,156 @@ function formatDateShort(dateStr) {
 }
 
 function renderProjectGanttTimeline(project, tasks = []) {
-  const tableEl = document.getElementById('ref-gantt-table');
-  const subtitleEl = document.getElementById('ref-gantt-subtitle');
-  if (!tableEl) return;
+  const container = document.getElementById('detail-gantt-container');
+  const summaryEl = document.getElementById('detail-timeline-summary');
+  if (!container) return;
 
-  let targetYear = 2026;
+  let minDate = new Date();
+  let maxDate = new Date();
+
   if (project.start_date) {
     const d = new Date(project.start_date);
-    if (!isNaN(d.getFullYear())) targetYear = d.getFullYear();
+    if (!isNaN(d.getTime())) minDate = new Date(d);
+  } else {
+    minDate.setMonth(minDate.getMonth() - 1);
   }
 
+  if (project.due_date) {
+    const d = new Date(project.due_date);
+    if (!isNaN(d.getTime())) maxDate = new Date(d);
+  } else {
+    maxDate.setMonth(maxDate.getMonth() + 2);
+  }
+
+  tasks.forEach(t => {
+    if (t.start_date) {
+      const d = new Date(t.start_date);
+      if (!isNaN(d.getTime()) && d < minDate) minDate = new Date(d);
+    }
+    if (t.end_date) {
+      const d = new Date(t.end_date);
+      if (!isNaN(d.getTime()) && d > maxDate) maxDate = new Date(d);
+    }
+  });
+
+  const startYear = minDate.getFullYear();
+  const startMonth = minDate.getMonth();
+  const endYear = maxDate.getFullYear();
+  const endMonth = maxDate.getMonth();
+
+  const months = [];
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthFullNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const monthFullNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
 
-  const monthsData = monthNames.map((name, i) => {
-    const days = new Date(targetYear, i + 1, 0).getDate();
-    return { index: i, name, fullName: monthFullNames[i], days };
-  });
-
-  const totalDaysInYear = monthsData.reduce((acc, m) => acc + m.days, 0);
-
-  if (subtitleEl) {
-    const activeTasksCount = tasks.length;
-    subtitleEl.textContent = `${project.title} • ${targetYear} Calendar Schedule • ${activeTasksCount} Task${activeTasksCount === 1 ? '' : 's'}`;
+  let curY = startYear;
+  let curM = startMonth;
+  while (curY < endYear || (curY === endYear && curM <= endMonth)) {
+    const daysInM = new Date(curY, curM + 1, 0).getDate();
+    months.push({ year: curY, month: curM, name: monthNames[curM], fullName: monthFullNames[curM], days: daysInM });
+    curM++;
+    if (curM > 11) {
+      curM = 0;
+      curY++;
+    }
   }
 
-  let monthsHdrHTML = '';
-  monthsData.forEach((m, idx) => {
-    const colorClass = idx % 2 === 0 ? 'hdr-blue' : 'hdr-orange';
-    const pct = ((m.days / totalDaysInYear) * 100).toFixed(4);
-    monthsHdrHTML += `
-      <div class="ref-gantt-month-hdr ${colorClass}" style="flex: 0 0 ${pct}%;">
-        ${m.name}
-      </div>
+  const gridStartDate = new Date(months[0].year, months[0].month, 1);
+  const lastM = months[months.length - 1];
+  const gridEndDate = new Date(lastM.year, lastM.month, lastM.days);
+
+  const overallDurationDays = Math.round((gridEndDate - gridStartDate) / (1000 * 60 * 60 * 24)) + 1;
+
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <strong style="color:var(--text-main); font-weight:700;">${escapeHTML(project.title)}</strong> &bull; 
+      Start: <span style="color:#60a5fa;">${formatDateShort(gridStartDate.toISOString().split('T')[0])}</span> &bull; 
+      End: <span style="color:#60a5fa;">${formatDateShort(gridEndDate.toISOString().split('T')[0])}</span> &bull; 
+      Overall Duration: <span class="gantt-dur-pill" style="font-size:11px; background:rgba(76,201,240,0.2); color:#4cc9f0; padding:2px 8px; border-radius:12px; font-weight:700;">${overallDurationDays} days</span>
     `;
-  });
-
-  const headerRowHTML = `
-    <div class="ref-gantt-header-row">
-      <div class="ref-gantt-header-taskname">Task Name</div>
-      <div class="ref-gantt-months-container">
-        ${monthsHdrHTML}
-      </div>
-    </div>
-  `;
-
-  function getDayOfYear(dateObj) {
-    const start = new Date(targetYear, 0, 0);
-    const diff = dateObj - start;
-    const oneDay = 1000 * 60 * 60 * 24;
-    return Math.floor(diff / oneDay);
   }
 
-  const today = new Date();
-  const isCurrentYear = today.getFullYear() === targetYear;
-  const todayDayOfYear = isCurrentYear ? getDayOfYear(today) : -1;
-  const todayLeftPct = todayDayOfYear > 0 ? (((todayDayOfYear - 1) / totalDaysInYear) * 100).toFixed(4) : -1;
+  const DAY_WIDTH = 34;
+  const todayStr = new Date().toISOString().split('T')[0];
 
-  let rowsHTML = '';
+  let monthsHeaderHTML = '';
+  months.forEach(m => {
+    const widthPx = m.days * DAY_WIDTH;
+    monthsHeaderHTML += `<div class="gantt-month-cell" style="width:${widthPx}px; min-width:${widthPx}px;">${m.fullName} ${m.year} (${m.days}d)</div>`;
+  });
+
+  let daysHeaderHTML = '';
+  const dayCols = [];
+
+  months.forEach(m => {
+    for (let day = 1; day <= m.days; day++) {
+      const dateObj = new Date(m.year, m.month, day);
+      const dayOfWeek = dateObj.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const dateStr = `${m.year}-${String(m.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const isToday = dateStr === todayStr;
+      const isMonthEnd = day === m.days;
+
+      dayCols.push({ dateStr, isWeekend, isToday, isMonthEnd });
+
+      const cellClasses = ['gantt-day-cell'];
+      if (isWeekend) cellClasses.push('is-weekend');
+      if (isToday) cellClasses.push('is-today');
+      if (isMonthEnd) cellClasses.push('gantt-month-separator');
+
+      daysHeaderHTML += `<div class="${cellClasses.join(' ')}" title="${dateStr}">${day}</div>`;
+    }
+  });
+
+  let taskRowsHTML = '';
 
   if (tasks.length === 0) {
-    rowsHTML = `
-      <div class="ref-gantt-task-row" style="padding:20px; justify-content:center; color:#64748b; font-size:13px;">
-        No timeline tasks scheduled for ${escapeHTML(project.title)} yet. Click "+ Add Task" to schedule a task.
+    taskRowsHTML = `
+      <div class="gantt-row gantt-task-row" style="padding:20px; text-align:center; color:var(--text-dim);">
+        <div class="gantt-fixed-col" style="justify-content:center;">No timeline tasks created yet</div>
+        <div class="gantt-timeline-track" style="padding:15px; color:var(--text-dim);">
+          Click "+ Add Task" button above to add tasks to ${escapeHTML(project.title)}'s timeline.
+        </div>
       </div>
     `;
   } else {
     tasks.forEach(task => {
-      const sDate = new Date(task.start_date);
-      const eDate = new Date(task.end_date);
+      const tStart = new Date(task.start_date);
+      const tEnd = new Date(task.end_date);
+      
+      const startDiffDays = Math.round((tStart - gridStartDate) / (1000 * 60 * 60 * 24));
+      const durationDays = Math.round((tEnd - tStart) / (1000 * 60 * 60 * 24)) + 1;
 
-      let startDay = 1;
-      let endDay = totalDaysInYear;
+      const leftPx = Math.max(0, startDiffDays * DAY_WIDTH);
+      const widthPx = Math.max(durationDays * DAY_WIDTH - 4, 20);
 
-      if (!isNaN(sDate.getTime())) {
-        startDay = getDayOfYear(sDate);
-      }
-      if (!isNaN(eDate.getTime())) {
-        endDay = getDayOfYear(eDate);
-      }
-
-      startDay = Math.max(1, Math.min(totalDaysInYear, startDay));
-      endDay = Math.max(1, Math.min(totalDaysInYear, endDay));
-      if (endDay < startDay) endDay = startDay;
-
-      const durDays = (endDay - startDay) + 1;
-      const leftPct = (((startDay - 1) / totalDaysInYear) * 100).toFixed(4);
-      const widthPct = Math.max(((durDays / totalDaysInYear) * 100), 1.5).toFixed(4);
-
-      let gridColsHTML = '';
-      monthsData.forEach(m => {
-        const pct = ((m.days / totalDaysInYear) * 100).toFixed(4);
-        gridColsHTML += `<div class="ref-gantt-month-grid-col" style="flex: 0 0 ${pct}%;"></div>`;
+      let trackColsHTML = '';
+      dayCols.forEach(col => {
+        const colClasses = ['gantt-track-day-col'];
+        if (col.isWeekend) colClasses.push('is-weekend');
+        if (col.isToday) colClasses.push('is-today');
+        if (col.isMonthEnd) colClasses.push('gantt-month-separator');
+        trackColsHTML += `<div class="${colClasses.join(' ')}"></div>`;
       });
 
-      const todayLineHTML = todayLeftPct > 0 ? `<div class="ref-gantt-today-line" style="left:${todayLeftPct}%;" title="Today (${today.toDateString()})"></div>` : '';
+      const statusLabel = task.status === 'completed' ? 'Completed' : (task.status === 'pending' ? 'Pending' : 'In Progress');
 
-      const statusClass = task.status === 'completed' ? 'bar-completed' : (task.status === 'pending' ? 'bar-pending' : '');
-      const statusText = task.status === 'completed' ? 'Completed' : (task.status === 'pending' ? 'Pending' : 'In Progress');
-
-      const dateLabelText = `${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)}`;
-
-      rowsHTML += `
-        <div class="ref-gantt-task-row">
-          <div class="ref-gantt-task-name-cell" title="${escapeHTML(task.task_name)}">
-            ${escapeHTML(task.task_name)}
+      taskRowsHTML += `
+        <div class="gantt-row gantt-task-row">
+          <div class="gantt-fixed-col">
+            <div class="gantt-task-name" title="${escapeHTML(task.task_name)}">${escapeHTML(task.task_name)}</div>
+            <div class="gantt-task-sub">
+              <span>${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)}</span>
+              <span class="gantt-dur-pill" style="color:#60a5fa; font-weight:700;">${durationDays}d</span>
+            </div>
           </div>
-          <div class="ref-gantt-calendar-track">
-            ${gridColsHTML}
-            ${todayLineHTML}
-            <div class="ref-gantt-bar ${statusClass}" 
-                 style="left: ${leftPct}%; width: ${widthPct}%;" 
+          <div class="gantt-timeline-track">
+            ${trackColsHTML}
+            <div class="gantt-bar bar-${task.status || 'in_progress'}" 
+                 style="left:${leftPx}px; width:${widthPx}px;" 
                  onclick="openTaskInfoModal(${task.id})"
-                 title="${escapeHTML(task.task_name)} | ${dateLabelText} (${durDays} days) | Status: ${statusText} | Assigned: ${escapeHTML(task.assigned_member || 'Unassigned')}">
-              <span class="ref-gantt-marker">✓</span>
-              <span class="ref-gantt-bar-dates">${dateLabelText} (${durDays}d)</span>
-              <span class="ref-gantt-marker">✓</span>
+                 title="${escapeHTML(task.task_name)} | ${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)} (${durationDays} days) | Status: ${statusLabel}">
+              <span class="gantt-bar-title">${escapeHTML(task.task_name)}</span>
+              <span class="gantt-bar-dur">${durationDays}d</span>
             </div>
           </div>
         </div>
@@ -2121,7 +1976,28 @@ function renderProjectGanttTimeline(project, tasks = []) {
     });
   }
 
-  tableEl.innerHTML = headerRowHTML + rowsHTML;
+  container.innerHTML = `
+    <div class="gantt-toolbar">
+      <div class="gantt-legend">
+        <span class="legend-item"><span class="legend-dot status-completed"></span> Completed</span>
+        <span class="legend-item"><span class="legend-dot status-in_progress"></span> In Progress</span>
+        <span class="legend-item"><span class="legend-dot status-pending"></span> Pending</span>
+      </div>
+    </div>
+    <div class="gantt-scroll-wrap">
+      <div class="gantt-table">
+        <div class="gantt-row gantt-months-row">
+          <div class="gantt-fixed-col gantt-header-fixed">Task Name & Details</div>
+          <div style="display:flex;">${monthsHeaderHTML}</div>
+        </div>
+        <div class="gantt-row gantt-days-row">
+          <div class="gantt-fixed-col gantt-header-fixed" style="font-size:10px; color:var(--text-muted);">Schedule (Dates)</div>
+          <div style="display:flex;">${daysHeaderHTML}</div>
+        </div>
+        ${taskRowsHTML}
+      </div>
+    </div>
+  `;
 }
 
 function openTaskModalForCreate() {
