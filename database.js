@@ -145,6 +145,23 @@ function initDb() {
       )
     `);
 
+    // Project Tasks Table for Project-Specific Gantt Timeline
+    db.run(`
+      CREATE TABLE IF NOT EXISTS project_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL,
+        project_code TEXT NOT NULL,
+        task_name TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        status TEXT DEFAULT 'in_progress',
+        description TEXT,
+        assigned_member TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+      )
+    `);
+
     // Seed default domains if domains table is empty
     db.get('SELECT COUNT(*) as count FROM domains', (err, row) => {
       if (!err && (!row || row.count === 0)) {
@@ -167,6 +184,9 @@ function initDb() {
       if (row.count === 0) {
         console.log('Seeding initial IGRID Lab projects with media & student rosters...');
         seedInitialData();
+      } else {
+        // Ensure default project tasks exist
+        seedInitialTasksIfEmpty();
       }
     });
   });
@@ -597,6 +617,62 @@ function seedInitialData() {
   insertBomStmt.finalize();
 
   console.log('IGRID Lab database initialized with rich media, photos, YouTube links & student rosters.');
+  seedInitialTasksIfEmpty();
+}
+
+function seedInitialTasksIfEmpty() {
+  db.get('SELECT COUNT(*) as count FROM project_tasks', (err, row) => {
+    if (err) return;
+    if (!row || row.count === 0) {
+      console.log('Seeding initial project-specific timeline tasks...');
+      db.all('SELECT id, project_code, start_date, due_date, team_lead FROM projects', [], (err2, projects) => {
+        if (err2 || !projects || projects.length === 0) return;
+
+        const defaultTaskTemplates = {
+          'IGRID-AI-01': [
+            { name: 'Dataset Collection & Annotation', start: '2026-02-01', end: '2026-02-12', status: 'completed', member: 'Priya Sundaram', desc: 'Collected 5,000 conveyor images and labeled defect bounding boxes.' },
+            { name: 'YOLOv8 Model Training & Quantization', start: '2026-02-13', end: '2026-02-25', status: 'completed', member: 'Meera Nair', desc: 'Trained YOLOv8s model and converted to TensorRT INT8 precision.' },
+            { name: 'Camera Hardware Mount & Opticals Setup', start: '2026-02-26', end: '2026-03-08', status: 'in_progress', member: 'Karthik Verma', desc: '3D printed adjustable camera rig and integrated industrial ring light.' },
+            { name: 'Jetson Orin Inference Pipeline Integration', start: '2026-03-09', end: '2026-03-18', status: 'in_progress', member: 'Priya Sundaram', desc: 'Optimizing Zero-Copy CUDA memory buffers for 60 FPS throughput.' },
+            { name: 'Conveyor Belt Field Deployment & Validation', start: '2026-03-19', end: '2026-03-25', status: 'pending', member: 'Meera Nair', desc: 'Final staging test on physical conveyor line with defect injection.' }
+          ],
+          'IGRID-ROB-02': [
+            { name: '3D CAD Arm Kinematics & FEA Analysis', start: '2026-01-15', end: '2026-01-28', status: 'completed', member: 'Neha Deshmukh', desc: 'Designed 6-DOF link geometry in Fusion360 with stress FEA simulation.' },
+            { name: 'STM32 Motor Driver PCB Fabrication & Testing', start: '2026-01-29', end: '2026-02-15', status: 'completed', member: 'Karthik Verma', desc: 'Designed 4-layer PCB with DRV8302 BLDC driver ICs and CAN transceiver.' },
+            { name: 'Joint Assembly & Encoder Calibration', start: '2026-02-16', end: '2026-03-05', status: 'in_progress', member: 'Vikram Malhotra', desc: 'Assembled harmonic drive reducers and calibrated magnetic absolute encoders.' },
+            { name: 'ROS2 MoveIt2 Trajectory Controller Integration', start: '2026-03-06', end: '2026-03-22', status: 'in_progress', member: 'Aarav Sharma', desc: 'Configured MoveIt2 URDF kinematic solver and tuned PID joint controllers.' },
+            { name: 'End-Effector Gripper & Vision Pick-and-Place Test', start: '2026-03-23', end: '2026-04-10', status: 'pending', member: 'Aarav Sharma', desc: 'Integrating vacuum gripper with camera feedback for target object pick and place.' }
+          ],
+          'IGRID-DRN-03': [
+            { name: 'Frame Assembly & ESC Wiring', start: '2026-01-10', end: '2026-01-22', status: 'completed', member: 'Rohan Kulkarni', desc: 'Carbon fiber quadcopter frame assembly and high-current PDB soldering.' },
+            { name: 'OAK-D Spatial Camera & LiDAR Mount', start: '2026-01-23', end: '2026-02-08', status: 'completed', member: 'Neha Deshmukh', desc: 'Vibration-damped 3D mount for depth camera and 2D LiDAR sensor.' },
+            { name: 'Fast-LIO VIO & Sensor Fusion Tuning', start: '2026-02-09', end: '2026-02-28', status: 'completed', member: 'Priya Sundaram', desc: 'Kalman filter fusion for visual-inertial odometry without GPS.' },
+            { name: 'Indoor GPS-Denied Flight Control Integration', start: '2026-03-01', end: '2026-03-12', status: 'in_progress', member: 'Rohan Kulkarni', desc: 'PX4 offboard mode communication with onboard companion computer.' },
+            { name: 'Obstacle Avoidance Flight Staging Test', start: '2026-03-13', end: '2026-03-18', status: 'pending', member: 'Rohan Kulkarni', desc: 'Testing obstacle-avoidance waypoint navigation in indoor cage.' }
+          ]
+        };
+
+        const stmt = db.prepare(`
+          INSERT INTO project_tasks (project_id, project_code, task_name, start_date, end_date, status, description, assigned_member)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        projects.forEach(p => {
+          const templates = defaultTaskTemplates[p.project_code] || [
+            { name: 'Phase 1: Architecture & Requirements', start: p.start_date || '2026-02-01', end: '2026-02-15', status: 'completed', member: p.team_lead || 'Lead', desc: 'Initial system specs and architecture definition.' },
+            { name: 'Phase 2: Hardware & Software Prototype', start: '2026-02-16', end: '2026-03-15', status: 'in_progress', member: p.team_lead || 'Lead', desc: 'Prototyping core modules and integration.' },
+            { name: 'Phase 3: Testing & Final Showcase Staging', start: '2026-03-16', end: p.due_date || '2026-04-15', status: 'pending', member: p.team_lead || 'Lead', desc: 'Staging, testing and documentation.' }
+          ];
+
+          templates.forEach(t => {
+            stmt.run(p.id, p.project_code, t.name, t.start, t.end, t.status, t.desc || '', t.member || '');
+          });
+        });
+
+        stmt.finalize();
+      });
+    }
+  });
 }
 
 module.exports = { db, initDb };

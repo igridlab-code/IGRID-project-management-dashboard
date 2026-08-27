@@ -9,6 +9,7 @@ const state = {
   students: [],
   boms: [],
   domains: [],
+  activeProjectTasks: [],
   currentView: 'board',
   filterDomain: 'All',
   filterTag: '',
@@ -61,6 +62,16 @@ const DOM = {
   addDomainForm: document.getElementById('add-domain-form'),
   formDomain: document.getElementById('form-domain'),
   drawerDomainSelect: document.getElementById('drawer-domain-select'),
+
+  // Task Management Modals
+  taskModal: document.getElementById('task-modal'),
+  closeTaskModal: document.getElementById('close-task-modal'),
+  btnCancelTask: document.getElementById('btn-cancel-task'),
+  taskForm: document.getElementById('task-form'),
+  btnAddProjectTask: document.getElementById('btn-add-project-task'),
+  taskInfoModal: document.getElementById('task-info-modal'),
+  closeTaskInfoModal: document.getElementById('close-task-info-modal'),
+  btnCloseTaskInfo: document.getElementById('btn-close-task-info'),
 
   // Executive Management Showcase
   execShowcaseGridRoot: document.getElementById('exec-showcase-grid-root'),
@@ -823,37 +834,6 @@ function initEventListeners() {
     });
   }
 
-  // Gantt Chart Controls & Year Navigation
-  const btnPrevYear = document.getElementById('btn-prev-year');
-  const btnNextYear = document.getElementById('btn-next-year');
-  const btnTodayGantt = document.getElementById('btn-today-gantt');
-
-  if (btnPrevYear) {
-    btnPrevYear.addEventListener('click', () => {
-      state.timelineYear = (state.timelineYear || new Date().getFullYear()) - 1;
-      renderTimeline();
-    });
-  }
-  if (btnNextYear) {
-    btnNextYear.addEventListener('click', () => {
-      state.timelineYear = (state.timelineYear || new Date().getFullYear()) + 1;
-      renderTimeline();
-    });
-  }
-  if (btnTodayGantt) {
-    btnTodayGantt.addEventListener('click', () => {
-      state.timelineYear = new Date().getFullYear();
-      renderTimeline();
-      scrollToTodayGantt();
-    });
-  }
-
-  // Date change listeners for auto duration calculation in project form
-  const startDateInput = document.getElementById('form-start-date');
-  const dueDateInput = document.getElementById('form-due-date');
-  if (startDateInput) startDateInput.addEventListener('change', updateFormDurationDisplay);
-  if (dueDateInput) dueDateInput.addEventListener('change', updateFormDurationDisplay);
-
   // Project Modal Actions
   DOM.openAddTaskModal.addEventListener('click', () => openProjectModalForCreate());
   DOM.closeProjectModal.addEventListener('click', () => closeModal(DOM.projectModal));
@@ -894,6 +874,20 @@ function initEventListeners() {
   });
 
   DOM.addCommentForm.addEventListener('submit', handleCommentSubmit);
+
+  // Project Task Management Modal Actions
+  if (DOM.btnAddProjectTask) DOM.btnAddProjectTask.addEventListener('click', openTaskModalForCreate);
+  if (DOM.closeTaskModal) DOM.closeTaskModal.addEventListener('click', () => closeModal(DOM.taskModal));
+  if (DOM.btnCancelTask) DOM.btnCancelTask.addEventListener('click', () => closeModal(DOM.taskModal));
+  if (DOM.taskForm) DOM.taskForm.addEventListener('submit', handleTaskFormSubmit);
+
+  const taskStartInput = document.getElementById('task-start-input');
+  const taskEndInput = document.getElementById('task-end-input');
+  if (taskStartInput) taskStartInput.addEventListener('input', updateTaskDurationPreview);
+  if (taskEndInput) taskEndInput.addEventListener('input', updateTaskDurationPreview);
+
+  if (DOM.closeTaskInfoModal) DOM.closeTaskInfoModal.addEventListener('click', () => closeModal(DOM.taskInfoModal));
+  if (DOM.btnCloseTaskInfo) DOM.btnCloseTaskInfo.addEventListener('click', () => closeModal(DOM.taskInfoModal));
 
   // Spotlight Modal Actions
   DOM.closeSpotlightModal.addEventListener('click', () => closeModal(DOM.spotlightModal));
@@ -1308,198 +1302,37 @@ function createCardHTML(p) {
 
 // 4. RENDER TIMELINE
 function renderTimeline() {
-state.timelineYear = new Date().getFullYear();
-
-function getDaysInMonth(monthIndex, year) {
-  return new Date(year, monthIndex + 1, 0).getDate();
-}
-
-function updateFormDurationDisplay() {
-  const startInput = document.getElementById('form-start-date');
-  const dueInput = document.getElementById('form-due-date');
-  const display = document.getElementById('form-duration-display');
-  if (!display) return;
-
-  const startVal = startInput ? startInput.value : '';
-  const dueVal = dueInput ? dueInput.value : '';
-
-  if (startVal && dueVal) {
-    const s = new Date(startVal);
-    const d = new Date(dueVal);
-    if (!isNaN(s.getTime()) && !isNaN(d.getTime())) {
-      const diffTime = d.getTime() - s.getTime();
-      const diffDays = Math.round(diffTime / (1000 * 3600 * 24)) + 1;
-      const duration = Math.max(1, diffDays);
-      display.textContent = `⏱️ ${duration} Day${duration === 1 ? '' : 's'}`;
-      return;
-    }
-  }
-  display.textContent = '⏱️ Set dates';
-}
-
-function renderTimeline() {
   if (!DOM.timelineChartRoot) return;
-
-  const year = state.timelineYear || new Date().getFullYear();
-  const yearDisplay = document.getElementById('timeline-year-display');
-  if (yearDisplay) yearDisplay.textContent = year;
-
   if (state.projects.length === 0) {
-    DOM.timelineChartRoot.innerHTML = '<div style="padding:30px; text-align:center; color:var(--text-dim);">No projects found to display on timeline.</div>';
+    DOM.timelineChartRoot.innerHTML = '<div style="padding:20px; color:var(--text-dim);">No projects to display on timeline.</div>';
     return;
   }
 
-  const months = [
-    { name: 'Jan', days: getDaysInMonth(0, year) },
-    { name: 'Feb', days: getDaysInMonth(1, year) },
-    { name: 'Mar', days: getDaysInMonth(2, year) },
-    { name: 'Apr', days: getDaysInMonth(3, year) },
-    { name: 'May', days: getDaysInMonth(4, year) },
-    { name: 'Jun', days: getDaysInMonth(5, year) },
-    { name: 'Jul', days: getDaysInMonth(6, year) },
-    { name: 'Aug', days: getDaysInMonth(7, year) },
-    { name: 'Sep', days: getDaysInMonth(8, year) },
-    { name: 'Oct', days: getDaysInMonth(9, year) },
-    { name: 'Nov', days: getDaysInMonth(10, year) },
-    { name: 'Dec', days: getDaysInMonth(11, year) }
-  ];
+  let html = '';
+  state.projects.forEach(p => {
+    const progress = p.progress || 0;
+    const priorityColor = p.status === 'completed' ? '#8b5cf6' : (p.priority === 'High' ? '#ef4444' : (p.priority === 'Normal' ? '#10b981' : '#38bdf8'));
+    
+    const startPercent = Math.max(5, Math.min(60, Math.floor((100 - progress) * 0.4)));
+    const widthPercent = Math.max(30, Math.min(90, progress + 20));
 
-  const DAY_WIDTH = 26;
-  const totalYearDays = months.reduce((acc, m) => acc + m.days, 0);
-
-  const now = new Date();
-  const isCurrentYear = now.getFullYear() === year;
-  const currentMonthIdx = now.getMonth();
-  const currentDayNum = now.getDate();
-
-  let sidebarRowsHtml = '';
-  let monthsHeaderHtml = '';
-  let daysHeaderHtml = '';
-  let gridBgCellsHtml = '';
-
-  months.forEach((m, mIdx) => {
-    const monthWidth = m.days * DAY_WIDTH;
-    monthsHeaderHtml += `<div class="gantt-month-cell" style="width:${monthWidth}px;">${m.name} ${year}</div>`;
-
-    for (let d = 1; d <= m.days; d++) {
-      const dateObj = new Date(year, mIdx, d);
-      const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-      const isToday = isCurrentYear && mIdx === currentMonthIdx && d === currentDayNum;
-
-      const cellClass = `gantt-day-cell ${isWeekend ? 'weekend' : ''} ${isToday ? 'today' : ''}`;
-      daysHeaderHtml += `<div class="${cellClass}">${d}</div>`;
-      gridBgCellsHtml += `<div class="gantt-grid-cell ${isWeekend ? 'weekend' : ''} ${isToday ? 'today' : ''}"></div>`;
-    }
-  });
-
-  const jan1 = new Date(year, 0, 1);
-
-  let taskBarsHtml = '';
-  state.projects.forEach((p) => {
-    let startDateObj = p.start_date ? new Date(p.start_date) : null;
-    let dueDateObj = p.due_date ? new Date(p.due_date) : null;
-
-    if (!dueDateObj || isNaN(dueDateObj.getTime())) {
-      dueDateObj = new Date(year, 11, 31);
-    }
-    if (!startDateObj || isNaN(startDateObj.getTime())) {
-      startDateObj = new Date(dueDateObj);
-      startDateObj.setDate(startDateObj.getDate() - 14);
-    }
-
-    const diffTime = dueDateObj.getTime() - startDateObj.getTime();
-    const durationDays = Math.max(1, Math.round(diffTime / (1000 * 3600 * 24)) + 1);
-
-    const formattedStart = formatDate(p.start_date || startDateObj.toISOString().split('T')[0]);
-    const formattedEnd = formatDate(p.due_date || dueDateObj.toISOString().split('T')[0]);
-
-    sidebarRowsHtml += `
-      <div class="gantt-sidebar-row" onclick="openProjectDetail(${p.id})" style="cursor:pointer;" title="Click to view details">
-        <div style="font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text-main);">
-          <span style="color:#a5b4fc; font-family:var(--font-mono); font-size:10px;">${p.project_code}</span><br>
-          ${escapeHTML(p.title)}
+    html += `
+      <div class="timeline-row">
+        <div class="timeline-project-info" onclick="openProjectDetail(${p.id})" style="cursor:pointer;">
+          <span class="timeline-code">${p.project_code} • ${p.domain}</span>
+          <span class="timeline-title">${escapeHTML(p.title)}</span>
         </div>
-        <div style="color:var(--text-muted); font-size:11px;">${formattedStart}</div>
-        <div style="color:var(--text-muted); font-size:11px;">${formattedEnd}</div>
-        <div><span class="badge badge-date" style="font-size:10px;">${durationDays} day${durationDays === 1 ? '' : 's'}</span></div>
-      </div>
-    `;
-
-    const startDiff = Math.round((startDateObj.getTime() - jan1.getTime()) / (1000 * 3600 * 24));
-    const endDiff = Math.round((dueDateObj.getTime() - jan1.getTime()) / (1000 * 3600 * 24));
-
-    const startColIndex = Math.max(0, Math.min(totalYearDays - 1, startDiff));
-    const endColIndex = Math.max(startColIndex, Math.min(totalYearDays - 1, endDiff));
-    const taskColSpan = Math.max(1, endColIndex - startColIndex + 1);
-
-    const leftPx = startColIndex * DAY_WIDTH;
-    const widthPx = taskColSpan * DAY_WIDTH;
-
-    const statusClass = `gantt-bar-${p.status || 'in_progress'}`;
-
-    taskBarsHtml += `
-      <div class="gantt-grid-row">
-        ${gridBgCellsHtml}
-        <div class="gantt-task-bar ${statusClass}" 
-             style="left: ${leftPx}px; width: ${widthPx}px;" 
-             onclick="openProjectDetail(${p.id})"
-             title="${escapeHTML(p.title)} (${p.project_code})\nStart: ${formattedStart} | End: ${formattedEnd}\nDuration: ${durationDays} days | Status: ${p.status.toUpperCase()} (${p.progress || 0}%)">
-          <span>${escapeHTML(p.project_code)} • ${escapeHTML(p.title)}</span>
-          <span style="font-size:10px; opacity:0.9;">${p.progress || 0}% (${durationDays}d)</span>
+        <div class="timeline-bar-track">
+          <div class="timeline-bar-fill" style="left:${startPercent}%; width:${widthPercent}%; background:${priorityColor};" onclick="openProjectDetail(${p.id})">
+            <span>${p.team_lead || p.domain}</span>
+            <span>${p.progress || 0}%</span>
+          </div>
         </div>
       </div>
     `;
   });
 
-  const ganttHtml = `
-    <div class="gantt-chart-wrapper">
-      <div class="gantt-sidebar-table">
-        <div class="gantt-sidebar-header">
-          <div>Task / Project</div>
-          <div>Start Date</div>
-          <div>End Date</div>
-          <div>Duration</div>
-        </div>
-        <div class="gantt-sidebar-body">
-          ${sidebarRowsHtml}
-        </div>
-      </div>
-      <div class="gantt-calendar-scroll" id="gantt-calendar-scroll-container">
-        <div class="gantt-calendar-header">
-          <div class="gantt-months-row">
-            ${monthsHeaderHtml}
-          </div>
-          <div class="gantt-days-row">
-            ${daysHeaderHtml}
-          </div>
-        </div>
-        <div class="gantt-body-rows">
-          ${taskBarsHtml}
-        </div>
-      </div>
-    </div>
-  `;
-
-  DOM.timelineChartRoot.innerHTML = ganttHtml;
-
-  if (isCurrentYear) {
-    setTimeout(() => {
-      scrollToTodayGantt();
-    }, 100);
-  }
-}
-
-function scrollToTodayGantt() {
-  const container = document.getElementById('gantt-calendar-scroll-container');
-  if (!container) return;
-  const now = new Date();
-  const year = state.timelineYear || now.getFullYear();
-  if (now.getFullYear() !== year) return;
-
-  const jan1 = new Date(year, 0, 1);
-  const diffDays = Math.floor((now.getTime() - jan1.getTime()) / (1000 * 3600 * 24));
-  const scrollPx = Math.max(0, (diffDays * 26) - 200);
-  container.scrollTo({ left: scrollPx, behavior: 'smooth' });
+  DOM.timelineChartRoot.innerHTML = html;
 }
 
 // 5. RENDER LIST VIEW
@@ -1944,12 +1777,366 @@ async function openProjectDetail(projectId) {
       bomWrapper.innerHTML = '<div style="font-size:12px; color:var(--text-dim);">No BOM requisitions submitted for this project.</div>';
     }
 
+    // Fetch & render Project-Specific Timeline Gantt Chart
+    try {
+      const tasksRes = await authFetch(`/api/projects/${id}/tasks`);
+      if (tasksRes.ok) {
+        state.activeProjectTasks = await tasksRes.json();
+      } else {
+        state.activeProjectTasks = [];
+      }
+    } catch(e) {
+      state.activeProjectTasks = [];
+    }
+    renderProjectGanttTimeline(project, state.activeProjectTasks);
+
     renderProjectComments(project.activities || []);
     openModal(DOM.detailModal);
   } catch (err) {
     console.error('Error in openProjectDetail:', err);
     showToast('Failed to open project details', 'error');
   }
+}
+
+// ----------------------------------------------------
+// PROJECT-SPECIFIC GANTT TIMELINE LOGIC
+// ----------------------------------------------------
+
+function formatDateShort(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${day} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function renderProjectGanttTimeline(project, tasks = []) {
+  const container = document.getElementById('detail-gantt-container');
+  const summaryEl = document.getElementById('detail-timeline-summary');
+  if (!container) return;
+
+  let minDate = new Date();
+  let maxDate = new Date();
+
+  if (project.start_date) {
+    const d = new Date(project.start_date);
+    if (!isNaN(d.getTime())) minDate = new Date(d);
+  } else {
+    minDate.setMonth(minDate.getMonth() - 1);
+  }
+
+  if (project.due_date) {
+    const d = new Date(project.due_date);
+    if (!isNaN(d.getTime())) maxDate = new Date(d);
+  } else {
+    maxDate.setMonth(maxDate.getMonth() + 2);
+  }
+
+  tasks.forEach(t => {
+    if (t.start_date) {
+      const d = new Date(t.start_date);
+      if (!isNaN(d.getTime()) && d < minDate) minDate = new Date(d);
+    }
+    if (t.end_date) {
+      const d = new Date(t.end_date);
+      if (!isNaN(d.getTime()) && d > maxDate) maxDate = new Date(d);
+    }
+  });
+
+  const startYear = minDate.getFullYear();
+  const startMonth = minDate.getMonth();
+  const endYear = maxDate.getFullYear();
+  const endMonth = maxDate.getMonth();
+
+  const months = [];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthFullNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+
+  let curY = startYear;
+  let curM = startMonth;
+  while (curY < endYear || (curY === endYear && curM <= endMonth)) {
+    const daysInM = new Date(curY, curM + 1, 0).getDate();
+    months.push({ year: curY, month: curM, name: monthNames[curM], fullName: monthFullNames[curM], days: daysInM });
+    curM++;
+    if (curM > 11) {
+      curM = 0;
+      curY++;
+    }
+  }
+
+  const gridStartDate = new Date(months[0].year, months[0].month, 1);
+  const lastM = months[months.length - 1];
+  const gridEndDate = new Date(lastM.year, lastM.month, lastM.days);
+
+  const overallDurationDays = Math.round((gridEndDate - gridStartDate) / (1000 * 60 * 60 * 24)) + 1;
+
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <strong style="color:var(--text-main); font-weight:700;">${escapeHTML(project.title)}</strong> &bull; 
+      Start: <span style="color:#60a5fa;">${formatDateShort(gridStartDate.toISOString().split('T')[0])}</span> &bull; 
+      End: <span style="color:#60a5fa;">${formatDateShort(gridEndDate.toISOString().split('T')[0])}</span> &bull; 
+      Overall Duration: <span class="gantt-dur-pill" style="font-size:11px; background:rgba(76,201,240,0.2); color:#4cc9f0; padding:2px 8px; border-radius:12px; font-weight:700;">${overallDurationDays} days</span>
+    `;
+  }
+
+  const DAY_WIDTH = 34;
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  let monthsHeaderHTML = '';
+  months.forEach(m => {
+    const widthPx = m.days * DAY_WIDTH;
+    monthsHeaderHTML += `<div class="gantt-month-cell" style="width:${widthPx}px; min-width:${widthPx}px;">${m.fullName} ${m.year} (${m.days}d)</div>`;
+  });
+
+  let daysHeaderHTML = '';
+  const dayCols = [];
+
+  months.forEach(m => {
+    for (let day = 1; day <= m.days; day++) {
+      const dateObj = new Date(m.year, m.month, day);
+      const dayOfWeek = dateObj.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const dateStr = `${m.year}-${String(m.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const isToday = dateStr === todayStr;
+      const isMonthEnd = day === m.days;
+
+      dayCols.push({ dateStr, isWeekend, isToday, isMonthEnd });
+
+      const cellClasses = ['gantt-day-cell'];
+      if (isWeekend) cellClasses.push('is-weekend');
+      if (isToday) cellClasses.push('is-today');
+      if (isMonthEnd) cellClasses.push('gantt-month-separator');
+
+      daysHeaderHTML += `<div class="${cellClasses.join(' ')}" title="${dateStr}">${day}</div>`;
+    }
+  });
+
+  let taskRowsHTML = '';
+
+  if (tasks.length === 0) {
+    taskRowsHTML = `
+      <div class="gantt-row gantt-task-row" style="padding:20px; text-align:center; color:var(--text-dim);">
+        <div class="gantt-fixed-col" style="justify-content:center;">No timeline tasks created yet</div>
+        <div class="gantt-timeline-track" style="padding:15px; color:var(--text-dim);">
+          Click "+ Add Task" button above to add tasks to ${escapeHTML(project.title)}'s timeline.
+        </div>
+      </div>
+    `;
+  } else {
+    tasks.forEach(task => {
+      const tStart = new Date(task.start_date);
+      const tEnd = new Date(task.end_date);
+      
+      const startDiffDays = Math.round((tStart - gridStartDate) / (1000 * 60 * 60 * 24));
+      const durationDays = Math.round((tEnd - tStart) / (1000 * 60 * 60 * 24)) + 1;
+
+      const leftPx = Math.max(0, startDiffDays * DAY_WIDTH);
+      const widthPx = Math.max(durationDays * DAY_WIDTH - 4, 20);
+
+      let trackColsHTML = '';
+      dayCols.forEach(col => {
+        const colClasses = ['gantt-track-day-col'];
+        if (col.isWeekend) colClasses.push('is-weekend');
+        if (col.isToday) colClasses.push('is-today');
+        if (col.isMonthEnd) colClasses.push('gantt-month-separator');
+        trackColsHTML += `<div class="${colClasses.join(' ')}"></div>`;
+      });
+
+      const statusLabel = task.status === 'completed' ? 'Completed' : (task.status === 'pending' ? 'Pending' : 'In Progress');
+
+      taskRowsHTML += `
+        <div class="gantt-row gantt-task-row">
+          <div class="gantt-fixed-col">
+            <div class="gantt-task-name" title="${escapeHTML(task.task_name)}">${escapeHTML(task.task_name)}</div>
+            <div class="gantt-task-sub">
+              <span>${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)}</span>
+              <span class="gantt-dur-pill" style="color:#60a5fa; font-weight:700;">${durationDays}d</span>
+            </div>
+          </div>
+          <div class="gantt-timeline-track">
+            ${trackColsHTML}
+            <div class="gantt-bar bar-${task.status || 'in_progress'}" 
+                 style="left:${leftPx}px; width:${widthPx}px;" 
+                 onclick="openTaskInfoModal(${task.id})"
+                 title="${escapeHTML(task.task_name)} | ${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)} (${durationDays} days) | Status: ${statusLabel}">
+              <span class="gantt-bar-title">${escapeHTML(task.task_name)}</span>
+              <span class="gantt-bar-dur">${durationDays}d</span>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  container.innerHTML = `
+    <div class="gantt-toolbar">
+      <div class="gantt-legend">
+        <span class="legend-item"><span class="legend-dot status-completed"></span> Completed</span>
+        <span class="legend-item"><span class="legend-dot status-in_progress"></span> In Progress</span>
+        <span class="legend-item"><span class="legend-dot status-pending"></span> Pending</span>
+      </div>
+    </div>
+    <div class="gantt-scroll-wrap">
+      <div class="gantt-table">
+        <div class="gantt-row gantt-months-row">
+          <div class="gantt-fixed-col gantt-header-fixed">Task Name & Details</div>
+          <div style="display:flex;">${monthsHeaderHTML}</div>
+        </div>
+        <div class="gantt-row gantt-days-row">
+          <div class="gantt-fixed-col gantt-header-fixed" style="font-size:10px; color:var(--text-muted);">Schedule (Dates)</div>
+          <div style="display:flex;">${daysHeaderHTML}</div>
+        </div>
+        ${taskRowsHTML}
+      </div>
+    </div>
+  `;
+}
+
+function openTaskModalForCreate() {
+  if (!state.activeProjectId) {
+    showToast('Please open a project first', 'error');
+    return;
+  }
+  const modalTitle = document.getElementById('modal-task-title');
+  if (modalTitle) modalTitle.textContent = '➕ Add Project Task';
+
+  const form = document.getElementById('task-form');
+  if (form) form.reset();
+
+  document.getElementById('task-id-input').value = '';
+
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  
+  const end = new Date();
+  end.setDate(end.getDate() + 5);
+  const endStr = end.toISOString().split('T')[0];
+
+  document.getElementById('task-start-input').value = todayStr;
+  document.getElementById('task-end-input').value = endStr;
+  document.getElementById('task-status-input').value = 'in_progress';
+
+  const activeProj = state.projects.find(p => p.id === state.activeProjectId);
+  if (activeProj && activeProj.team_lead) {
+    document.getElementById('task-assigned-input').value = activeProj.team_lead;
+  } else {
+    document.getElementById('task-assigned-input').value = '';
+  }
+
+  updateTaskDurationPreview();
+  openModal(DOM.taskModal);
+}
+
+function updateTaskDurationPreview() {
+  const startVal = document.getElementById('task-start-input').value;
+  const endVal = document.getElementById('task-end-input').value;
+  const preview = document.getElementById('task-duration-preview');
+  if (!preview) return;
+
+  if (startVal && endVal) {
+    const s = new Date(startVal);
+    const e = new Date(endVal);
+    if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+      const dur = Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
+      if (dur < 1) {
+        preview.style.color = '#ef4444';
+        preview.textContent = '⚠️ End Date must be on or after Start Date';
+      } else {
+        preview.style.color = 'var(--primary)';
+        preview.textContent = `Calculated Duration: ${dur} day${dur === 1 ? '' : 's'}`;
+      }
+      return;
+    }
+  }
+  preview.textContent = 'Calculated Duration: -';
+}
+
+async function handleTaskFormSubmit(e) {
+  e.preventDefault();
+  const taskId = document.getElementById('task-id-input').value;
+  const task_name = document.getElementById('task-name-input').value.trim();
+  const start_date = document.getElementById('task-start-input').value;
+  const end_date = document.getElementById('task-end-input').value;
+  const status = document.getElementById('task-status-input').value;
+  const assigned_member = document.getElementById('task-assigned-input').value.trim();
+  const description = document.getElementById('task-desc-input').value.trim();
+
+  if (!task_name || !start_date || !end_date) {
+    showToast('Please fill in all required task fields.', 'error');
+    return;
+  }
+
+  if (new Date(end_date) < new Date(start_date)) {
+    showToast('End Date must be on or after Start Date.', 'error');
+    return;
+  }
+
+  const payload = { task_name, start_date, end_date, status, assigned_member, description };
+
+  try {
+    let res;
+    if (taskId) {
+      res = await authFetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } else {
+      res = await authFetch(`/api/projects/${state.activeProjectId}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
+
+    if (res.ok) {
+      closeModal(DOM.taskModal);
+      showToast(taskId ? 'Task updated successfully' : 'Task added successfully');
+      
+      const tasksRes = await authFetch(`/api/projects/${state.activeProjectId}/tasks`);
+      if (tasksRes.ok) {
+        state.activeProjectTasks = await tasksRes.json();
+      }
+      const activeProj = state.projects.find(p => p.id === state.activeProjectId);
+      if (activeProj) {
+        renderProjectGanttTimeline(activeProj, state.activeProjectTasks);
+      }
+    } else {
+      const json = await res.json();
+      showToast(json.error || 'Failed to save task', 'error');
+    }
+  } catch (err) {
+    console.error('Error saving task:', err);
+    showToast('Failed to save task to server', 'error');
+  }
+}
+
+function openTaskInfoModal(taskId) {
+  const task = state.activeProjectTasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  const titleEl = document.getElementById('task-info-title');
+  const badgeEl = document.getElementById('task-info-status-badge');
+  const pillEl = document.getElementById('task-info-duration-pill');
+  const datesEl = document.getElementById('task-info-dates');
+  const descEl = document.getElementById('task-info-desc');
+  const assignedEl = document.getElementById('task-info-assigned');
+
+  const dur = Math.round((new Date(task.end_date) - new Date(task.start_date)) / (1000 * 60 * 60 * 24)) + 1;
+
+  if (titleEl) titleEl.textContent = task.task_name;
+  if (badgeEl) {
+    const statusLabel = task.status === 'completed' ? 'Completed' : (task.status === 'pending' ? 'Pending' : 'In Progress');
+    badgeEl.textContent = statusLabel;
+    badgeEl.className = `badge ${task.status === 'completed' ? 'badge-normal' : (task.status === 'pending' ? 'badge-date' : 'badge-blue')}`;
+  }
+  if (pillEl) pillEl.textContent = `${dur} day${dur === 1 ? '' : 's'}`;
+  if (datesEl) datesEl.textContent = `${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)}`;
+  if (descEl) descEl.textContent = task.description || 'No description provided for this task.';
+  if (assignedEl) assignedEl.textContent = `Assigned to: ${task.assigned_member || 'Unassigned'}`;
+
+  openModal(DOM.taskInfoModal);
 }
 
 function renderProjectComments(activities) {
@@ -2030,15 +2217,9 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   document.getElementById('form-project-id').value = '';
   document.getElementById('form-status').value = defaultStatus;
   
-  const today = new Date();
   const nextMonth = new Date();
   nextMonth.setDate(nextMonth.getDate() + 30);
-
-  const startDateInput = document.getElementById('form-start-date');
-  const dueDateInput = document.getElementById('form-due-date');
-  if (startDateInput) startDateInput.value = today.toISOString().split('T')[0];
-  if (dueDateInput) dueDateInput.value = nextMonth.toISOString().split('T')[0];
-  updateFormDurationDisplay();
+  document.getElementById('form-due-date').value = nextMonth.toISOString().split('T')[0];
 
   ['preview-image-url', 'preview-github', 'preview-youtube', 'preview-doc-url', 'preview-linkedin'].forEach(id => {
     updateLinkPreviewIcon(id, '');
@@ -2058,12 +2239,7 @@ function openProjectModalForEdit(project) {
   document.getElementById('form-status').value = project.status;
   document.getElementById('form-tags').value = project.tags || '';
   document.getElementById('form-progress').value = project.progress || 0;
-
-  const startDateInput = document.getElementById('form-start-date');
-  if (startDateInput) startDateInput.value = project.start_date || '';
   document.getElementById('form-due-date').value = project.due_date || '';
-  updateFormDurationDisplay();
-
   document.getElementById('form-action-item').value = project.immediate_action || '';
   document.getElementById('form-github').value = project.github_repo || '';
   document.getElementById('form-youtube').value = project.youtube_url || '';
@@ -2114,7 +2290,6 @@ async function handleProjectFormSubmit(e) {
     status: document.getElementById('form-status').value,
     tags: document.getElementById('form-tags').value.trim(),
     progress: Number(document.getElementById('form-progress').value) || 0,
-    start_date: document.getElementById('form-start-date') ? document.getElementById('form-start-date').value : '',
     due_date: document.getElementById('form-due-date').value,
     immediate_action: document.getElementById('form-action-item').value.trim(),
     github_repo: document.getElementById('form-github').value.trim(),

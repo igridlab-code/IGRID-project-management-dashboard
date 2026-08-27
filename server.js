@@ -602,6 +602,86 @@ app.put('/api/bom/:id/status', requireAuth, (req, res) => {
   });
 });
 
+// ----------------------------------------------------
+// PROJECT-SPECIFIC TIMELINE TASKS ENDPOINTS
+// ----------------------------------------------------
+
+// GET TASKS FOR SPECIFIC PROJECT
+app.get('/api/projects/:id/tasks', requireAuth, (req, res) => {
+  const { id } = req.params;
+  db.all('SELECT * FROM project_tasks WHERE project_id = ? ORDER BY start_date ASC, id ASC', [id], (err, tasks) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(tasks || []);
+  });
+});
+
+// CREATE TASK FOR SPECIFIC PROJECT
+app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const { task_name, start_date, end_date, status, description, assigned_member } = req.body;
+
+  if (!task_name || !start_date || !end_date) {
+    return res.status(400).json({ error: 'Task Name, Start Date, and End Date are required.' });
+  }
+
+  db.get('SELECT project_code FROM projects WHERE id = ?', [id], (err, proj) => {
+    if (err || !proj) return res.status(404).json({ error: 'Project not found' });
+
+    const sql = `
+      INSERT INTO project_tasks (project_id, project_code, task_name, start_date, end_date, status, description, assigned_member)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    db.run(
+      sql,
+      [id, proj.project_code, task_name.trim(), start_date, end_date, status || 'in_progress', (description || '').trim(), (assigned_member || '').trim()],
+      function(err2) {
+        if (err2) return res.status(500).json({ error: err2.message });
+        res.status(201).json({ id: this.lastID, message: 'Task created successfully.' });
+      }
+    );
+  });
+});
+
+// UPDATE TASK
+app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
+  const { taskId } = req.params;
+  const { task_name, start_date, end_date, status, description, assigned_member } = req.body;
+
+  if (!task_name || !start_date || !end_date) {
+    return res.status(400).json({ error: 'Task Name, Start Date, and End Date are required.' });
+  }
+
+  const sql = `
+    UPDATE project_tasks SET
+      task_name = ?,
+      start_date = ?,
+      end_date = ?,
+      status = ?,
+      description = ?,
+      assigned_member = ?
+    WHERE id = ?
+  `;
+
+  db.run(
+    sql,
+    [task_name.trim(), start_date, end_date, status || 'in_progress', (description || '').trim(), (assigned_member || '').trim(), taskId],
+    function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Task updated successfully.' });
+    }
+  );
+});
+
+// DELETE TASK
+app.delete('/api/tasks/:taskId', requireAuth, (req, res) => {
+  const { taskId } = req.params;
+  db.run('DELETE FROM project_tasks WHERE id = ?', [taskId], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Task deleted successfully.' });
+  });
+});
+
 // ADD COMMENT / ACTIVITY
 app.post('/api/projects/:id/comments', requireAuth, (req, res) => {
   const { id } = req.params;
