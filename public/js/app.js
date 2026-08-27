@@ -823,6 +823,37 @@ function initEventListeners() {
     });
   }
 
+  // Gantt Chart Controls & Year Navigation
+  const btnPrevYear = document.getElementById('btn-prev-year');
+  const btnNextYear = document.getElementById('btn-next-year');
+  const btnTodayGantt = document.getElementById('btn-today-gantt');
+
+  if (btnPrevYear) {
+    btnPrevYear.addEventListener('click', () => {
+      state.timelineYear = (state.timelineYear || new Date().getFullYear()) - 1;
+      renderTimeline();
+    });
+  }
+  if (btnNextYear) {
+    btnNextYear.addEventListener('click', () => {
+      state.timelineYear = (state.timelineYear || new Date().getFullYear()) + 1;
+      renderTimeline();
+    });
+  }
+  if (btnTodayGantt) {
+    btnTodayGantt.addEventListener('click', () => {
+      state.timelineYear = new Date().getFullYear();
+      renderTimeline();
+      scrollToTodayGantt();
+    });
+  }
+
+  // Date change listeners for auto duration calculation in project form
+  const startDateInput = document.getElementById('form-start-date');
+  const dueDateInput = document.getElementById('form-due-date');
+  if (startDateInput) startDateInput.addEventListener('change', updateFormDurationDisplay);
+  if (dueDateInput) dueDateInput.addEventListener('change', updateFormDurationDisplay);
+
   // Project Modal Actions
   DOM.openAddTaskModal.addEventListener('click', () => openProjectModalForCreate());
   DOM.closeProjectModal.addEventListener('click', () => closeModal(DOM.projectModal));
@@ -1277,37 +1308,198 @@ function createCardHTML(p) {
 
 // 4. RENDER TIMELINE
 function renderTimeline() {
+state.timelineYear = new Date().getFullYear();
+
+function getDaysInMonth(monthIndex, year) {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+function updateFormDurationDisplay() {
+  const startInput = document.getElementById('form-start-date');
+  const dueInput = document.getElementById('form-due-date');
+  const display = document.getElementById('form-duration-display');
+  if (!display) return;
+
+  const startVal = startInput ? startInput.value : '';
+  const dueVal = dueInput ? dueInput.value : '';
+
+  if (startVal && dueVal) {
+    const s = new Date(startVal);
+    const d = new Date(dueVal);
+    if (!isNaN(s.getTime()) && !isNaN(d.getTime())) {
+      const diffTime = d.getTime() - s.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 3600 * 24)) + 1;
+      const duration = Math.max(1, diffDays);
+      display.textContent = `⏱️ ${duration} Day${duration === 1 ? '' : 's'}`;
+      return;
+    }
+  }
+  display.textContent = '⏱️ Set dates';
+}
+
+function renderTimeline() {
   if (!DOM.timelineChartRoot) return;
+
+  const year = state.timelineYear || new Date().getFullYear();
+  const yearDisplay = document.getElementById('timeline-year-display');
+  if (yearDisplay) yearDisplay.textContent = year;
+
   if (state.projects.length === 0) {
-    DOM.timelineChartRoot.innerHTML = '<div style="padding:20px; color:var(--text-dim);">No projects to display on timeline.</div>';
+    DOM.timelineChartRoot.innerHTML = '<div style="padding:30px; text-align:center; color:var(--text-dim);">No projects found to display on timeline.</div>';
     return;
   }
 
-  let html = '';
-  state.projects.forEach(p => {
-    const progress = p.progress || 0;
-    const priorityColor = p.status === 'completed' ? '#8b5cf6' : (p.priority === 'High' ? '#ef4444' : (p.priority === 'Normal' ? '#10b981' : '#38bdf8'));
-    
-    const startPercent = Math.max(5, Math.min(60, Math.floor((100 - progress) * 0.4)));
-    const widthPercent = Math.max(30, Math.min(90, progress + 20));
+  const months = [
+    { name: 'Jan', days: getDaysInMonth(0, year) },
+    { name: 'Feb', days: getDaysInMonth(1, year) },
+    { name: 'Mar', days: getDaysInMonth(2, year) },
+    { name: 'Apr', days: getDaysInMonth(3, year) },
+    { name: 'May', days: getDaysInMonth(4, year) },
+    { name: 'Jun', days: getDaysInMonth(5, year) },
+    { name: 'Jul', days: getDaysInMonth(6, year) },
+    { name: 'Aug', days: getDaysInMonth(7, year) },
+    { name: 'Sep', days: getDaysInMonth(8, year) },
+    { name: 'Oct', days: getDaysInMonth(9, year) },
+    { name: 'Nov', days: getDaysInMonth(10, year) },
+    { name: 'Dec', days: getDaysInMonth(11, year) }
+  ];
 
-    html += `
-      <div class="timeline-row">
-        <div class="timeline-project-info" onclick="openProjectDetail(${p.id})" style="cursor:pointer;">
-          <span class="timeline-code">${p.project_code} • ${p.domain}</span>
-          <span class="timeline-title">${escapeHTML(p.title)}</span>
+  const DAY_WIDTH = 26;
+  const totalYearDays = months.reduce((acc, m) => acc + m.days, 0);
+
+  const now = new Date();
+  const isCurrentYear = now.getFullYear() === year;
+  const currentMonthIdx = now.getMonth();
+  const currentDayNum = now.getDate();
+
+  let sidebarRowsHtml = '';
+  let monthsHeaderHtml = '';
+  let daysHeaderHtml = '';
+  let gridBgCellsHtml = '';
+
+  months.forEach((m, mIdx) => {
+    const monthWidth = m.days * DAY_WIDTH;
+    monthsHeaderHtml += `<div class="gantt-month-cell" style="width:${monthWidth}px;">${m.name} ${year}</div>`;
+
+    for (let d = 1; d <= m.days; d++) {
+      const dateObj = new Date(year, mIdx, d);
+      const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+      const isToday = isCurrentYear && mIdx === currentMonthIdx && d === currentDayNum;
+
+      const cellClass = `gantt-day-cell ${isWeekend ? 'weekend' : ''} ${isToday ? 'today' : ''}`;
+      daysHeaderHtml += `<div class="${cellClass}">${d}</div>`;
+      gridBgCellsHtml += `<div class="gantt-grid-cell ${isWeekend ? 'weekend' : ''} ${isToday ? 'today' : ''}"></div>`;
+    }
+  });
+
+  const jan1 = new Date(year, 0, 1);
+
+  let taskBarsHtml = '';
+  state.projects.forEach((p) => {
+    let startDateObj = p.start_date ? new Date(p.start_date) : null;
+    let dueDateObj = p.due_date ? new Date(p.due_date) : null;
+
+    if (!dueDateObj || isNaN(dueDateObj.getTime())) {
+      dueDateObj = new Date(year, 11, 31);
+    }
+    if (!startDateObj || isNaN(startDateObj.getTime())) {
+      startDateObj = new Date(dueDateObj);
+      startDateObj.setDate(startDateObj.getDate() - 14);
+    }
+
+    const diffTime = dueDateObj.getTime() - startDateObj.getTime();
+    const durationDays = Math.max(1, Math.round(diffTime / (1000 * 3600 * 24)) + 1);
+
+    const formattedStart = formatDate(p.start_date || startDateObj.toISOString().split('T')[0]);
+    const formattedEnd = formatDate(p.due_date || dueDateObj.toISOString().split('T')[0]);
+
+    sidebarRowsHtml += `
+      <div class="gantt-sidebar-row" onclick="openProjectDetail(${p.id})" style="cursor:pointer;" title="Click to view details">
+        <div style="font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text-main);">
+          <span style="color:#a5b4fc; font-family:var(--font-mono); font-size:10px;">${p.project_code}</span><br>
+          ${escapeHTML(p.title)}
         </div>
-        <div class="timeline-bar-track">
-          <div class="timeline-bar-fill" style="left:${startPercent}%; width:${widthPercent}%; background:${priorityColor};" onclick="openProjectDetail(${p.id})">
-            <span>${p.team_lead || p.domain}</span>
-            <span>${p.progress || 0}%</span>
-          </div>
+        <div style="color:var(--text-muted); font-size:11px;">${formattedStart}</div>
+        <div style="color:var(--text-muted); font-size:11px;">${formattedEnd}</div>
+        <div><span class="badge badge-date" style="font-size:10px;">${durationDays} day${durationDays === 1 ? '' : 's'}</span></div>
+      </div>
+    `;
+
+    const startDiff = Math.round((startDateObj.getTime() - jan1.getTime()) / (1000 * 3600 * 24));
+    const endDiff = Math.round((dueDateObj.getTime() - jan1.getTime()) / (1000 * 3600 * 24));
+
+    const startColIndex = Math.max(0, Math.min(totalYearDays - 1, startDiff));
+    const endColIndex = Math.max(startColIndex, Math.min(totalYearDays - 1, endDiff));
+    const taskColSpan = Math.max(1, endColIndex - startColIndex + 1);
+
+    const leftPx = startColIndex * DAY_WIDTH;
+    const widthPx = taskColSpan * DAY_WIDTH;
+
+    const statusClass = `gantt-bar-${p.status || 'in_progress'}`;
+
+    taskBarsHtml += `
+      <div class="gantt-grid-row">
+        ${gridBgCellsHtml}
+        <div class="gantt-task-bar ${statusClass}" 
+             style="left: ${leftPx}px; width: ${widthPx}px;" 
+             onclick="openProjectDetail(${p.id})"
+             title="${escapeHTML(p.title)} (${p.project_code})\nStart: ${formattedStart} | End: ${formattedEnd}\nDuration: ${durationDays} days | Status: ${p.status.toUpperCase()} (${p.progress || 0}%)">
+          <span>${escapeHTML(p.project_code)} • ${escapeHTML(p.title)}</span>
+          <span style="font-size:10px; opacity:0.9;">${p.progress || 0}% (${durationDays}d)</span>
         </div>
       </div>
     `;
   });
 
-  DOM.timelineChartRoot.innerHTML = html;
+  const ganttHtml = `
+    <div class="gantt-chart-wrapper">
+      <div class="gantt-sidebar-table">
+        <div class="gantt-sidebar-header">
+          <div>Task / Project</div>
+          <div>Start Date</div>
+          <div>End Date</div>
+          <div>Duration</div>
+        </div>
+        <div class="gantt-sidebar-body">
+          ${sidebarRowsHtml}
+        </div>
+      </div>
+      <div class="gantt-calendar-scroll" id="gantt-calendar-scroll-container">
+        <div class="gantt-calendar-header">
+          <div class="gantt-months-row">
+            ${monthsHeaderHtml}
+          </div>
+          <div class="gantt-days-row">
+            ${daysHeaderHtml}
+          </div>
+        </div>
+        <div class="gantt-body-rows">
+          ${taskBarsHtml}
+        </div>
+      </div>
+    </div>
+  `;
+
+  DOM.timelineChartRoot.innerHTML = ganttHtml;
+
+  if (isCurrentYear) {
+    setTimeout(() => {
+      scrollToTodayGantt();
+    }, 100);
+  }
+}
+
+function scrollToTodayGantt() {
+  const container = document.getElementById('gantt-calendar-scroll-container');
+  if (!container) return;
+  const now = new Date();
+  const year = state.timelineYear || now.getFullYear();
+  if (now.getFullYear() !== year) return;
+
+  const jan1 = new Date(year, 0, 1);
+  const diffDays = Math.floor((now.getTime() - jan1.getTime()) / (1000 * 3600 * 24));
+  const scrollPx = Math.max(0, (diffDays * 26) - 200);
+  container.scrollTo({ left: scrollPx, behavior: 'smooth' });
 }
 
 // 5. RENDER LIST VIEW
@@ -1838,9 +2030,15 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   document.getElementById('form-project-id').value = '';
   document.getElementById('form-status').value = defaultStatus;
   
+  const today = new Date();
   const nextMonth = new Date();
   nextMonth.setDate(nextMonth.getDate() + 30);
-  document.getElementById('form-due-date').value = nextMonth.toISOString().split('T')[0];
+
+  const startDateInput = document.getElementById('form-start-date');
+  const dueDateInput = document.getElementById('form-due-date');
+  if (startDateInput) startDateInput.value = today.toISOString().split('T')[0];
+  if (dueDateInput) dueDateInput.value = nextMonth.toISOString().split('T')[0];
+  updateFormDurationDisplay();
 
   ['preview-image-url', 'preview-github', 'preview-youtube', 'preview-doc-url', 'preview-linkedin'].forEach(id => {
     updateLinkPreviewIcon(id, '');
@@ -1860,7 +2058,12 @@ function openProjectModalForEdit(project) {
   document.getElementById('form-status').value = project.status;
   document.getElementById('form-tags').value = project.tags || '';
   document.getElementById('form-progress').value = project.progress || 0;
+
+  const startDateInput = document.getElementById('form-start-date');
+  if (startDateInput) startDateInput.value = project.start_date || '';
   document.getElementById('form-due-date').value = project.due_date || '';
+  updateFormDurationDisplay();
+
   document.getElementById('form-action-item').value = project.immediate_action || '';
   document.getElementById('form-github').value = project.github_repo || '';
   document.getElementById('form-youtube').value = project.youtube_url || '';
@@ -1911,6 +2114,7 @@ async function handleProjectFormSubmit(e) {
     status: document.getElementById('form-status').value,
     tags: document.getElementById('form-tags').value.trim(),
     progress: Number(document.getElementById('form-progress').value) || 0,
+    start_date: document.getElementById('form-start-date') ? document.getElementById('form-start-date').value : '',
     due_date: document.getElementById('form-due-date').value,
     immediate_action: document.getElementById('form-action-item').value.trim(),
     github_repo: document.getElementById('form-github').value.trim(),

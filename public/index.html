@@ -428,15 +428,18 @@
       <!-- 3. TIMELINE (GANTT) VIEW -->
       <div class="view-panel" id="view-timeline">
         <div class="timeline-container">
-          <div class="timeline-controls-bar">
-            <div class="timeline-legend">
-              <span class="legend-item"><span class="legend-dot high-dot"></span> High Priority</span>
-              <span class="legend-item"><span class="legend-dot normal-dot"></span> Normal Priority</span>
-              <span class="legend-item"><span class="legend-dot low-dot"></span> Low Priority</span>
-              <span class="legend-item"><span class="legend-dot completed-dot"></span> Completed</span>
+          <div class="timeline-controls-bar" style="flex-wrap:wrap; gap:16px; align-items:center;">
+            <div class="timeline-year-nav" style="display:flex; align-items:center; gap:8px;">
+              <button class="btn btn-sm btn-secondary" id="btn-prev-year">◀ Prev Year</button>
+              <span class="timeline-year-title" id="timeline-year-display" style="font-size:15px; font-weight:800; color:var(--primary); font-family:var(--font-mono); padding:4px 12px; background:var(--bg-card-sub); border:1px solid var(--border-color); border-radius:var(--radius-sm);">2026</span>
+              <button class="btn btn-sm btn-secondary" id="btn-next-year">Next Year ▶</button>
+              <button class="btn btn-sm btn-primary" id="btn-today-gantt" style="margin-left:6px;">🎯 Scroll to Today</button>
             </div>
-            <div class="timeline-zoom-info">
-              <span>📅 Innovation Sprint 2026 (Jan - May)</span>
+            <div class="timeline-legend">
+              <span class="legend-item"><span class="legend-dot" style="background:#38bdf8;"></span> On Progress</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#34d399;"></span> Completed</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#c084fc;"></span> Testing</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#94a3b8;"></span> In Queue</span>
             </div>
           </div>
           <div class="timeline-chart" id="timeline-chart-root"></div>
@@ -634,18 +637,24 @@
           </div>
 
           <div class="form-row">
-            <div class="form-group col-6">
-              <label for="form-tags">Hashtags (Comma-separated)</label>
-              <input type="text" id="form-tags" placeholder="#ROS2, #EdgeAI, #YOLOv8, #CANBus">
-              <small class="form-help">Type tags starting with #</small>
-            </div>
             <div class="form-group col-3">
+              <label for="form-tags">Hashtags</label>
+              <input type="text" id="form-tags" placeholder="#ROS2, #EdgeAI">
+            </div>
+            <div class="form-group col-2">
               <label for="form-progress">Progress %</label>
               <input type="number" id="form-progress" min="0" max="100" value="0">
             </div>
             <div class="form-group col-3">
-              <label for="form-due-date">Due Date *</label>
-              <input type="date" id="form-due-date" required>
+              <label for="form-start-date">Start Date</label>
+              <input type="date" id="form-start-date">
+            </div>
+            <div class="form-group col-4">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label for="form-due-date" style="margin:0;">Due / End Date *</label>
+                <span id="form-duration-display" style="font-size:11px; font-weight:700; color:var(--primary); font-family:var(--font-mono);">⏱️ Set dates</span>
+              </div>
+              <input type="date" id="form-due-date" required style="margin-top:4px;">
             </div>
           </div>
 
