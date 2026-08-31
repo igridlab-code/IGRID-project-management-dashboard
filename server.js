@@ -483,7 +483,15 @@ app.post('/api/projects', requireAuth, (req, res) => {
     ],
     function(err) {
       if (err) return res.status(500).json({ error: err.message });
-      res.status(201).json({ id: this.lastID, project_code: code, message: 'Project created successfully.' });
+      const createdId = this.lastID;
+      if (req.user && req.user.role === 'student') {
+        db.run(
+          'UPDATE students SET assigned_project = ?, project_title = ? WHERE user_id = ? OR LOWER(email) = ?',
+          [code, title, req.user.id, (req.user.email || '').toLowerCase()],
+          () => {}
+        );
+      }
+      res.status(201).json({ id: createdId, project_code: code, message: 'Project created successfully.' });
     }
   );
 });

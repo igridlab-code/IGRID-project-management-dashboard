@@ -274,7 +274,7 @@ function updateUserNavbarUI() {
 
     if (!isAdmin) {
       if (openAddStudentBtn) openAddStudentBtn.style.display = 'none';
-      if (openAddProjectBtn) openAddProjectBtn.style.display = 'none';
+      if (openAddProjectBtn) openAddProjectBtn.style.display = 'inline-block';
     } else {
       if (openAddStudentBtn) openAddStudentBtn.style.display = 'inline-block';
       if (openAddProjectBtn) openAddProjectBtn.style.display = 'inline-block';
@@ -3020,10 +3020,48 @@ function initEditFormLinkProtection() {
 }
 
 function openProjectModalForCreate(defaultStatus = 'in_progress') {
-  DOM.modalProjectTitle.textContent = '🚀 Create Innovation Project / Task';
+  if (isUserPublic()) {
+    showToast('Please sign in to create a new project.', 'info');
+    setTimeout(() => { window.location.href = '/login'; }, 800);
+    return;
+  }
+
+  const isStudent = isUserStudent();
+  const isAdmin = isUserAdmin();
+
+  if (DOM.modalProjectTitle) {
+    DOM.modalProjectTitle.textContent = isStudent
+      ? '🚀 Create Student Innovation Project'
+      : '🚀 Create New Lab Project';
+  }
+
   DOM.projectForm.reset();
   document.getElementById('form-project-id').value = '';
+
+  // Re-enable all inputs that might have been disabled during edit mode
+  [
+    'form-code', 'form-title', 'form-description', 'form-domain',
+    'form-priority', 'form-status', 'form-tags', 'form-progress',
+    'form-start-date', 'form-due-date', 'form-action-item',
+    'form-team-name', 'form-team-lead'
+  ].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+
+  const saveBtn = document.getElementById('save-project-btn');
+  if (saveBtn) {
+    saveBtn.innerHTML = '🚀 Create Project';
+  }
+
   document.getElementById('form-status').value = defaultStatus;
+
+  if (isStudent && state.currentUser) {
+    const leadEl = document.getElementById('form-team-lead');
+    if (leadEl) {
+      leadEl.value = state.currentUser.name || state.currentUser.email.split('@')[0];
+    }
+  }
   
   const today = new Date();
   const nextMonth = new Date();
