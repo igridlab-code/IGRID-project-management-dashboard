@@ -27,14 +27,7 @@ function log(msg) {
   } catch(e) {}
 }
 
-// 0. Auto-clean port 3000 conflicts before starting
-try {
-  if (process.platform === 'win32') {
-    execSync('powershell -Command "$p = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue; if ($p) { $p | ForEach-Object { if ($_.OwningProcess -ne $PID -and $_.OwningProcess -gt 0) { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } } }"', { stdio: 'ignore' });
-  }
-} catch(e) {}
-
-// Configuration
+// Configuration & Environment Variables
 let config = {
   ngrok_domain: 'kabob-suspect-mandate.ngrok-free.dev',
   ngrok_token: '3Hr56NkQmK7fScedP090Ry6c8ll_78W6QjADbCB92cWhD8ZpT',
@@ -48,10 +41,24 @@ if (fs.existsSync(configFile)) {
   } catch(e) {}
 }
 
-const PERMANENT_PUBLIC_URL = `https://${config.ngrok_domain}`;
+const PORT = parseInt(process.env.PORT || config.port || '3000', 10);
+const NGROK_DOMAIN = process.env.NGROK_DOMAIN || config.ngrok_domain || 'kabob-suspect-mandate.ngrok-free.dev';
+const NGROK_AUTHTOKEN = process.env.NGROK_AUTHTOKEN || process.env.NGROK_TOKEN || config.ngrok_token || '3Hr56NkQmK7fScedP090Ry6c8ll_78W6QjADbCB92cWhD8ZpT';
+const PERMANENT_PUBLIC_URL = `https://${NGROK_DOMAIN}`;
+
+// 0. Auto-clean configured port conflicts before starting
+function cleanPort(portToClean) {
+  try {
+    if (process.platform === 'win32') {
+      execSync(`powershell -Command "$p = Get-NetTCPConnection -LocalPort ${portToClean} -ErrorAction SilentlyContinue; if ($p) { $p | ForEach-Object { if ($_.OwningProcess -ne $PID -and $_.OwningProcess -gt 0) { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } } }"`, { stdio: 'ignore' });
+    }
+  } catch(e) {}
+}
+cleanPort(PORT);
 
 log('======================================================');
 log('🚀 Starting IGRID Lab Master Supervisor Service');
+log(`💻 Local Port: ${PORT}`);
 log(`🌐 Permanent Public Domain: ${PERMANENT_PUBLIC_URL}`);
 log('======================================================');
 
@@ -61,24 +68,17 @@ savePublicUrl(PERMANENT_PUBLIC_URL, true);
 let serverProcess = null;
 let isExiting = false;
 
-function cleanPort3000() {
-  try {
-    if (process.platform === 'win32') {
-      execSync('powershell -Command "Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Where-Object { $_ -ne $PID -and $_ -gt 0 } | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"', { stdio: 'ignore' });
-    }
-  } catch(e) {}
-}
-
 function startServer() {
   if (isExiting) return;
   if (serverProcess && !serverProcess.killed) {
     return;
   }
 
-  cleanPort3000();
-  log('Starting Express backend server (server.js)...');
+  cleanPort(PORT);
+  log(`Starting Express backend server on port ${PORT} (server.js)...`);
   serverProcess = spawn('node', ['server.js'], {
     cwd: projectDir,
+    env: { ...process.env, PORT: String(PORT) },
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
@@ -109,21 +109,21 @@ async function startNgrokSdk() {
   if (ngrokListener) return;
   try {
     const ngrok = require('@ngrok/ngrok');
-    log(`Connecting to Ngrok cloud for domain ${config.ngrok_domain}...`);
+    log(`Connecting to Ngrok cloud for domain ${NGROK_DOMAIN}...`);
 
     ngrokSession = await new ngrok.SessionBuilder()
-      .authtoken(config.ngrok_token)
+      .authtoken(NGROK_AUTHTOKEN)
       .connect();
 
     ngrokListener = await ngrokSession.httpEndpoint()
-      .domain(config.ngrok_domain)
+      .domain(NGROK_DOMAIN)
       .listen();
 
     const liveUrl = ngrokListener.url();
     log(`🎉 NGROK CONNECTED SUCCESSFULLY! Live URL: ${liveUrl}`);
     
-    // Forward traffic to local server on port 3000
-    ngrokListener.forward(`http://localhost:${config.port || 3000}`);
+    // Forward traffic to local server on configured port
+    ngrokListener.forward(`http://localhost:${PORT}`);
 
     savePublicUrl(liveUrl, true);
   } catch (err) {
@@ -147,10 +147,10 @@ ${publicUrl}
 (This link is fixed and will NEVER change)
 
 💻 LOCAL COMPUTER LINK:
-http://localhost:3000
+http://localhost:${PORT}
 
 📡 LOCAL WI-FI / LAB NETWORK LINK:
-http://192.168.0.164:3000
+http://192.168.0.164:${PORT}
 
 Status: Active & Synchronized
 Updated: ${new Date().toLocaleString()}
@@ -161,8 +161,8 @@ Updated: ${new Date().toLocaleString()}
   const tunnelInfo = {
     public_url: publicUrl,
     is_permanent: isPermanent,
-    local_url: 'http://localhost:3000',
-    lan_url: 'http://192.168.0.164:3000',
+    local_url: `http://localhost:${PORT}`,
+    lan_url: `http://192.168.0.164:${PORT}`,
     updated_at: new Date().toISOString()
   };
   fs.writeFileSync(tunnelJsonFile, JSON.stringify(tunnelInfo, null, 2), 'utf8');

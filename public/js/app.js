@@ -248,13 +248,25 @@ async function authFetch(url, options = {}) {
   }
   options.headers = headers;
 
-  const res = await fetch(url, options);
-  if (res.status === 401 && options.method && options.method !== 'GET') {
-    showToast('Please sign in as a student or administrator to make changes.', 'error');
-    setTimeout(() => { window.location.href = '/login'; }, 1200);
-    throw new Error('Unauthorized');
+  const baseUrl = (window.API_BASE_URL || '').replace(/\/$/, '');
+  const fullUrl = (url.startsWith('http://') || url.startsWith('https://')) 
+    ? url 
+    : `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+
+  try {
+    const res = await fetch(fullUrl, options);
+    if (res.status === 401 && options.method && options.method !== 'GET') {
+      showToast('Please sign in as a student or administrator to make changes.', 'error');
+      setTimeout(() => { window.location.href = '/login'; }, 1200);
+      throw new Error('Unauthorized');
+    }
+    return res;
+  } catch (err) {
+    if (err.message !== 'Unauthorized') {
+      console.warn(`[API Connection Warning] ${url}:`, err.message || err);
+    }
+    throw err;
   }
-  return res;
 }
 
 function updateUserNavbarUI() {
