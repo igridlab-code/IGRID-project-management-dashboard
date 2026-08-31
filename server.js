@@ -638,13 +638,14 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
   });
 });
 
-// UPDATE PROJECT STATUS (ADMIN ONLY)
-app.put('/api/projects/:id/status', requireAuth, requireAdmin, (req, res) => {
+// UPDATE PROJECT STATUS / STAGE (ADMIN ONLY)
+const handleProjectStageUpdate = (req, res) => {
   const { id } = req.params;
-  const { status, progress } = req.body;
+  const status = req.body.status || req.body.stage;
+  const progress = req.body.progress;
 
   if (!['in_queue', 'in_progress', 'testing', 'completed'].includes(status)) {
-    return res.status(400).json({ error: 'Invalid status' });
+    return res.status(400).json({ error: 'Invalid status/stage. Must be one of: in_queue, in_progress, testing, completed.' });
   }
 
   let newProgress = progress;
@@ -666,14 +667,19 @@ app.put('/api/projects/:id/status', requireAuth, requireAdmin, (req, res) => {
   db.run(sql, [status, newProgress, id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
 
+    const adminName = (req.user && req.user.name) ? req.user.name : 'Lab Coordinator';
     db.run(
       'INSERT INTO activities (project_id, author, author_role, message, type) VALUES (?, ?, ?, ?, ?)',
-      [id, 'Lab Admin', 'Coordinator', `Moved status to ${status.replace('_', ' ').toUpperCase()} (Progress: ${newProgress}%)`, 'status_change']
+      [id, adminName, 'Coordinator', `Moved status to ${status.replace('_', ' ').toUpperCase()} (Progress: ${newProgress}%)`, 'status_change']
     );
 
-    res.json({ message: 'Status updated', status, progress: newProgress });
+    res.json({ message: 'Stage updated successfully', status, progress: newProgress });
   });
-});
+};
+
+app.put('/api/projects/:id/status', requireAuth, requireAdmin, handleProjectStageUpdate);
+app.patch('/api/projects/:id/status', requireAuth, requireAdmin, handleProjectStageUpdate);
+app.patch('/api/projects/:id/stage', requireAuth, requireAdmin, handleProjectStageUpdate);
 
 // DELETE PROJECT (ADMIN ONLY)
 app.delete('/api/projects/:id', requireAuth, requireAdmin, (req, res) => {

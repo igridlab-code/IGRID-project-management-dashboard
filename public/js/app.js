@@ -1444,10 +1444,17 @@ function createCardHTML(p) {
   if (p.bom_status === 'Approved') bomIcon = '<span style="color:#10b981;" title="BOM Approved">✓ BOM</span>';
   else if (p.bom_status === 'Submitted') bomIcon = '<span style="color:#f59e0b;" title="BOM Pending Review">⏳ BOM</span>';
 
+  const isAdmin = isUserAdmin();
+  const draggableAttrs = isAdmin ? 'draggable="true" ondragstart="handleDragStart(event)" ondragend="handleDragEnd(event)"' : 'draggable="false"';
+  const stageLockIcon = !isAdmin ? '<span title="🔒 Stage changes are restricted to Administrator" style="font-size: 11px; opacity: 0.65; cursor: default;">🔒</span>' : '';
+
   return `
-    <div class="kanban-card" draggable="true" data-id="${p.id}" ondragstart="handleDragStart(event)" ondragend="handleDragEnd(event)">
+    <div class="kanban-card" ${draggableAttrs} data-id="${p.id}" ${!isAdmin ? 'title="Click to view details (Stage moves restricted to Admin)"' : 'title="Drag to change stage or click for details"'}>
       <div class="card-top-bar">
-        <span class="card-id-code">${p.project_code}</span>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          ${stageLockIcon}
+          <span class="card-id-code">${p.project_code}</span>
+        </div>
         <div class="card-badges-right">
           <span class="badge ${priorityClass}">${p.priority}</span>
           ${formattedDate ? `<span class="badge badge-due-date ${isOverdue ? 'overdue' : ''}">📅 ${formattedDate}</span>` : ''}
@@ -2282,9 +2289,14 @@ function updateStatsSummary() {
 }
 
 // ----------------------------------------------------
-// DRAG & DROP HANDLERS (KANBAN)
+// DRAG & DROP HANDLERS (KANBAN - ADMIN ONLY)
 // ----------------------------------------------------
 function handleDragStart(e) {
+  if (!isUserAdmin()) {
+    e.preventDefault();
+    showToast('Stage changes are restricted to Administrator.', 'warning');
+    return false;
+  }
   state.draggedCardId = Number(e.target.getAttribute('data-id'));
   e.target.classList.add('dragging');
   e.dataTransfer.setData('text/plain', state.draggedCardId);
@@ -2296,6 +2308,7 @@ function handleDragEnd(e) {
 }
 
 function handleDragOver(e) {
+  if (!isUserAdmin()) return;
   e.preventDefault();
   e.currentTarget.classList.add('drag-over');
 }
@@ -2307,37 +2320,51 @@ function handleDragLeave(e) {
 async function handleDrop(e, targetStatus) {
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
+
+  if (!isUserAdmin()) {
+    showToast('Access denied: Only administrator can change project stage.', 'error');
+    return;
+  }
+
   const projectId = state.draggedCardId;
   if (!projectId) return;
 
   const project = state.projects.find(p => p.id === projectId);
   if (project && project.status !== targetStatus) {
-    project.status = targetStatus;
-    if (targetStatus === 'completed') project.progress = 100;
-    else if (targetStatus === 'in_queue') project.progress = 15;
-    else if (targetStatus === 'in_progress' && project.progress < 30) project.progress = 50;
-    else if (targetStatus === 'testing' && project.progress < 70) project.progress = 85;
+    const oldStatus = project.status;
+    const confirmMove = confirm(`Move project "${project.title}" (${project.project_code}) from ${formatStatus(oldStatus)} to ${formatStatus(targetStatus)} stage?`);
+    if (!confirmMove) {
+      return;
+    }
 
-    // Immediate optimistic update across all views
-    renderAllViews();
-    updateStatsSummary();
+    let newProgress = project.progress;
+    if (targetStatus === 'completed') newProgress = 100;
+    else if (targetStatus === 'in_queue') newProgress = Math.min(project.progress || 0, 20);
+    else if (targetStatus === 'in_progress' && (project.progress || 0) < 30) newProgress = 50;
+    else if (targetStatus === 'testing' && (project.progress || 0) < 70) newProgress = 85;
 
     try {
       const res = await authFetch(`/api/projects/${projectId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: targetStatus, progress: project.progress })
+        body: JSON.stringify({ status: targetStatus, progress: newProgress })
       });
       if (res.ok) {
         showToast(`Moved ${project.project_code} to ${formatStatus(targetStatus)}`);
-        // Re-fetch to ensure server state consistency across views
+        project.status = targetStatus;
+        project.progress = newProgress;
         await Promise.all([fetchProjects(), fetchNotifications()]);
         renderAllViews();
         updateStatsSummary();
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        showToast(errJson.error || 'Failed to update stage on server', 'error');
+        renderAllViews();
       }
     } catch (err) {
       console.error(err);
       showToast('Failed to update status on server', 'error');
+      renderAllViews();
     }
   }
 }
