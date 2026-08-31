@@ -25,12 +25,12 @@ function makeRequest(pathStr, options = {}, body = null) {
 async function runTests() {
   console.log('🧪 Starting Admin Student Profile Management Verification Tests...\n');
 
-  // 1️⃣ Authenticate Admin User (Try Login first, fallback to Signup)
+  // 1️⃣ Authenticate Admin User
   let adminToken = null;
   let adminRes = await makeRequest('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
-  }, { email: 'kaviyaarumugam541@gmail.com', password: 'AdminPassword123!' });
+  }, { email: 'admin@igridlab.edu.in', password: 'Admin@123' });
 
   if (adminRes.statusCode === 200 && adminRes.json && adminRes.json.token) {
     adminToken = adminRes.json.token;

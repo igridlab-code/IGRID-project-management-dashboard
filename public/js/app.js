@@ -191,7 +191,7 @@ function isUserAdmin() {
   if (!state.currentUser) return false;
   const role = (state.currentUser.role || '').toLowerCase();
   const email = (state.currentUser.email || '').toLowerCase();
-  return role === 'admin' || email === 'kaviyaarumugam541@gmail.com' || email.includes('admin');
+  return role === 'admin' || email === 'admin@igridlab.edu.in';
 }
 
 function isUserStudent() {
@@ -356,7 +356,7 @@ function initChatbotWidget() {
   if (!toggleBtn || !panel) return;
 
   if (scopedLabel && state.currentUser) {
-    const isAdmin = state.currentUser.email === 'kaviyaarumugam541@gmail.com' || state.currentUser.role === 'admin';
+    const isAdmin = isUserAdmin();
     scopedLabel.textContent = isAdmin ? '🌐 Admin Lab-Wide Context' : `👥 Scoped to User: ${state.currentUser.email}`;
   }
 
@@ -1794,7 +1794,7 @@ function isUserAdmin() {
   if (!state.currentUser) return false;
   const role = (state.currentUser.role || '').toLowerCase();
   const email = (state.currentUser.email || '').toLowerCase();
-  return role === 'admin' || email === 'kaviyaarumugam541@gmail.com' || email.includes('admin');
+  return role === 'admin' || email === 'admin@igridlab.edu.in';
 }
 
 // 9. RENDER STUDENTS DIRECTORY

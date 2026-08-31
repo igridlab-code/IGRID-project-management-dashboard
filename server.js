@@ -13,6 +13,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'igrid_lab_dashboard_session_secret
 // Initialize Database
 initDb();
 
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@igridlab.edu.in').toLowerCase();
+
 // Middlewares
 app.use(cors());
 app.use(express.json());
@@ -66,7 +68,11 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  if (!req.user || req.user.role !== 'admin') {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === ADMIN_EMAIL;
+
+  if (!isAdmin) {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
   next();
@@ -95,7 +101,7 @@ app.post('/api/auth/signup', (req, res) => {
   }
 
   let role = 'student';
-  if (cleanEmail === 'kaviyaarumugam541@gmail.com' || cleanEmail.includes('admin') || req.body.role === 'admin') {
+  if (cleanEmail === ADMIN_EMAIL) {
     role = 'admin';
   } else if (req.body.role === 'viewer' || cleanEmail.includes('viewer') || cleanEmail.includes('showcase')) {
     role = 'viewer';
@@ -201,7 +207,7 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const userRole = user.role || (cleanEmail === 'kaviyaarumugam541@gmail.com' || cleanEmail.includes('admin') ? 'admin' : 'student');
+    const userRole = user.role || (cleanEmail === ADMIN_EMAIL ? 'admin' : 'student');
 
     // Find student record if any
     db.get('SELECT id FROM students WHERE user_id = ? OR email = ?', [user.id, cleanEmail], (err2, student) => {
@@ -713,7 +719,7 @@ app.put('/api/students/:id', requireAuth, (req, res) => {
   const reqStudentId = Number(req.params.id);
   const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
   const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
-  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+  const isAdmin = userRole === 'admin' || userEmail === ADMIN_EMAIL;
 
   if (userRole === 'viewer' || userRole === 'public') {
     return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
@@ -815,7 +821,7 @@ app.get('/api/students/:id/calendar', requireAuth, (req, res) => {
 app.post('/api/students/:id/calendar', requireAuth, (req, res) => {
   const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
   const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
-  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+  const isAdmin = userRole === 'admin' || userEmail === ADMIN_EMAIL;
 
   if (!isAdmin) {
     return res.status(403).json({ error: 'Access denied. Only Admins can manage student calendar activities.' });
@@ -843,7 +849,7 @@ app.post('/api/students/:id/calendar', requireAuth, (req, res) => {
 app.put('/api/students/calendar/:activityId', requireAuth, (req, res) => {
   const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
   const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
-  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+  const isAdmin = userRole === 'admin' || userEmail === ADMIN_EMAIL;
 
   if (!isAdmin) {
     return res.status(403).json({ error: 'Access denied. Only Admins can edit calendar activities.' });
@@ -868,7 +874,7 @@ app.put('/api/students/calendar/:activityId', requireAuth, (req, res) => {
 app.delete('/api/students/calendar/:activityId', requireAuth, (req, res) => {
   const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
   const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
-  const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+  const isAdmin = userRole === 'admin' || userEmail === ADMIN_EMAIL;
 
   if (!isAdmin) {
     return res.status(403).json({ error: 'Access denied. Only Admins can delete calendar activities.' });
@@ -942,8 +948,8 @@ app.post('/api/bom', requireAuth, (req, res) => {
   );
 });
 
-// APPROVE / REJECT BOM ITEM
-app.put('/api/bom/:id/status', requireAuth, (req, res) => {
+// APPROVE / REJECT BOM ITEM (ADMIN ONLY)
+app.put('/api/bom/:id/status', requireAuth, requireAdmin, (req, res) => {
   const { id } = req.params;
   const { status, admin_remarks } = req.body;
 
@@ -1241,7 +1247,8 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Message is required.' });
   }
 
-  const isAdmin = req.user.email === 'kaviyaarumugam541@gmail.com' || req.user.role === 'admin';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = (req.user && req.user.role === 'admin') || userEmail === ADMIN_EMAIL;
 
   // 1. ALWAYS query ALL projects from database for project index lookup
   db.all('SELECT * FROM projects', [], async (err, projects) => {

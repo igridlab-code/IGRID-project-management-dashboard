@@ -722,18 +722,19 @@ function seedInitialTasksIfEmpty() {
 function seedDefaultAccounts() {
   const bcrypt = require('bcryptjs');
   const hashAdmin = bcrypt.hashSync('Admin@123', 10);
-  const hashAdminAlt = bcrypt.hashSync('AdminPassword123!', 10);
   const hashViewer = bcrypt.hashSync('Viewer@123', 10);
   const hashStudent = bcrypt.hashSync('password123', 10);
 
   const defaultAccounts = [
     { email: 'admin@igridlab.edu.in', name: 'Admin Coordinator', hash: hashAdmin, role: 'admin' },
-    { email: 'kaviyaarumugam541@gmail.com', name: 'Kaviya Arumugam (Admin)', hash: hashAdminAlt, role: 'admin' },
-    { email: 'admin@igrid.com', name: 'Lab Director', hash: hashAdmin, role: 'admin' },
+    { email: 'kaviyaarumugam541@gmail.com', name: 'Kaviya Arumugam', hash: hashStudent, role: 'student' },
     { email: 'viewer@igridlab.edu.in', name: 'Public Showcase Visitor', hash: hashViewer, role: 'viewer' },
     { email: 'showcase@igrid.lab', name: 'Public Viewer', hash: hashStudent, role: 'viewer' },
     { email: 'priya.s@igrid.lab', name: 'Priya Sundaram (Student)', hash: hashStudent, role: 'student' }
   ];
+
+  // Guarantee kaviyaarumugam541@gmail.com is downgraded to student
+  db.run(`UPDATE auth_users SET role = 'student' WHERE LOWER(email) = 'kaviyaarumugam541@gmail.com'`);
 
   defaultAccounts.forEach(acc => {
     db.run(`
@@ -742,7 +743,7 @@ function seedDefaultAccounts() {
       ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, role = excluded.role, name = excluded.name
     `, [acc.email, acc.hash, acc.name, acc.role], (err) => {
       if (err) {
-        db.run(`UPDATE auth_users SET role = ?, password_hash = ? WHERE email = ?`, [acc.role, acc.hash, acc.email]);
+        db.run(`UPDATE auth_users SET role = ?, password_hash = ?, name = ? WHERE email = ?`, [acc.role, acc.hash, acc.name, acc.email]);
       }
     });
   });

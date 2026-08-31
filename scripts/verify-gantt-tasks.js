@@ -29,7 +29,7 @@ async function runTests() {
   let loginRes = await makeRequest('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
-  }, { email: 'kaviyaarumugam541@gmail.com', password: 'AdminPassword123!' });
+  }, { email: 'admin@igridlab.edu.in', password: 'Admin@123' });
 
   let adminToken = loginRes.json ? loginRes.json.token : null;
   if (!adminToken) {
