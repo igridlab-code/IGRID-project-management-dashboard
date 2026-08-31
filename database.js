@@ -745,6 +745,23 @@ function seedDefaultAdminUsers() {
       }
     });
   });
+
+  const hashViewer = bcrypt.hashSync('Viewer@123', 10);
+  const defaultViewers = [
+    { email: 'viewer@igridlab.edu.in', name: 'Public Showcase Visitor', hash: hashViewer }
+  ];
+
+  defaultViewers.forEach(v => {
+    db.run(`
+      INSERT INTO auth_users (email, password_hash, name, role, auth_provider)
+      VALUES (?, ?, ?, 'viewer', 'email')
+      ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, role = 'viewer', name = excluded.name
+    `, [v.email, v.hash, v.name], (err) => {
+      if (err) {
+        db.run(`UPDATE auth_users SET role = 'viewer', password_hash = ? WHERE email = ?`, [v.hash, v.email]);
+      }
+    });
+  });
 }
 
 // Call seedDefaultAdminUsers on DB init

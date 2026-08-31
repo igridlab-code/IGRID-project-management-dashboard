@@ -120,15 +120,16 @@ app.post('/api/auth/signup', (req, res) => {
       return res.status(400).json({ error: 'An account with this email address already exists. Please log in instead.' });
     }
 
-    // Security Rule: Public signup defaults strictly to student.
-    // Only the hard-locked administrator email can receive admin role.
+    // Security Rule: Public signup defaults to student or viewer.
+    // Only hard-locked administrator emails can receive admin role.
     const isHardlockedAdmin = cleanEmail === 'kaviyaarumugam541@gmail.com' || cleanEmail === 'admin@igridlab.edu.in';
-    const role = isHardlockedAdmin ? 'admin' : 'student';
+    const isViewer = !isHardlockedAdmin && (req.body.account_type === 'viewer' || req.body.role === 'viewer');
+    const role = isHardlockedAdmin ? 'admin' : (isViewer ? 'viewer' : 'student');
 
-    const finalTeamName = (custom_team ? custom_team.trim() : (team_name ? team_name.trim() : (req.body.project_title ? req.body.project_title.trim() : '')));
-    const finalProjectCode = project_code ? project_code.trim() : '';
+    const finalTeamName = isViewer ? '' : (custom_team ? custom_team.trim() : (team_name ? team_name.trim() : (req.body.project_title ? req.body.project_title.trim() : '')));
+    const finalProjectCode = isViewer ? '' : (project_code ? project_code.trim() : '');
 
-    if (!isHardlockedAdmin && !finalTeamName && !finalProjectCode) {
+    if (!isHardlockedAdmin && !isViewer && !finalTeamName && !finalProjectCode) {
       return res.status(400).json({ error: 'Please select an existing team from the dropdown or enter a team join code / name.' });
     }
 
@@ -150,6 +151,34 @@ app.post('/api/auth/signup', (req, res) => {
       }
 
       const userId = this.lastID;
+
+      // If viewer, return token directly without student profile
+      if (role === 'viewer') {
+        const token = jwt.sign({
+          id: userId,
+          email: cleanEmail,
+          name: displayName,
+          role: 'viewer',
+          student_id: null,
+          team_name: null,
+          project_code: null
+        }, JWT_SECRET, { expiresIn: '7d' });
+
+        return res.status(201).json({
+          message: 'Public Showcase Viewer account created successfully! Enjoy browsing all innovation projects.',
+          token,
+          verification_token: verificationToken,
+          user: {
+            id: userId,
+            email: cleanEmail,
+            name: displayName,
+            role: 'viewer',
+            student_id: null,
+            team_name: null,
+            project_code: null
+          }
+        });
+      }
       const studentRoll = roll_no ? roll_no.trim() : `REG-${Date.now().toString().slice(-6)}`;
 
       // Match or link to project
@@ -543,6 +572,10 @@ app.get('/api/projects/:id', optionalAuth, (req, res) => {
 
 // CREATE PROJECT (ADMIN OR STUDENT)
 app.post('/api/projects', requireAuth, (req, res) => {
+  if (req.user && req.user.role === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot create projects.' });
+  }
+
   const {
     project_code, title, description, domain, tags, status, priority,
     progress, start_date, due_date, immediate_action, github_repo,
@@ -586,6 +619,11 @@ app.post('/api/projects', requireAuth, (req, res) => {
 app.put('/api/projects/:id', requireAuth, (req, res) => {
   const { id } = req.params;
   const user = req.user;
+
+  if (user && user.role === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot edit projects.' });
+  }
+
   const isAdmin = user && user.role === 'admin';
 
   db.get('SELECT * FROM projects WHERE id = ?', [id], (err, project) => {
@@ -959,6 +997,10 @@ app.get('/api/bom', requireAuth, (req, res) => {
 
 // SUBMIT BOM ITEM
 app.post('/api/bom', requireAuth, (req, res) => {
+  if (req.user && req.user.role === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot submit BOM requisitions.' });
+  }
+
   const {
     project_code, item_name, part_number, category, quantity,
     unit_price, supplier_url, datasheet_url, justification, submitted_by
@@ -993,6 +1035,10 @@ app.post('/api/bom', requireAuth, (req, res) => {
 
 // APPROVE / REJECT BOM ITEM
 app.put('/api/bom/:id/status', requireAuth, (req, res) => {
+  if (req.user && req.user.role === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access.' });
+  }
+
   const { id } = req.params;
   const { status, admin_remarks } = req.body;
 
@@ -1036,6 +1082,10 @@ app.get('/api/public/projects/:id/tasks', (req, res) => {
 
 // CREATE TASK FOR SPECIFIC PROJECT
 app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
+  if (req.user && req.user.role === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot create tasks.' });
+  }
+
   const { id } = req.params;
   const { task_name, start_date, end_date, status, priority, description, assigned_member } = req.body;
 
@@ -1064,6 +1114,10 @@ app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
 
 // UPDATE TASK
 app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
+  if (req.user && req.user.role === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot update tasks.' });
+  }
+
   const { taskId } = req.params;
   const { task_name, start_date, end_date, status, priority, description, assigned_member } = req.body;
 
@@ -1095,6 +1149,10 @@ app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
 
 // DELETE TASK
 app.delete('/api/tasks/:taskId', requireAuth, (req, res) => {
+  if (req.user && req.user.role === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot delete tasks.' });
+  }
+
   const { taskId } = req.params;
   db.run('DELETE FROM project_tasks WHERE id = ?', [taskId], function(err) {
     if (err) return res.status(500).json({ error: err.message });
@@ -1104,6 +1162,10 @@ app.delete('/api/tasks/:taskId', requireAuth, (req, res) => {
 
 // ADD COMMENT / ACTIVITY
 app.post('/api/projects/:id/comments', requireAuth, (req, res) => {
+  if (req.user && req.user.role === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot post comments.' });
+  }
+
   const { id } = req.params;
   const { author, author_role, message } = req.body;
 

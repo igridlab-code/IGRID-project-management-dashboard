@@ -239,59 +239,81 @@
               <span>🎓 <strong>Student Demo Login</strong> (Deliverables Edit)</span>
               <span style="font-size: 10px; opacity: 0.8;">priya.s@igrid.lab</span>
             </button>
+            <button type="button" id="btn-demo-viewer" style="padding: 8px 12px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+              <span>👁️ <strong>Public Viewer Login</strong> (Read-Only Showcase)</span>
+              <span style="font-size: 10px; opacity: 0.8;">Viewer@123</span>
+            </button>
             <a href="/showcase" style="padding: 8px 12px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); color: #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 600; text-decoration: none; text-align: center; display: block;">
-              🌐 <strong>Continue as Public Visitor</strong> (Read-Only Showcase)
+              🌐 <strong>Browse Unregistered</strong> (Public Showcase)
             </a>
           </div>
         </div>
       </form>
 
-      <!-- 2. CREATE STUDENT ACCOUNT FORM -->
+      <!-- 2. CREATE ACCOUNT FORM -->
       <form id="form-signup" style="display: none;">
+        <!-- Account Type Selector -->
         <div class="form-group">
-          <label>Full Name *</label>
-          <input type="text" id="signup-name" placeholder="e.g. Priya Sundaram" required>
+          <label>Select Account Type *</label>
+          <div style="display: flex; gap: 10px; margin-top: 4px;">
+            <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; color: #93c5fd;">
+              <input type="radio" name="signup-role-type" value="student" checked style="accent-color: #3b82f6;">
+              🎓 Student Innovator
+            </label>
+            <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; color: #6ee7b7;">
+              <input type="radio" name="signup-role-type" value="viewer" style="accent-color: #10b981;">
+              👁️ Showcase Viewer
+            </label>
+          </div>
         </div>
 
         <div class="form-group">
-          <label>Email Address * (Personal/College Email)</label>
-          <input type="email" id="signup-email" placeholder="student@gmail.com" required autocomplete="email">
+          <label>Full Name *</label>
+          <input type="text" id="signup-name" placeholder="e.g. Priya Sundaram or John Doe" required>
+        </div>
+
+        <div class="form-group">
+          <label>Email Address *</label>
+          <input type="email" id="signup-email" placeholder="yourname@gmail.com" required autocomplete="email">
           <small style="color: var(--text-dim); font-size: 11px;">You will use this email & password to sign in.</small>
         </div>
 
-        <!-- Team & Project Selector -->
-        <div class="form-group">
-          <label>Select Your Team / Project *</label>
-          <select id="signup-team-select" required style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15)); background: #0f172a; color: var(--text-main, #f8fafc); font-size: 13px;">
-            <option value="" disabled selected>⏳ Loading active teams...</option>
-          </select>
-          <small style="color: var(--text-dim); font-size: 11px;">Joining an existing team connects you to their shared workspace.</small>
-        </div>
-
-        <div class="form-group" id="signup-custom-team-wrap" style="display: none;">
-          <label>Enter Team Code or Custom Team Name *</label>
-          <input type="text" id="signup-custom-team" placeholder="e.g. IGRID-AI-01 or Team AeroViper">
-        </div>
-
-        <div style="display: flex; gap: 10px;">
-          <div class="form-group" style="flex: 1;">
-            <label>Student Roll / Register No.</label>
-            <input type="text" id="signup-roll" placeholder="e.g. 811221104045">
+        <!-- Student-Specific Fields Container -->
+        <div id="signup-student-fields-wrap">
+          <!-- Team & Project Selector -->
+          <div class="form-group">
+            <label>Select Your Team / Project *</label>
+            <select id="signup-team-select" style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15)); background: #0f172a; color: var(--text-main, #f8fafc); font-size: 13px;">
+              <option value="" disabled selected>⏳ Loading active teams...</option>
+            </select>
+            <small style="color: var(--text-dim); font-size: 11px;">Joining an existing team connects you to their shared workspace.</small>
           </div>
-          <div class="form-group" style="flex: 1;">
-            <label>Department</label>
-            <input type="text" id="signup-dept" placeholder="ECE / CSE / AI">
-          </div>
-        </div>
 
-        <div style="display: flex; gap: 10px;">
-          <div class="form-group" style="flex: 1;">
-            <label>Year</label>
-            <input type="text" id="signup-year" placeholder="3rd Year">
+          <div class="form-group" id="signup-custom-team-wrap" style="display: none;">
+            <label>Enter Team Code or Custom Team Name *</label>
+            <input type="text" id="signup-custom-team" placeholder="e.g. IGRID-AI-01 or Team AeroViper">
           </div>
-          <div class="form-group" style="flex: 1;">
-            <label>Phone Number</label>
-            <input type="tel" id="signup-phone" placeholder="+91 98765 43210">
+
+          <div style="display: flex; gap: 10px;">
+            <div class="form-group" style="flex: 1;">
+              <label>Student Roll / Register No.</label>
+              <input type="text" id="signup-roll" placeholder="e.g. 811221104045">
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label>Department</label>
+              <input type="text" id="signup-dept" placeholder="ECE / CSE / AI">
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px;">
+            <div class="form-group" style="flex: 1;">
+              <label>Year</label>
+              <input type="text" id="signup-year" placeholder="3rd Year">
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label>Phone Number</label>
+              <input type="tel" id="signup-phone" placeholder="+91 98765 43210">
+            </div>
           </div>
         </div>
 
@@ -408,6 +430,23 @@
 
     const btnDemoAdmin = document.getElementById('btn-demo-admin');
     const btnDemoStudent = document.getElementById('btn-demo-student');
+    const btnDemoViewer = document.getElementById('btn-demo-viewer');
+    const studentFieldsWrap = document.getElementById('signup-student-fields-wrap');
+    const roleTypeRadios = document.querySelectorAll('input[name="signup-role-type"]');
+    const btnSignupSubmit = document.getElementById('btn-signup-submit');
+
+    roleTypeRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (radio.value === 'viewer') {
+          if (studentFieldsWrap) studentFieldsWrap.style.display = 'none';
+          if (btnSignupSubmit) btnSignupSubmit.textContent = '👁️ Register Showcase Viewer Account';
+        } else {
+          if (studentFieldsWrap) studentFieldsWrap.style.display = 'block';
+          if (btnSignupSubmit) btnSignupSubmit.textContent = '🚀 Register Student Account';
+          if (signupTeamSelect.options.length <= 1) loadSignupTeams();
+        }
+      });
+    });
 
     if (btnDemoAdmin) {
       btnDemoAdmin.onclick = () => {
@@ -427,6 +466,15 @@
       };
     }
 
+    if (btnDemoViewer) {
+      btnDemoViewer.onclick = () => {
+        document.getElementById('login-email').value = 'viewer@igridlab.edu.in';
+        document.getElementById('login-password').value = 'Viewer@123';
+        showToast('Filled Public Viewer Credentials. Logging in...');
+        document.getElementById('btn-login-submit').click();
+      };
+    }
+
     // Form Submissions
     formLogin.onsubmit = async (e) => {
       e.preventDefault();
@@ -442,7 +490,8 @@
         const data = await res.json();
         if (res.ok) {
           localStorage.setItem('igrid_session', data.token);
-          showToast('Welcome back! Redirecting to dashboard...');
+          const roleLabel = data.user && data.user.role === 'viewer' ? 'Showcase Viewer' : (data.user && data.user.role === 'admin' ? 'Administrator' : 'Student Innovator');
+          showToast(`Welcome back, ${data.user.name || 'User'} (${roleLabel})! Redirecting...`);
           setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 600);
         } else {
           showToast(data.error || 'Login failed', true);
@@ -454,19 +503,22 @@
 
     formSignup.onsubmit = async (e) => {
       e.preventDefault();
+      const roleType = document.querySelector('input[name="signup-role-type"]:checked')?.value || 'student';
+      const isViewer = roleType === 'viewer';
+
       const name = document.getElementById('signup-name').value.trim();
       const email = document.getElementById('signup-email').value.trim();
-      const roll_no = document.getElementById('signup-roll').value.trim();
-      const phone = document.getElementById('signup-phone').value.trim();
-      const department = document.getElementById('signup-dept').value.trim();
-      const year = document.getElementById('signup-year').value.trim();
+      const roll_no = isViewer ? '' : document.getElementById('signup-roll').value.trim();
+      const phone = isViewer ? '' : document.getElementById('signup-phone').value.trim();
+      const department = isViewer ? '' : document.getElementById('signup-dept').value.trim();
+      const year = isViewer ? '' : document.getElementById('signup-year').value.trim();
       const password = document.getElementById('signup-password').value;
       const confirmPassword = document.getElementById('signup-confirm-password').value;
 
       const selectedOption = signupTeamSelect.options[signupTeamSelect.selectedIndex];
-      const team_name = selectedOption && selectedOption.dataset.team ? selectedOption.dataset.team : signupTeamSelect.value;
-      const project_code = selectedOption && selectedOption.dataset.code ? selectedOption.dataset.code : '';
-      const custom_team = customTeamInput.value.trim();
+      const team_name = isViewer ? '' : (selectedOption && selectedOption.dataset.team ? selectedOption.dataset.team : signupTeamSelect.value);
+      const project_code = isViewer ? '' : (selectedOption && selectedOption.dataset.code ? selectedOption.dataset.code : '');
+      const custom_team = isViewer ? '' : customTeamInput.value.trim();
 
       if (!name || !email || !password) {
         showToast('Please fill in all required fields (Name, Email, Password)', true);
@@ -483,7 +535,7 @@
         return;
       }
 
-      if (!team_name && !custom_team) {
+      if (!isViewer && !team_name && !custom_team) {
         showToast('Please select your team or enter a team join code', true);
         return;
       }
@@ -497,6 +549,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            account_type: isViewer ? 'viewer' : 'student',
             name, email, roll_no, phone, department, year,
             team_name: team_name === '__custom_team__' ? '' : team_name,
             project_code,
@@ -507,7 +560,8 @@
         const data = await res.json();
         if (res.ok) {
           localStorage.setItem('igrid_session', data.token);
-          showToast('Student Account Created! Redirecting to your team workspace...');
+          const msg = isViewer ? 'Showcase Viewer Account Created! Redirecting...' : 'Student Account Created! Redirecting to team workspace...';
+          showToast(msg);
           setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 700);
         } else {
           showToast(data.error || 'Registration failed', true);
@@ -516,7 +570,7 @@
         showToast('Connection error during signup', true);
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = '🚀 Register Student Account';
+        submitBtn.textContent = isViewer ? '👁️ Register Showcase Viewer Account' : '🚀 Register Student Account';
       }
     };
 

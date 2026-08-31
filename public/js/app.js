@@ -191,16 +191,25 @@ function isUserAdmin() {
   if (!state.currentUser) return false;
   const role = (state.currentUser.role || '').toLowerCase();
   const email = (state.currentUser.email || '').toLowerCase();
-  return role === 'admin' || email === 'kaviyaarumugam541@gmail.com' || email.includes('admin');
+  return role === 'admin' || email === 'kaviyaarumugam541@gmail.com' || email === 'admin@igridlab.edu.in';
+}
+
+function isUserViewer() {
+  if (!state.currentUser) return false;
+  return (state.currentUser.role || '').toLowerCase() === 'viewer';
 }
 
 function isUserStudent() {
   if (!state.currentUser) return false;
-  return state.currentUser.role === 'student' || !isUserAdmin();
+  return (state.currentUser.role || '').toLowerCase() === 'student';
 }
 
 function isUserPublic() {
   return !state.currentUser;
+}
+
+function isUserReadOnly() {
+  return isUserPublic() || isUserViewer();
 }
 
 async function checkSessionOrRedirect() {
@@ -261,14 +270,25 @@ function updateUserNavbarUI() {
 
   if (state.currentUser) {
     const isAdmin = isUserAdmin();
+    const isViewer = isUserViewer();
     const displayName = state.currentUser.name || state.currentUser.email.split('@')[0];
     const teamBadge = state.currentUser.team_name ? ` • ${state.currentUser.team_name}` : '';
 
     if (userNameText) userNameText.textContent = displayName;
-    if (avatarImg) avatarImg.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=${isAdmin ? '6366f1' : '10b981'}&color=fff`;
+    const avatarBg = isAdmin ? '6366f1' : (isViewer ? '10b981' : '3b82f6');
+    if (avatarImg) avatarImg.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=${avatarBg}&color=fff`;
+
     if (userRoleBadge) {
-      userRoleBadge.textContent = isAdmin ? '👑 Admin Coordinator' : `🎓 Student Innovator${teamBadge}`;
-      userRoleBadge.className = `badge ${isAdmin ? 'badge-primary' : 'badge-success'}`;
+      if (isAdmin) {
+        userRoleBadge.textContent = '👑 Admin Coordinator';
+        userRoleBadge.className = 'badge badge-primary';
+      } else if (isViewer) {
+        userRoleBadge.textContent = '👁️ Showcase Viewer (Read-Only)';
+        userRoleBadge.className = 'badge badge-success';
+      } else {
+        userRoleBadge.textContent = `🎓 Student Innovator${teamBadge}`;
+        userRoleBadge.className = 'badge badge-info';
+      }
     }
 
     if (signupBtn) signupBtn.style.display = 'none';
@@ -2465,10 +2485,10 @@ async function openProjectDetail(projectId) {
     // Role-based visibility for Action Buttons (Edit Project, Delete Project, Quick Add BOM, Add Task)
     const isAdmin = isUserAdmin();
     const isStudent = isUserStudent();
-    const isPublic = isUserPublic();
+    const isReadOnly = isUserReadOnly();
     const addTaskBtn = document.getElementById('btn-add-project-task');
 
-    if (isPublic) {
+    if (isReadOnly) {
       if (DOM.btnEditCurrentProject) DOM.btnEditCurrentProject.style.display = 'none';
       if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'none';
       if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'none';
