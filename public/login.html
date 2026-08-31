@@ -254,48 +254,49 @@
         </div>
 
         <div class="form-group">
-          <label>Student ID / Register Number *</label>
-          <input type="text" id="signup-roll" placeholder="e.g. 811221104045" required>
-        </div>
-
-        <div class="form-group">
-          <label>Email Address *</label>
+          <label>Email Address * (Personal/College Email)</label>
           <input type="email" id="signup-email" placeholder="student@gmail.com" required autocomplete="email">
+          <small style="color: var(--text-dim); font-size: 11px;">You will use this email & password to sign in.</small>
         </div>
 
+        <!-- Team & Project Selector -->
         <div class="form-group">
-          <label>Phone Number</label>
-          <input type="tel" id="signup-phone" placeholder="+91 98765 43210">
+          <label>Select Your Team / Project *</label>
+          <select id="signup-team-select" required style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15)); background: #0f172a; color: var(--text-main, #f8fafc); font-size: 13px;">
+            <option value="" disabled selected>⏳ Loading active teams...</option>
+          </select>
+          <small style="color: var(--text-dim); font-size: 11px;">Joining an existing team connects you to their shared workspace.</small>
+        </div>
+
+        <div class="form-group" id="signup-custom-team-wrap" style="display: none;">
+          <label>Enter Team Code or Custom Team Name *</label>
+          <input type="text" id="signup-custom-team" placeholder="e.g. IGRID-AI-01 or Team AeroViper">
         </div>
 
         <div style="display: flex; gap: 10px;">
           <div class="form-group" style="flex: 1;">
-            <label>Department</label>
-            <input type="text" id="signup-dept" placeholder="ECE / CSE / Mech / AI">
+            <label>Student Roll / Register No.</label>
+            <input type="text" id="signup-roll" placeholder="e.g. 811221104045">
           </div>
           <div class="form-group" style="flex: 1;">
-            <label>Year & Section</label>
-            <input type="text" id="signup-year" placeholder="3rd Year (Sec A)">
+            <label>Department</label>
+            <input type="text" id="signup-dept" placeholder="ECE / CSE / AI">
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+          <div class="form-group" style="flex: 1;">
+            <label>Year</label>
+            <input type="text" id="signup-year" placeholder="3rd Year">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label>Phone Number</label>
+            <input type="tel" id="signup-phone" placeholder="+91 98765 43210">
           </div>
         </div>
 
         <div class="form-group">
-          <label>Project Title</label>
-          <input type="text" id="signup-project" placeholder="e.g. Smart Grass Cutter Robot">
-        </div>
-
-        <div class="form-group">
-          <label>Team Members</label>
-          <input type="text" id="signup-team" placeholder="Alex Chen, Sarah Jenkins">
-        </div>
-
-        <div class="form-group">
-          <label>Guide / Mentor Name</label>
-          <input type="text" id="signup-guide" placeholder="Dr. R. Arumugam">
-        </div>
-
-        <div class="form-group">
-          <label>Create Password * (encrypted)</label>
+          <label>Create Password * (min 6 characters)</label>
           <input type="password" id="signup-password" placeholder="At least 6 characters" minlength="6" required autocomplete="new-password">
         </div>
 
@@ -304,7 +305,7 @@
           <input type="password" id="signup-confirm-password" placeholder="Re-enter password" minlength="6" required autocomplete="new-password">
         </div>
 
-        <button type="submit" class="btn-submit" id="btn-signup-submit">Register Student Account</button>
+        <button type="submit" class="btn-submit" id="btn-signup-submit">🚀 Register Student Account</button>
       </form>
 
       <!-- 3. FORGOT PASSWORD FORM -->
@@ -341,13 +342,48 @@
     const linkForgot = document.getElementById('link-forgot');
     const linkBackToLogin = document.getElementById('link-back-to-login');
     const toast = document.getElementById('auth-toast');
+    const signupTeamSelect = document.getElementById('signup-team-select');
+    const customTeamWrap = document.getElementById('signup-custom-team-wrap');
+    const customTeamInput = document.getElementById('signup-custom-team');
 
     function showToast(msg, isError = false) {
       toast.textContent = msg;
       toast.style.background = isError ? '#ef4444' : '#10b981';
       toast.style.display = 'block';
-      setTimeout(() => { toast.style.display = 'none'; }, 4000);
+      setTimeout(() => { toast.style.display = 'none'; }, 4500);
     }
+
+    // Load available teams for signup dropdown
+    async function loadSignupTeams() {
+      try {
+        const res = await fetch('/api/public/teams');
+        if (res.ok) {
+          const teams = await res.json();
+          let html = '<option value="" disabled selected>-- Select Your Team & Project --</option>';
+          teams.forEach(t => {
+            const label = `${t.team_name ? t.team_name + ' • ' : ''}${t.project_code || 'Project'}: ${t.title || 'Untitled'}`;
+            html += `<option value="${t.team_name || t.project_code}" data-code="${t.project_code || ''}" data-team="${t.team_name || ''}">${label}</option>`;
+          });
+          html += '<option value="__custom_team__">➕ Join by Team Code / New Team Name...</option>';
+          signupTeamSelect.innerHTML = html;
+        } else {
+          signupTeamSelect.innerHTML = '<option value="__custom_team__">➕ Enter Team Code / Name</option>';
+        }
+      } catch (err) {
+        signupTeamSelect.innerHTML = '<option value="__custom_team__">➕ Enter Team Code / Name</option>';
+      }
+    }
+
+    signupTeamSelect.addEventListener('change', () => {
+      if (signupTeamSelect.value === '__custom_team__') {
+        customTeamWrap.style.display = 'block';
+        customTeamInput.required = true;
+        customTeamInput.focus();
+      } else {
+        customTeamWrap.style.display = 'none';
+        customTeamInput.required = false;
+      }
+    });
 
     tabLogin.onclick = () => {
       tabLogin.classList.add('active'); tabSignup.classList.remove('active');
@@ -357,6 +393,9 @@
     tabSignup.onclick = () => {
       tabSignup.classList.add('active'); tabLogin.classList.remove('active');
       formSignup.style.display = 'block'; formLogin.style.display = 'none'; formForgot.style.display = 'none';
+      if (signupTeamSelect.options.length <= 1) {
+        loadSignupTeams();
+      }
     };
 
     linkForgot.onclick = () => {
@@ -416,19 +455,26 @@
     formSignup.onsubmit = async (e) => {
       e.preventDefault();
       const name = document.getElementById('signup-name').value.trim();
-      const roll_no = document.getElementById('signup-roll').value.trim();
       const email = document.getElementById('signup-email').value.trim();
+      const roll_no = document.getElementById('signup-roll').value.trim();
       const phone = document.getElementById('signup-phone').value.trim();
       const department = document.getElementById('signup-dept').value.trim();
       const year = document.getElementById('signup-year').value.trim();
-      const project_title = document.getElementById('signup-project').value.trim();
-      const team_members = document.getElementById('signup-team').value.trim();
-      const guide = document.getElementById('signup-guide').value.trim();
       const password = document.getElementById('signup-password').value;
       const confirmPassword = document.getElementById('signup-confirm-password').value;
 
-      if (!name || !roll_no || !email || !password) {
-        showToast('Please fill in all required fields', true);
+      const selectedOption = signupTeamSelect.options[signupTeamSelect.selectedIndex];
+      const team_name = selectedOption && selectedOption.dataset.team ? selectedOption.dataset.team : signupTeamSelect.value;
+      const project_code = selectedOption && selectedOption.dataset.code ? selectedOption.dataset.code : '';
+      const custom_team = customTeamInput.value.trim();
+
+      if (!name || !email || !password) {
+        showToast('Please fill in all required fields (Name, Email, Password)', true);
+        return;
+      }
+
+      if (password.length < 6) {
+        showToast('Password must be at least 6 characters long', true);
         return;
       }
 
@@ -437,27 +483,50 @@
         return;
       }
 
+      if (!team_name && !custom_team) {
+        showToast('Please select your team or enter a team join code', true);
+        return;
+      }
+
+      const submitBtn = document.getElementById('btn-signup-submit');
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Creating Account...';
+
       try {
         const res = await fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            name, roll_no, email, phone, department, year,
-            project_title, team_members, guide, password
+            name, email, roll_no, phone, department, year,
+            team_name: team_name === '__custom_team__' ? '' : team_name,
+            project_code,
+            custom_team,
+            password
           })
         });
         const data = await res.json();
         if (res.ok) {
           localStorage.setItem('igrid_session', data.token);
-          showToast('Student Account Registered! Redirecting...');
-          setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 600);
+          showToast('Student Account Created! Redirecting to your team workspace...');
+          setTimeout(() => { window.location.href = `/?token=${data.token}`; }, 700);
         } else {
           showToast(data.error || 'Registration failed', true);
         }
       } catch (err) {
-        showToast('Connection error', true);
+        showToast('Connection error during signup', true);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '🚀 Register Student Account';
       }
     };
+
+    // Check URL parameters for active tab
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('tab') === 'signup') {
+      tabSignup.click();
+    } else {
+      loadSignupTeams();
+    }
 
     formForgot.onsubmit = async (e) => {
       e.preventDefault();
@@ -484,7 +553,6 @@
     };
 
     // Check if reset token in URL
-    const urlParams = new URLSearchParams(window.location.search);
     const resetToken = urlParams.get('reset_token');
     if (resetToken) {
       const newPassword = prompt('Enter your new password (at least 6 characters):');

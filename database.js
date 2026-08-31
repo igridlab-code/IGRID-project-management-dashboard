@@ -158,6 +158,10 @@ function initDb() {
 
     db.run(`ALTER TABLE auth_users ADD COLUMN name TEXT`, () => {});
     db.run(`ALTER TABLE auth_users ADD COLUMN role TEXT DEFAULT 'student'`, () => {});
+    db.run(`ALTER TABLE auth_users ADD COLUMN team_name TEXT`, () => {});
+    db.run(`ALTER TABLE auth_users ADD COLUMN project_code TEXT`, () => {});
+    db.run(`ALTER TABLE auth_users ADD COLUMN is_verified INTEGER DEFAULT 1`, () => {});
+    db.run(`ALTER TABLE auth_users ADD COLUMN verification_token TEXT`, () => {});
 
     // Domains Table
     db.run(`

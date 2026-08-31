@@ -253,28 +253,31 @@ function updateUserNavbarUI() {
   const userRoleBadge = document.getElementById('user-display-role');
   const userNameText = document.getElementById('user-display-name');
   const avatarImg = document.getElementById('profile-avatar-img');
+  const signupBtn = document.getElementById('btn-signup-nav');
   const loginBtn = document.getElementById('btn-login-nav');
   const logoutBtn = document.getElementById('btn-logout-nav');
   const openAddStudentBtn = document.getElementById('open-add-student-modal');
-  const openAddProjectBtn = document.getElementById('open-project-modal');
+  const openAddProjectBtn = document.getElementById('open-project-modal') || document.getElementById('open-add-task-modal');
 
   if (state.currentUser) {
     const isAdmin = isUserAdmin();
     const displayName = state.currentUser.name || state.currentUser.email.split('@')[0];
+    const teamBadge = state.currentUser.team_name ? ` • ${state.currentUser.team_name}` : '';
 
     if (userNameText) userNameText.textContent = displayName;
     if (avatarImg) avatarImg.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=${isAdmin ? '6366f1' : '10b981'}&color=fff`;
     if (userRoleBadge) {
-      userRoleBadge.textContent = isAdmin ? '👑 Admin Coordinator' : '🎓 Student Innovator';
+      userRoleBadge.textContent = isAdmin ? '👑 Admin Coordinator' : `🎓 Student Innovator${teamBadge}`;
       userRoleBadge.className = `badge ${isAdmin ? 'badge-primary' : 'badge-success'}`;
     }
 
+    if (signupBtn) signupBtn.style.display = 'none';
     if (loginBtn) loginBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = 'inline-block';
 
     if (!isAdmin) {
       if (openAddStudentBtn) openAddStudentBtn.style.display = 'none';
-      if (openAddProjectBtn) openAddProjectBtn.style.display = 'inline-block';
+      if (openAddProjectBtn) openAddProjectBtn.style.display = 'none';
     } else {
       if (openAddStudentBtn) openAddStudentBtn.style.display = 'inline-block';
       if (openAddProjectBtn) openAddProjectBtn.style.display = 'inline-block';
@@ -287,6 +290,7 @@ function updateUserNavbarUI() {
       userRoleBadge.textContent = '🌐 Public Showcase (Read-Only)';
       userRoleBadge.className = 'badge badge-primary';
     }
+    if (signupBtn) signupBtn.style.display = 'inline-block';
     if (loginBtn) loginBtn.style.display = 'inline-block';
     if (logoutBtn) logoutBtn.style.display = 'none';
     if (openAddStudentBtn) openAddStudentBtn.style.display = 'none';
@@ -3020,48 +3024,10 @@ function initEditFormLinkProtection() {
 }
 
 function openProjectModalForCreate(defaultStatus = 'in_progress') {
-  if (isUserPublic()) {
-    showToast('Please sign in to create a new project.', 'info');
-    setTimeout(() => { window.location.href = '/login'; }, 800);
-    return;
-  }
-
-  const isStudent = isUserStudent();
-  const isAdmin = isUserAdmin();
-
-  if (DOM.modalProjectTitle) {
-    DOM.modalProjectTitle.textContent = isStudent
-      ? '🚀 Create Student Innovation Project'
-      : '🚀 Create New Lab Project';
-  }
-
+  DOM.modalProjectTitle.textContent = '🚀 Create Innovation Project / Task';
   DOM.projectForm.reset();
   document.getElementById('form-project-id').value = '';
-
-  // Re-enable all inputs that might have been disabled during edit mode
-  [
-    'form-code', 'form-title', 'form-description', 'form-domain',
-    'form-priority', 'form-status', 'form-tags', 'form-progress',
-    'form-start-date', 'form-due-date', 'form-action-item',
-    'form-team-name', 'form-team-lead'
-  ].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.disabled = false;
-  });
-
-  const saveBtn = document.getElementById('save-project-btn');
-  if (saveBtn) {
-    saveBtn.innerHTML = '🚀 Create Project';
-  }
-
   document.getElementById('form-status').value = defaultStatus;
-
-  if (isStudent && state.currentUser) {
-    const leadEl = document.getElementById('form-team-lead');
-    if (leadEl) {
-      leadEl.value = state.currentUser.name || state.currentUser.email.split('@')[0];
-    }
-  }
   
   const today = new Date();
   const nextMonth = new Date();

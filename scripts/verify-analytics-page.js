@@ -26,13 +26,20 @@ async function runTests() {
   console.log('🧪 Starting Analytics Page & API Verification Tests...\n');
 
   // Authenticate test user
-  const adminEmail = `analytics_tester_${Date.now()}@gmail.com`;
-  const signupRes = await makeRequest('/api/auth/signup', {
+  let loginRes = await makeRequest('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
-  }, { email: adminEmail, password: 'AdminPassword123!' });
+  }, { email: 'admin@igridlab.edu.in', password: 'Admin@123' });
 
-  const token = signupRes.json ? signupRes.json.token : null;
+  let token = loginRes.json ? loginRes.json.token : null;
+  if (!token) {
+    const signupRes = await makeRequest('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }, { name: 'Analytics Admin', email: `analytics_tester_${Date.now()}@gmail.com`, password: 'AdminPassword123!', team_name: 'Lab Admin' });
+    token = signupRes.json ? signupRes.json.token : null;
+  }
+
   if (!token) {
     console.error('❌ FAIL: Could not authenticate test user.');
     process.exit(1);

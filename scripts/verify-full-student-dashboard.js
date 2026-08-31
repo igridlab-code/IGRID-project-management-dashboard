@@ -93,6 +93,7 @@ async function runTests() {
     name: 'Karthik Raja',
     roll_no: `81122110${(regTimestamp + 1).toString().slice(-4)}`,
     email: student2Email,
+    team_name: 'Team 2 (Batch 1)',
     password: 'StudentPass123!'
   });
 
