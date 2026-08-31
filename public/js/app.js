@@ -15,6 +15,7 @@ const state = {
   boms: [],
   domains: [],
   activeProjectTasks: [],
+  allProjectsCache: [],
   currentView: 'board',
   filterDomain: 'All',
   filterTag: '',
@@ -704,6 +705,16 @@ async function fetchProjects() {
 
   const res = await authFetch(`/api/projects?${params.toString()}`);
   state.projects = await res.json();
+
+  // If no filters active, update allProjectsCache
+  if (state.filterDomain === 'All' && state.filterStatus === 'All' && state.filterPriority === 'All' && !state.filterTag && !state.searchQuery) {
+    state.allProjectsCache = [...state.projects];
+  } else if (!state.allProjectsCache || state.allProjectsCache.length === 0) {
+    try {
+      const allRes = await authFetch('/api/projects');
+      state.allProjectsCache = await allRes.json();
+    } catch(e) {}
+  }
 }
 
 async function fetchStudents() {
@@ -802,15 +813,31 @@ function initEventListeners() {
     });
   });
 
-  // Hashtag Cloud Filter
+  // Hashtag Cloud Filter (Single-select / Toggle)
   if (DOM.hashtagCloud) {
     DOM.hashtagCloud.addEventListener('click', async (e) => {
-      if (e.target.classList.contains('hashtag-chip')) {
-        DOM.hashtagCloud.querySelectorAll('.hashtag-chip').forEach(c => c.classList.remove('active'));
-        e.target.classList.add('active');
-        state.filterTag = e.target.getAttribute('data-tag');
-        await fetchProjects();
-        renderAllViews();
+      const chip = e.target.closest('.hashtag-chip');
+      if (!chip) return;
+
+      const tagVal = chip.getAttribute('data-tag') || '';
+
+      // Toggle behavior: clicking active tag resets to all projects
+      if (state.filterTag.toLowerCase() === tagVal.toLowerCase() && tagVal !== '') {
+        state.filterTag = '';
+      } else {
+        state.filterTag = tagVal;
+      }
+
+      await fetchProjects();
+      renderAllViews();
+      if (DOM.filterActiveDot) {
+        DOM.filterActiveDot.style.display = (state.filterDomain !== 'All' || state.filterPriority !== 'All' || state.filterStatus !== 'All' || state.filterTag) ? 'block' : 'none';
+      }
+
+      if (state.filterTag) {
+        showToast(`Filtered by ${state.filterTag} (${state.projects.length} matching)`);
+      } else {
+        showToast('Showing all project tags');
       }
     });
   }
@@ -1110,9 +1137,59 @@ function switchView(viewName) {
 }
 
 // ----------------------------------------------------
-// RENDERING FUNCTIONS
+// RENDERING FUNCTIONS & HASHTAG CLOUD
 // ----------------------------------------------------
+const PRESET_TAGS = ['#all', '#ROS2', '#EdgeAI', '#YOLOv8', '#JetsonOrin', '#PX4', '#LoRaWAN', '#SLAM', '#CANBus', '#FPGA'];
+
+function renderHashtagCloud() {
+  if (!DOM.hashtagCloud) return;
+
+  const dataset = (state.allProjectsCache && state.allProjectsCache.length > 0) ? state.allProjectsCache : state.projects;
+
+  const tagCounts = {};
+  PRESET_TAGS.forEach(tag => {
+    if (tag === '#all') {
+      tagCounts[tag] = dataset.length;
+    } else {
+      const clean = tag.replace('#', '').toLowerCase();
+      tagCounts[tag] = dataset.filter(p => {
+        const pTags = (p.tags || '').toLowerCase();
+        return pTags.includes(clean);
+      }).length;
+    }
+  });
+
+  const activeTag = state.filterTag ? (state.filterTag.startsWith('#') ? state.filterTag : `#${state.filterTag}`) : '#all';
+
+  let html = `<span class="hashtag-label">Tags:</span>`;
+  PRESET_TAGS.forEach(tag => {
+    const isAll = tag === '#all';
+    const isActive = (isAll && (!state.filterTag || state.filterTag === '#all' || state.filterTag === '')) || (!isAll && activeTag.toLowerCase() === tag.toLowerCase());
+    const count = tagCounts[tag] || 0;
+    const tagValue = isAll ? '' : tag;
+    html += `
+      <button type="button" class="hashtag-chip ${isActive ? 'active' : ''}" data-tag="${tagValue}" title="${isAll ? 'Show all projects' : `Filter by ${tag} (${count} projects)`}">
+        <span>${tag}</span>
+        <span class="hashtag-count">${count}</span>
+      </button>
+    `;
+  });
+
+  DOM.hashtagCloud.innerHTML = html;
+}
+
+window.resetTagFilter = async function() {
+  state.filterTag = '';
+  await fetchProjects();
+  renderAllViews();
+  if (DOM.filterActiveDot) {
+    DOM.filterActiveDot.style.display = (state.filterDomain !== 'All' || state.filterPriority !== 'All' || state.filterStatus !== 'All' || state.filterTag) ? 'block' : 'none';
+  }
+  showToast('Showing all projects');
+};
+
 function renderAllViews() {
+  renderHashtagCloud();
   renderKanban();
   renderExecutiveShowcase();
   renderTimeline();
@@ -1390,10 +1467,19 @@ function renderKanban() {
   DOM.countTesting.textContent = cols.testing.length;
   DOM.countCompleted.textContent = cols.completed.length;
 
-  DOM.cardsInQueue.innerHTML = cols.in_queue.map(createCardHTML).join('');
-  DOM.cardsInProgress.innerHTML = cols.in_progress.map(createCardHTML).join('');
-  DOM.cardsTesting.innerHTML = cols.testing.map(createCardHTML).join('');
-  DOM.cardsCompleted.innerHTML = cols.completed.map(createCardHTML).join('');
+  if (state.projects.length === 0) {
+    const activeTagName = state.filterTag || 'the selected criteria';
+    const resetBtn = state.filterTag ? `<div style="margin-top:10px;"><button class="btn btn-secondary" onclick="resetTagFilter()" style="font-size:11px; padding:4px 10px; cursor:pointer;">Reset Filter (#all)</button></div>` : '';
+    DOM.cardsInQueue.innerHTML = `<div class="empty-column-state" style="padding:28px 12px; text-align:center; color:var(--text-dim); font-size:12px;">No projects tagged <strong>${escapeHTML(activeTagName)}</strong> in Queue.${resetBtn}</div>`;
+    DOM.cardsInProgress.innerHTML = `<div class="empty-column-state" style="padding:28px 12px; text-align:center; color:var(--text-dim); font-size:12px;">No projects tagged <strong>${escapeHTML(activeTagName)}</strong> in Progress.</div>`;
+    DOM.cardsTesting.innerHTML = `<div class="empty-column-state" style="padding:28px 12px; text-align:center; color:var(--text-dim); font-size:12px;">No projects tagged <strong>${escapeHTML(activeTagName)}</strong> in Testing.</div>`;
+    DOM.cardsCompleted.innerHTML = `<div class="empty-column-state" style="padding:28px 12px; text-align:center; color:var(--text-dim); font-size:12px;">No projects tagged <strong>${escapeHTML(activeTagName)}</strong> Completed.</div>`;
+  } else {
+    DOM.cardsInQueue.innerHTML = cols.in_queue.length ? cols.in_queue.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
+    DOM.cardsInProgress.innerHTML = cols.in_progress.length ? cols.in_progress.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
+    DOM.cardsTesting.innerHTML = cols.testing.length ? cols.testing.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
+    DOM.cardsCompleted.innerHTML = cols.completed.length ? cols.completed.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
+  }
 
   document.querySelectorAll('.kanban-card').forEach(card => {
     card.addEventListener('click', (e) => {
@@ -1406,11 +1492,19 @@ function renderKanban() {
   document.querySelectorAll('.card-tag-pill').forEach(pill => {
     pill.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const tag = pill.getAttribute('data-tag');
-      state.filterTag = tag;
+      const tag = pill.getAttribute('data-tag') || '';
+      const cleanTag = tag.startsWith('#') ? tag : `#${tag}`;
+      if (state.filterTag.toLowerCase() === cleanTag.toLowerCase()) {
+        state.filterTag = '';
+      } else {
+        state.filterTag = cleanTag;
+      }
       await fetchProjects();
       renderAllViews();
-      showToast(`Filtering by tag ${tag}`);
+      if (DOM.filterActiveDot) {
+        DOM.filterActiveDot.style.display = (state.filterDomain !== 'All' || state.filterPriority !== 'All' || state.filterStatus !== 'All' || state.filterTag) ? 'block' : 'none';
+      }
+      showToast(state.filterTag ? `Filtered by tag ${state.filterTag} (${state.projects.length} matching)` : 'Showing all project tags');
     });
   });
 }

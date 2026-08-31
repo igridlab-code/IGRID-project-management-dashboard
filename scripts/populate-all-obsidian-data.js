@@ -55,20 +55,31 @@ function generateTags(id, title, domain) {
   const tagList = [];
   const t = title.toLowerCase();
 
-  if (domain === 'Robotics & Automation') tagList.push('#Robotics', '#Autonomous', '#SLAM', '#Motors');
-  else if (domain === 'Drones & Vision') tagList.push('#Drones', '#ComputerVision', '#AerialMapping', '#DigitalTwin');
-  else if (domain === 'Biomedical & Healthcare') tagList.push('#Biomedical', '#Healthcare', '#Sensors', '#ESP32');
-  else if (domain === 'AI & Machine Learning') tagList.push('#AI', '#ComputerVision', '#DeepLearning', '#Analytics');
-  else if (domain === 'IoT & Embedded') tagList.push('#IoT', '#Embedded', '#ESP32', '#SmartCampus');
-  else tagList.push('#ERP', '#Software', '#FullStack', '#WebPlatform');
+  if (domain === 'Robotics & Automation' || t.includes('robot') || t.includes('arm')) {
+    tagList.push('#ROS2', '#CANBus', '#SLAM', '#Robotics');
+  } else if (domain === 'Drones & Vision' || t.includes('drone') || t.includes('uav')) {
+    tagList.push('#PX4', '#SLAM', '#Drones', '#EdgeAI');
+  } else if (domain === 'Biomedical & Healthcare' || t.includes('medical') || t.includes('health')) {
+    tagList.push('#LoRaWAN', '#Sensors', '#ESP32', '#Biomedical');
+  } else if (domain === 'AI & Machine Learning' || t.includes('vision') || t.includes('detection') || t.includes('ai')) {
+    tagList.push('#EdgeAI', '#YOLOv8', '#JetsonOrin', '#ComputerVision');
+  } else if (domain === 'IoT & Embedded' || t.includes('mesh') || t.includes('sensor')) {
+    tagList.push('#LoRaWAN', '#IoT', '#ESP32', '#SmartCampus');
+  } else if (t.includes('fpga') || t.includes('dsp') || t.includes('switch')) {
+    tagList.push('#FPGA', '#Embedded', '#CANBus');
+  } else {
+    tagList.push('#EdgeAI', '#Software', '#FullStack');
+  }
 
   if (t.includes('waste')) tagList.push('#GreenCampus');
   if (t.includes('carbon')) tagList.push('#Sustainability');
-  if (t.includes('attendance')) tagList.push('#FaceRecognition');
-  if (t.includes('irrigation')) tagList.push('#AgriTech');
+  if (t.includes('attendance')) tagList.push('#YOLOv8', '#EdgeAI');
+  if (t.includes('irrigation')) tagList.push('#LoRaWAN', '#AgriTech');
   if (t.includes('placement')) tagList.push('#StudentAnalytics');
+  if (t.includes('cleaning') || t.includes('delivery')) tagList.push('#ROS2', '#SLAM');
+  if (t.includes('switch') || t.includes('motor') || t.includes('fpga') || t.includes('hardware')) tagList.push('#FPGA', '#CANBus');
 
-  return Array.from(new Set(tagList)).slice(0, 4).join(' ');
+  return Array.from(new Set(tagList)).slice(0, 5).join(' ');
 }
 
 // Curated prototype photos for flagship showcase cards

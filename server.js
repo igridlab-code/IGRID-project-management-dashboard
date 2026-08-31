@@ -392,9 +392,11 @@ app.get('/api/projects', optionalAuth, (req, res) => {
     params.push(priority);
   }
 
-  if (tag) {
-    sql += ' AND tags LIKE ?';
-    params.push(`%${tag}%`);
+  if (tag && tag !== '#all' && tag !== 'all' && tag !== 'All') {
+    const rawTag = tag.trim();
+    const cleanTag = rawTag.startsWith('#') ? rawTag.slice(1) : rawTag;
+    sql += ' AND (tags LIKE ? OR tags LIKE ?)';
+    params.push(`%#${cleanTag}%`, `%${cleanTag}%`);
   }
 
   if (search) {

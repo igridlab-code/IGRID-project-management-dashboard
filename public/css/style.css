@@ -766,6 +766,8 @@ body {
   align-items: center;
   gap: 6px;
   overflow-x: auto;
+  padding: 4px 0;
+  scrollbar-width: thin;
 }
 
 .hashtag-label {
@@ -774,31 +776,85 @@ body {
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap;
+  margin-right: 2px;
 }
 
 .hashtag-chip {
-  background: var(--bg-card-sub);
-  border: 1px dashed var(--border-color);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 3px 9px;
-  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 9999px;
   cursor: pointer;
-  transition: var(--transition);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  user-select: none;
 }
 
 .hashtag-chip:hover {
-  border-color: var(--primary);
-  background: var(--bg-card-hover);
-  color: var(--text-main);
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  transform: translateY(-1px);
 }
 
 .hashtag-chip.active {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--primary-text);
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
   font-weight: 700;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+}
+
+.hashtag-chip .hashtag-count {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+  min-width: 14px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.hashtag-chip:hover .hashtag-count {
+  background: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+}
+
+.hashtag-chip.active .hashtag-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.card-tag-pill {
+  display: inline-block;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.card-tag-pill:hover {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+  transform: scale(1.05);
 }
 
 /* ==========================================================================
