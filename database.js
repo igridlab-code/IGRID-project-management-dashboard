@@ -158,10 +158,6 @@ function initDb() {
 
     db.run(`ALTER TABLE auth_users ADD COLUMN name TEXT`, () => {});
     db.run(`ALTER TABLE auth_users ADD COLUMN role TEXT DEFAULT 'student'`, () => {});
-    db.run(`ALTER TABLE auth_users ADD COLUMN team_name TEXT`, () => {});
-    db.run(`ALTER TABLE auth_users ADD COLUMN project_code TEXT`, () => {});
-    db.run(`ALTER TABLE auth_users ADD COLUMN is_verified INTEGER DEFAULT 1`, () => {});
-    db.run(`ALTER TABLE auth_users ADD COLUMN verification_token TEXT`, () => {});
 
     // Domains Table
     db.run(`
@@ -723,50 +719,38 @@ function seedInitialTasksIfEmpty() {
   });
 }
 
-function seedDefaultAdminUsers() {
+function seedDefaultAccounts() {
   const bcrypt = require('bcryptjs');
-  const hash1 = bcrypt.hashSync('Admin@123', 10);
-  const hash2 = bcrypt.hashSync('AdminPassword123!', 10);
-
-  const defaultAdmins = [
-    { email: 'admin@igridlab.edu.in', name: 'Admin Coordinator', hash: hash1 },
-    { email: 'kaviyaarumugam541@gmail.com', name: 'Kaviya Arumugam (Admin)', hash: hash2 },
-    { email: 'admin@igrid.com', name: 'Lab Director', hash: hash1 }
-  ];
-
-  defaultAdmins.forEach(adm => {
-    db.run(`
-      INSERT INTO auth_users (email, password_hash, name, role, auth_provider)
-      VALUES (?, ?, ?, 'admin', 'email')
-      ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, role = 'admin', name = excluded.name
-    `, [adm.email, adm.hash, adm.name], (err) => {
-      if (err) {
-        db.run(`UPDATE auth_users SET role = 'admin', password_hash = ? WHERE email = ?`, [adm.hash, adm.email]);
-      }
-    });
-  });
-
+  const hashAdmin = bcrypt.hashSync('Admin@123', 10);
+  const hashAdminAlt = bcrypt.hashSync('AdminPassword123!', 10);
   const hashViewer = bcrypt.hashSync('Viewer@123', 10);
-  const defaultViewers = [
-    { email: 'viewer@igridlab.edu.in', name: 'Public Showcase Visitor', hash: hashViewer }
+  const hashStudent = bcrypt.hashSync('password123', 10);
+
+  const defaultAccounts = [
+    { email: 'admin@igridlab.edu.in', name: 'Admin Coordinator', hash: hashAdmin, role: 'admin' },
+    { email: 'kaviyaarumugam541@gmail.com', name: 'Kaviya Arumugam (Admin)', hash: hashAdminAlt, role: 'admin' },
+    { email: 'admin@igrid.com', name: 'Lab Director', hash: hashAdmin, role: 'admin' },
+    { email: 'viewer@igridlab.edu.in', name: 'Public Showcase Visitor', hash: hashViewer, role: 'viewer' },
+    { email: 'showcase@igrid.lab', name: 'Public Viewer', hash: hashStudent, role: 'viewer' },
+    { email: 'priya.s@igrid.lab', name: 'Priya Sundaram (Student)', hash: hashStudent, role: 'student' }
   ];
 
-  defaultViewers.forEach(v => {
+  defaultAccounts.forEach(acc => {
     db.run(`
       INSERT INTO auth_users (email, password_hash, name, role, auth_provider)
-      VALUES (?, ?, ?, 'viewer', 'email')
-      ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, role = 'viewer', name = excluded.name
-    `, [v.email, v.hash, v.name], (err) => {
+      VALUES (?, ?, ?, ?, 'email')
+      ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, role = excluded.role, name = excluded.name
+    `, [acc.email, acc.hash, acc.name, acc.role], (err) => {
       if (err) {
-        db.run(`UPDATE auth_users SET role = 'viewer', password_hash = ? WHERE email = ?`, [v.hash, v.email]);
+        db.run(`UPDATE auth_users SET role = ?, password_hash = ? WHERE email = ?`, [acc.role, acc.hash, acc.email]);
       }
     });
   });
 }
 
-// Call seedDefaultAdminUsers on DB init
+// Call seedDefaultAccounts on DB init
 db.serialize(() => {
-  seedDefaultAdminUsers();
+  seedDefaultAccounts();
 });
 
-module.exports = { db, initDb, seedDefaultAdminUsers };
+module.exports = { db, initDb, seedDefaultAdminUsers: seedDefaultAccounts, seedDefaultAccounts };

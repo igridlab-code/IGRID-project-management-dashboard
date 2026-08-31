@@ -81,194 +81,100 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// Helper: Public list of active teams & projects for Signup dropdown
-app.get('/api/public/teams', (req, res) => {
-  db.all(`
-    SELECT DISTINCT 
-      id, project_code, title, domain, team_name, team_lead
-    FROM projects 
-    WHERE (team_name IS NOT NULL AND team_name != '') OR (title IS NOT NULL AND title != '')
-    ORDER BY CASE WHEN team_name IS NOT NULL AND team_name != '' THEN 0 ELSE 1 END, team_name ASC, project_code ASC
-  `, [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows || []);
-  });
-});
-
-// 1. SIGNUP (Open student signup with team selection, individual credentials & strict student role)
+// 1. SIGNUP (Email + Password with student profile or viewer creation)
 app.post('/api/auth/signup', (req, res) => {
-  const { email, password, name, roll_no, phone, department, year, section, team_name, project_code, custom_team } = req.body;
+  const { email, password, name, roll_no, phone, department, year, section, project_title, team_members, guide } = req.body;
 
-  if (!email || !password || !name) {
-    return res.status(400).json({ error: 'Full Name, email, and password are required.' });
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
   }
 
   const cleanEmail = email.trim().toLowerCase();
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(cleanEmail)) {
-    return res.status(400).json({ error: 'Please enter a valid email address.' });
-  }
-
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
   }
 
-  // Explicit duplicate email check first
-  db.get('SELECT id FROM auth_users WHERE email = ?', [cleanEmail], (dupErr, existingUser) => {
-    if (dupErr) return res.status(500).json({ error: dupErr.message });
-    if (existingUser) {
-      return res.status(400).json({ error: 'An account with this email address already exists. Please log in instead.' });
+  let role = 'student';
+  if (cleanEmail === 'kaviyaarumugam541@gmail.com' || cleanEmail.includes('admin') || req.body.role === 'admin') {
+    role = 'admin';
+  } else if (req.body.role === 'viewer' || cleanEmail.includes('viewer') || cleanEmail.includes('showcase')) {
+    role = 'viewer';
+  }
+
+  const displayName = name || cleanEmail.split('@')[0];
+  const hash = bcrypt.hashSync(password, 10);
+
+  const sql = `
+    INSERT INTO auth_users (email, password_hash, name, role, auth_provider)
+    VALUES (?, ?, ?, ?, 'email')
+  `;
+
+  db.run(sql, [cleanEmail, hash, displayName, role], function(err) {
+    if (err) {
+      if (err.message.includes('UNIQUE')) {
+        return res.status(400).json({ error: 'An account with this email address already exists.' });
+      }
+      return res.status(500).json({ error: err.message });
     }
 
-    // Security Rule: Public signup defaults to student or viewer.
-    // Only hard-locked administrator emails can receive admin role.
-    const isHardlockedAdmin = cleanEmail === 'kaviyaarumugam541@gmail.com' || cleanEmail === 'admin@igridlab.edu.in';
-    const isViewer = !isHardlockedAdmin && (req.body.account_type === 'viewer' || req.body.role === 'viewer');
-    const role = isHardlockedAdmin ? 'admin' : (isViewer ? 'viewer' : 'student');
+    const userId = this.lastID;
 
-    const finalTeamName = isViewer ? '' : (custom_team ? custom_team.trim() : (team_name ? team_name.trim() : (req.body.project_title ? req.body.project_title.trim() : '')));
-    const finalProjectCode = isViewer ? '' : (project_code ? project_code.trim() : '');
+    // Instant access for Public Showcase Viewers without student profile requirement
+    if (role === 'viewer') {
+      const token = jwt.sign({
+        id: userId,
+        email: cleanEmail,
+        name: displayName,
+        role: 'viewer',
+        student_id: null
+      }, JWT_SECRET, { expiresIn: '7d' });
 
-    if (!isHardlockedAdmin && !isViewer && !finalTeamName && !finalProjectCode) {
-      return res.status(400).json({ error: 'Please select an existing team from the dropdown or enter a team join code / name.' });
+      return res.status(201).json({
+        message: 'Public Viewer account created successfully',
+        token,
+        user: { id: userId, email: cleanEmail, name: displayName, role: 'viewer', student_id: null }
+      });
     }
 
-    const displayName = name.trim();
-    const hash = bcrypt.hashSync(password, 10);
-    const verificationToken = crypto.randomBytes ? crypto.randomBytes(24).toString('hex') : Date.now().toString();
-
-    const sql = `
-      INSERT INTO auth_users (email, password_hash, name, role, auth_provider, team_name, project_code, is_verified, verification_token)
-      VALUES (?, ?, ?, ?, 'email', ?, ?, 1, ?)
+    // Create student profile automatically if student ID / roll_no provided or student role
+    const studentRoll = roll_no || `REG-${Date.now().toString().slice(-6)}`;
+    const studentSql = `
+      INSERT INTO students (
+        user_id, name, roll_no, email, phone, department, year, section,
+        assigned_project, project_title, team_members, guide, status, progress
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
-    db.run(sql, [cleanEmail, hash, displayName, role, finalTeamName, finalProjectCode, verificationToken], function(err) {
-      if (err) {
-        if (err.message.includes('UNIQUE')) {
-          return res.status(400).json({ error: 'An account with this email address already exists. Please log in instead.' });
-        }
-        return res.status(500).json({ error: err.message });
+    const studentParams = [
+      userId, displayName, studentRoll, cleanEmail, phone || '', department || 'IGRID Lab',
+      year || '1st Year', section || 'A', project_title || '', project_title || '',
+      team_members || '', guide || '', 'Active', 0
+    ];
+
+    db.run(studentSql, studentParams, function(err2) {
+      if (err2) {
+        console.error('Error creating student record during signup:', err2.message);
       }
+      const newStudentId = (this && this.lastID) ? this.lastID : null;
 
-      const userId = this.lastID;
+      db.get('SELECT id FROM students WHERE user_id = ? OR email = ?', [userId, cleanEmail], (err3, stRow) => {
+        const studentId = stRow ? stRow.id : newStudentId;
 
-      // If viewer, return token directly without student profile
-      if (role === 'viewer') {
         const token = jwt.sign({
           id: userId,
           email: cleanEmail,
           name: displayName,
-          role: 'viewer',
-          student_id: null,
-          team_name: null,
-          project_code: null
+          role: role,
+          student_id: studentId
         }, JWT_SECRET, { expiresIn: '7d' });
 
-        return res.status(201).json({
-          message: 'Public Showcase Viewer account created successfully! Enjoy browsing all innovation projects.',
+        res.status(201).json({
+          message: 'Account created successfully',
           token,
-          verification_token: verificationToken,
-          user: {
-            id: userId,
-            email: cleanEmail,
-            name: displayName,
-            role: 'viewer',
-            student_id: null,
-            team_name: null,
-            project_code: null
-          }
-        });
-      }
-      const studentRoll = roll_no ? roll_no.trim() : `REG-${Date.now().toString().slice(-6)}`;
-
-      // Match or link to project
-      db.get(`
-        SELECT id, project_code, title, team_name, team_members 
-        FROM projects 
-        WHERE (project_code = ? AND project_code != '') OR (team_name = ? AND team_name != '')
-        LIMIT 1
-      `, [finalProjectCode, finalTeamName], (pErr, projectMatch) => {
-        const assignedTitle = projectMatch ? projectMatch.title : (finalProjectCode || finalTeamName || 'Assigned Project');
-        const assignedTeam = projectMatch ? (projectMatch.team_name || finalTeamName) : finalTeamName;
-
-        // If project found, append student to project's team_members list
-        if (projectMatch) {
-          let members = [];
-          try {
-            members = typeof projectMatch.team_members === 'string' ? (projectMatch.team_members.startsWith('[') ? JSON.parse(projectMatch.team_members) : projectMatch.team_members.split(',').map(m => m.trim())) : (projectMatch.team_members || []);
-          } catch(e) {
-            members = [];
-          }
-          if (!members.includes(displayName) && !members.some(m => typeof m === 'object' && m.email === cleanEmail)) {
-            members.push(displayName);
-            const updatedMembersStr = JSON.stringify(members);
-            db.run('UPDATE projects SET team_members = ? WHERE id = ?', [updatedMembersStr, projectMatch.id]);
-          }
-        }
-
-        const studentSql = `
-          INSERT INTO students (
-            user_id, name, roll_no, email, phone, department, year, section,
-            team_name, assigned_project, project_title, team_members, status, progress
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', 0)
-        `;
-
-        const studentParams = [
-          userId, displayName, studentRoll, cleanEmail, phone || '', department || 'IGRID Lab',
-          year || '1st Year', section || 'A', assignedTeam, assignedTitle, assignedTitle, displayName
-        ];
-
-        db.run(studentSql, studentParams, function(err2) {
-          if (err2) {
-            console.error('Error creating student record during signup:', err2.message);
-          }
-          const studentId = this ? this.lastID : null;
-
-          const token = jwt.sign({
-            id: userId,
-            email: cleanEmail,
-            name: displayName,
-            role: role,
-            student_id: studentId,
-            team_name: assignedTeam,
-            project_code: projectMatch ? projectMatch.project_code : finalProjectCode
-          }, JWT_SECRET, { expiresIn: '7d' });
-
-          res.status(201).json({
-            message: 'Account created successfully! Welcome to your team workspace.',
-            token,
-            verification_token: verificationToken,
-            user: {
-              id: userId,
-              email: cleanEmail,
-              name: displayName,
-              role,
-              student_id: studentId,
-              team_name: assignedTeam,
-              project_code: projectMatch ? projectMatch.project_code : finalProjectCode
-            }
-          });
+          user: { id: userId, email: cleanEmail, name: displayName, role, student_id: studentId }
         });
       });
-    });
-  });
-});
-
-// Email Verification Endpoint
-app.get('/api/auth/verify-email', (req, res) => {
-  const { token } = req.query;
-  if (!token) {
-    return res.status(400).json({ error: 'Verification token is required.' });
-  }
-
-  db.get('SELECT id, email FROM auth_users WHERE verification_token = ?', [token], (err, user) => {
-    if (err || !user) {
-      return res.status(400).json({ error: 'Invalid or expired verification token.' });
-    }
-    db.run('UPDATE auth_users SET is_verified = 1, verification_token = NULL WHERE id = ?', [user.id], (err2) => {
-      if (err2) return res.status(500).json({ error: err2.message });
-      res.json({ message: 'Email verified successfully! You can now access your team dashboard.' });
     });
   });
 });
@@ -298,19 +204,15 @@ app.post('/api/auth/login', (req, res) => {
     const userRole = user.role || (cleanEmail === 'kaviyaarumugam541@gmail.com' || cleanEmail.includes('admin') ? 'admin' : 'student');
 
     // Find student record if any
-    db.get('SELECT id, team_name, assigned_project FROM students WHERE user_id = ? OR email = ?', [user.id, cleanEmail], (err2, student) => {
+    db.get('SELECT id FROM students WHERE user_id = ? OR email = ?', [user.id, cleanEmail], (err2, student) => {
       const studentId = student ? student.id : null;
-      const teamName = user.team_name || (student ? student.team_name : null);
-      const projectCode = user.project_code || null;
 
       const token = jwt.sign({
         id: user.id,
         email: user.email,
         name: user.name || user.email.split('@')[0],
         role: userRole,
-        student_id: studentId,
-        team_name: teamName,
-        project_code: projectCode
+        student_id: studentId
       }, JWT_SECRET, { expiresIn: '7d' });
 
       res.json({
@@ -321,9 +223,7 @@ app.post('/api/auth/login', (req, res) => {
           email: user.email,
           name: user.name || user.email.split('@')[0],
           role: userRole,
-          student_id: studentId,
-          team_name: teamName,
-          project_code: projectCode
+          student_id: studentId
         }
       });
     });
@@ -572,8 +472,8 @@ app.get('/api/projects/:id', optionalAuth, (req, res) => {
 
 // CREATE PROJECT (ADMIN OR STUDENT)
 app.post('/api/projects', requireAuth, (req, res) => {
-  if (req.user && req.user.role === 'viewer') {
-    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot create projects.' });
+  if (req.user && (req.user.role === 'viewer' || req.user.role === 'public')) {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
   }
 
   const {
@@ -619,12 +519,11 @@ app.post('/api/projects', requireAuth, (req, res) => {
 app.put('/api/projects/:id', requireAuth, (req, res) => {
   const { id } = req.params;
   const user = req.user;
-
-  if (user && user.role === 'viewer') {
-    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot edit projects.' });
-  }
-
   const isAdmin = user && user.role === 'admin';
+
+  if (user && (user.role === 'viewer' || user.role === 'public')) {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
+  }
 
   db.get('SELECT * FROM projects WHERE id = ?', [id], (err, project) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -809,6 +708,10 @@ app.put('/api/students/:id', requireAuth, (req, res) => {
   const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
   const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
   const isAdmin = userRole === 'admin' || userEmail === 'kaviyaarumugam541@gmail.com' || userEmail.includes('admin');
+
+  if (userRole === 'viewer' || userRole === 'public') {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
+  }
 
   db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err, existingStudent) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -997,8 +900,8 @@ app.get('/api/bom', requireAuth, (req, res) => {
 
 // SUBMIT BOM ITEM
 app.post('/api/bom', requireAuth, (req, res) => {
-  if (req.user && req.user.role === 'viewer') {
-    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot submit BOM requisitions.' });
+  if (req.user && (req.user.role === 'viewer' || req.user.role === 'public')) {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
   }
 
   const {
@@ -1035,10 +938,6 @@ app.post('/api/bom', requireAuth, (req, res) => {
 
 // APPROVE / REJECT BOM ITEM
 app.put('/api/bom/:id/status', requireAuth, (req, res) => {
-  if (req.user && req.user.role === 'viewer') {
-    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access.' });
-  }
-
   const { id } = req.params;
   const { status, admin_remarks } = req.body;
 
@@ -1082,8 +981,8 @@ app.get('/api/public/projects/:id/tasks', (req, res) => {
 
 // CREATE TASK FOR SPECIFIC PROJECT
 app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
-  if (req.user && req.user.role === 'viewer') {
-    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot create tasks.' });
+  if (req.user && (req.user.role === 'viewer' || req.user.role === 'public')) {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
   }
 
   const { id } = req.params;
@@ -1114,8 +1013,8 @@ app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
 
 // UPDATE TASK
 app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
-  if (req.user && req.user.role === 'viewer') {
-    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot update tasks.' });
+  if (req.user && (req.user.role === 'viewer' || req.user.role === 'public')) {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
   }
 
   const { taskId } = req.params;
@@ -1149,8 +1048,8 @@ app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
 
 // DELETE TASK
 app.delete('/api/tasks/:taskId', requireAuth, (req, res) => {
-  if (req.user && req.user.role === 'viewer') {
-    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot delete tasks.' });
+  if (req.user && (req.user.role === 'viewer' || req.user.role === 'public')) {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
   }
 
   const { taskId } = req.params;
@@ -1162,10 +1061,9 @@ app.delete('/api/tasks/:taskId', requireAuth, (req, res) => {
 
 // ADD COMMENT / ACTIVITY
 app.post('/api/projects/:id/comments', requireAuth, (req, res) => {
-  if (req.user && req.user.role === 'viewer') {
-    return res.status(403).json({ error: 'Access denied: Viewers have read-only showcase access and cannot post comments.' });
+  if (req.user && (req.user.role === 'viewer' || req.user.role === 'public')) {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
   }
-
   const { id } = req.params;
   const { author, author_role, message } = req.body;
 
