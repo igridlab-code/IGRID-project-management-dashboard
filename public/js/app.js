@@ -1030,9 +1030,18 @@ function initEventListeners() {
 
   DOM.addCommentForm.addEventListener('submit', handleCommentSubmit);
 
+  // Topbar Add Task / Project button
+  const topbarAddTaskBtn = document.getElementById('open-add-task-modal');
+  if (topbarAddTaskBtn) {
+    topbarAddTaskBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openProjectModalForCreate();
+    });
+  }
+
   // Global Event Delegation for all Add Task Buttons (Yellow & Blue buttons)
   document.addEventListener('click', (e) => {
-    const addBtn = e.target.closest('.add-task-btn, #btn-add-project-task, .ref-gantt-add-btn');
+    const addBtn = e.target.closest('.add-task-btn, #btn-add-project-task, .ref-gantt-add-btn, [data-action="add-task"]');
     if (addBtn) {
       e.preventDefault();
       e.stopPropagation();
@@ -1044,6 +1053,14 @@ function initEventListeners() {
   if (DOM.closeTaskModal) DOM.closeTaskModal.addEventListener('click', () => closeModal(DOM.taskModal));
   if (DOM.btnCancelTask) DOM.btnCancelTask.addEventListener('click', () => closeModal(DOM.taskModal));
   if (DOM.taskForm) DOM.taskForm.addEventListener('submit', handleTaskFormSubmit);
+
+  const submitTaskBtn = document.getElementById('btn-submit-task');
+  if (submitTaskBtn) {
+    submitTaskBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      handleTaskFormSubmit(e);
+    });
+  }
 
   const taskStartInput = document.getElementById('task-start-input');
   const taskEndInput = document.getElementById('task-end-input');
@@ -3227,16 +3244,23 @@ function syncDatesFromMonthSelects() {
 function openTaskModalForCreate() {
   console.log('[IGRID] openTaskModalForCreate called, activeProjectId:', state.activeProjectId);
   if (!state.activeProjectId) {
-    showToast('Please open a project first', 'error');
-    return;
+    if (state.projects && state.projects.length > 0) {
+      state.activeProjectId = state.projects[0].id;
+    } else {
+      showToast('Please create a project first before adding tasks.', 'warning');
+      openProjectModalForCreate();
+      return;
+    }
   }
+
   const modalTitle = document.getElementById('modal-task-title');
   if (modalTitle) modalTitle.textContent = '➕ Add Project Task';
 
   const form = document.getElementById('task-form');
   if (form) form.reset();
 
-  document.getElementById('task-id-input').value = '';
+  const idInput = document.getElementById('task-id-input');
+  if (idInput) idInput.value = '';
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -3245,27 +3269,33 @@ function openTaskModalForCreate() {
   end.setDate(end.getDate() + 5);
   const endStr = end.toISOString().split('T')[0];
 
-  document.getElementById('task-start-input').value = todayStr;
-  document.getElementById('task-end-input').value = endStr;
-  document.getElementById('task-status-input').value = 'in_progress';
-  document.getElementById('task-priority-input').value = 'Normal';
+  const startInput = document.getElementById('task-start-input');
+  if (startInput) startInput.value = todayStr;
+  const endInput = document.getElementById('task-end-input');
+  if (endInput) endInput.value = endStr;
+  const statusInput = document.getElementById('task-status-input');
+  if (statusInput) statusInput.value = 'in_progress';
+  const prioInput = document.getElementById('task-priority-input');
+  if (prioInput) prioInput.value = 'Normal';
 
   const activeProj = state.projects.find(p => p.id === state.activeProjectId);
-  if (activeProj && activeProj.team_lead) {
-    document.getElementById('task-assigned-input').value = activeProj.team_lead;
-  } else {
-    document.getElementById('task-assigned-input').value = '';
+  const assignedInput = document.getElementById('task-assigned-input');
+  if (assignedInput) {
+    assignedInput.value = (activeProj && activeProj.team_lead) ? activeProj.team_lead : '';
+  }
+
+  const submitBtn = document.getElementById('btn-submit-task');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = 'Save Task';
   }
 
   syncMonthSelectsFromDates();
   updateTaskDurationPreview();
 
-  // Force task modal to appear above the detail modal
   const taskModalEl = DOM.taskModal || document.getElementById('task-modal');
   if (taskModalEl) {
-    taskModalEl.style.zIndex = '300';
-    taskModalEl.classList.add('active');
-    document.body.style.overflow = 'hidden';
+    openModal(taskModalEl);
     console.log('[IGRID] Task modal opened successfully');
   } else {
     console.error('[IGRID] Task modal element not found!');
@@ -3282,30 +3312,41 @@ function openTaskModalForEdit(taskId) {
   const modalTitle = document.getElementById('modal-task-title');
   if (modalTitle) modalTitle.textContent = '✏️ Edit Project Task';
 
-  document.getElementById('task-id-input').value = task.id;
-  document.getElementById('task-name-input').value = task.task_name || '';
-  document.getElementById('task-start-input').value = task.start_date || '';
-  document.getElementById('task-end-input').value = task.end_date || '';
-  document.getElementById('task-status-input').value = task.status || 'in_progress';
-  document.getElementById('task-priority-input').value = task.priority || 'Normal';
-  document.getElementById('task-assigned-input').value = task.assigned_member || '';
-  document.getElementById('task-desc-input').value = task.description || '';
+  const idInput = document.getElementById('task-id-input');
+  if (idInput) idInput.value = task.id;
+  const nameInput = document.getElementById('task-name-input');
+  if (nameInput) nameInput.value = task.task_name || '';
+  const startInput = document.getElementById('task-start-input');
+  if (startInput) startInput.value = (task.start_date || '').split('T')[0];
+  const endInput = document.getElementById('task-end-input');
+  if (endInput) endInput.value = (task.end_date || '').split('T')[0];
+  const statusInput = document.getElementById('task-status-input');
+  if (statusInput) statusInput.value = task.status || 'in_progress';
+  const prioInput = document.getElementById('task-priority-input');
+  if (prioInput) prioInput.value = task.priority || 'Normal';
+  const assignedInput = document.getElementById('task-assigned-input');
+  if (assignedInput) assignedInput.value = task.assigned_member || '';
+  const descInput = document.getElementById('task-desc-input');
+  if (descInput) descInput.value = task.description || '';
+
+  const submitBtn = document.getElementById('btn-submit-task');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = 'Save Task';
+  }
 
   syncMonthSelectsFromDates();
   updateTaskDurationPreview();
 
-  // Force task modal to appear above the detail modal
   const taskModalEl = DOM.taskModal || document.getElementById('task-modal');
   if (taskModalEl) {
-    taskModalEl.style.zIndex = '300';
-    taskModalEl.classList.add('active');
-    document.body.style.overflow = 'hidden';
+    openModal(taskModalEl);
   }
 }
 
 function updateTaskDurationPreview() {
-  const startVal = document.getElementById('task-start-input').value;
-  const endVal = document.getElementById('task-end-input').value;
+  const startVal = document.getElementById('task-start-input')?.value;
+  const endVal = document.getElementById('task-end-input')?.value;
   const preview = document.getElementById('task-duration-preview');
   if (!preview) return;
 
@@ -3328,29 +3369,53 @@ function updateTaskDurationPreview() {
 }
 
 async function handleTaskFormSubmit(e) {
-  e.preventDefault();
-  const taskId = document.getElementById('task-id-input').value;
-  const task_name = document.getElementById('task-name-input').value.trim();
-  const start_date = document.getElementById('task-start-input').value;
-  const end_date = document.getElementById('task-end-input').value;
-  const status = document.getElementById('task-status-input').value;
-  const priority = document.getElementById('task-priority-input').value;
-  const assigned_member = document.getElementById('task-assigned-input').value.trim();
-  const description = document.getElementById('task-desc-input').value.trim();
-
-  if (!task_name || !start_date || !end_date) {
-    showToast('Please fill in all required task fields.', 'error');
-    return;
+  if (e) {
+    if (e.preventDefault) e.preventDefault();
+    if (e.stopPropagation) e.stopPropagation();
   }
-
-  if (new Date(end_date) < new Date(start_date)) {
-    showToast('To Date cannot be earlier than From Date.', 'error');
-    return;
+  
+  const submitBtn = document.getElementById('btn-submit-task');
+  const originalBtnText = submitBtn ? submitBtn.innerHTML : 'Save Task';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span style="display:inline-block; animation: spin 1s linear infinite; margin-right:6px;">⏳</span> Saving...';
   }
-
-  const payload = { task_name, start_date, end_date, status, priority, assigned_member, description };
 
   try {
+    const taskId = document.getElementById('task-id-input')?.value;
+    const task_name = (document.getElementById('task-name-input')?.value || '').trim();
+    const start_date = document.getElementById('task-start-input')?.value || '';
+    const end_date = document.getElementById('task-end-input')?.value || '';
+    const status = document.getElementById('task-status-input')?.value || 'in_progress';
+    const priority = document.getElementById('task-priority-input')?.value || 'Normal';
+    const assigned_member = (document.getElementById('task-assigned-input')?.value || '').trim();
+    const description = (document.getElementById('task-desc-input')?.value || '').trim();
+
+    if (!task_name) {
+      showToast('Task Name is required.', 'error');
+      const nameEl = document.getElementById('task-name-input');
+      if (nameEl) nameEl.focus();
+      return;
+    }
+
+    if (!start_date || !end_date) {
+      showToast('Both From Date and To Date are required.', 'error');
+      return;
+    }
+
+    if (new Date(end_date) < new Date(start_date)) {
+      showToast('To Date cannot be earlier than From Date.', 'error');
+      return;
+    }
+
+    const payload = { task_name, start_date, end_date, status, priority, assigned_member, description };
+
+    const projId = state.activeProjectId || (state.projects[0] ? state.projects[0].id : null);
+    if (!projId && !taskId) {
+      showToast('Please open or select a project first.', 'error');
+      return;
+    }
+
     let res;
     if (taskId) {
       res = await authFetch(`/api/tasks/${taskId}`, {
@@ -3359,7 +3424,7 @@ async function handleTaskFormSubmit(e) {
         body: JSON.stringify(payload)
       });
     } else {
-      res = await authFetch(`/api/projects/${state.activeProjectId}/tasks`, {
+      res = await authFetch(`/api/projects/${projId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -3367,24 +3432,32 @@ async function handleTaskFormSubmit(e) {
     }
 
     if (res.ok) {
-      closeModal(DOM.taskModal);
-      showToast(taskId ? 'Task updated successfully' : 'Task added successfully');
+      closeModal(DOM.taskModal || document.getElementById('task-modal'));
+      showToast(taskId ? 'Task updated successfully' : 'Task added successfully', 'success');
       
-      const tasksRes = await authFetch(`/api/projects/${state.activeProjectId}/tasks`);
-      if (tasksRes.ok) {
-        state.activeProjectTasks = await tasksRes.json();
-      }
-      const activeProj = state.projects.find(p => p.id === state.activeProjectId);
-      if (activeProj) {
-        renderProjectGanttTimeline(activeProj, state.activeProjectTasks);
+      if (projId) {
+        const tasksRes = await authFetch(`/api/projects/${projId}/tasks`);
+        if (tasksRes.ok) {
+          state.activeProjectTasks = await tasksRes.json();
+        }
+        const activeProj = state.projects.find(p => p.id === projId);
+        if (activeProj) {
+          renderProjectGanttTimeline(activeProj, state.activeProjectTasks);
+        }
       }
     } else {
-      const json = await res.json();
-      showToast(json.error || 'Failed to save task', 'error');
+      const json = await res.json().catch(() => ({}));
+      showToast(json.error || `Failed to save task (HTTP ${res.status})`, 'error');
     }
   } catch (err) {
     console.error('Error saving task:', err);
-    showToast('Failed to save task to server', 'error');
+    showToast(`Failed to save task: ${err.message || 'Server error'}`, 'error');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnText;
+    }
+    syncBodyScrollLock();
   }
 }
 
@@ -4861,4 +4934,9 @@ window.openAdminAuditEditModal = openAdminAuditEditModal;
 window.toggleStudentCardExpand = toggleStudentCardExpand;
 window.handleToggleProjectActive = handleToggleProjectActive;
 window.renderProjectActiveToggleHTML = renderProjectActiveToggleHTML;
+window.openTaskModalForCreate = openTaskModalForCreate;
+window.openTaskModalForEdit = openTaskModalForEdit;
+window.openTaskInfoModal = openTaskInfoModal;
+window.handleTaskFormSubmit = handleTaskFormSubmit;
+
 
