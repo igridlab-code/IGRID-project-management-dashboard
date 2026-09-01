@@ -227,11 +227,26 @@
 
         <button type="submit" class="btn-submit" id="btn-login-submit">Sign In to Dashboard</button>
 
-        <!-- Guest Showcase Access Option -->
-        <div style="margin-top: 20px; text-align: center;">
-          <a href="/showcase" style="padding: 10px 14px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); color: #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
-            🌐 <span>Continue to Public Showcase (Guest Mode)</span>
-          </a>
+        <!-- Quick Demo Accounts Box -->
+        <div style="margin-top: 20px; padding: 14px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">⚡ Quick Test Roles & Credentials</div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button type="button" id="btn-demo-admin" style="padding: 8px 12px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #f59e0b; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+              <span>👑 <strong>Admin Demo Login</strong> (Full CRUD)</span>
+              <span style="font-size: 10px; opacity: 0.8;">Admin@123</span>
+            </button>
+            <button type="button" id="btn-demo-student" style="padding: 8px 12px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+              <span>🎓 <strong>Student Demo Login</strong> (Deliverables Edit)</span>
+              <span style="font-size: 10px; opacity: 0.8;">priya.s@igrid.lab</span>
+            </button>
+            <button type="button" id="btn-demo-viewer" style="padding: 8px 12px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #60a5fa; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+              <span>👁️ <strong>Public Showcase Viewer</strong> (Read-Only)</span>
+              <span style="font-size: 10px; opacity: 0.8;">Viewer@123</span>
+            </button>
+            <a href="/showcase" style="padding: 8px 12px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); color: #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 600; text-decoration: none; text-align: center; display: block;">
+              🌐 <strong>Continue as Guest</strong> (No Login Needed)
+            </a>
+          </div>
         </div>
       </form>
 
@@ -364,6 +379,37 @@
     linkBackToLogin.onclick = () => {
       tabLogin.click();
     };
+
+    const btnDemoAdmin = document.getElementById('btn-demo-admin');
+    const btnDemoStudent = document.getElementById('btn-demo-student');
+    const btnDemoViewer = document.getElementById('btn-demo-viewer');
+
+    if (btnDemoAdmin) {
+      btnDemoAdmin.onclick = () => {
+        document.getElementById('login-email').value = 'admin@igridlab.edu.in';
+        document.getElementById('login-password').value = 'Admin@123';
+        showToast('Filled Admin Credentials. Logging in...');
+        document.getElementById('btn-login-submit').click();
+      };
+    }
+
+    if (btnDemoStudent) {
+      btnDemoStudent.onclick = () => {
+        document.getElementById('login-email').value = 'priya.s@igrid.lab';
+        document.getElementById('login-password').value = 'password123';
+        showToast('Filled Student Credentials. Logging in...');
+        document.getElementById('btn-login-submit').click();
+      };
+    }
+
+    if (btnDemoViewer) {
+      btnDemoViewer.onclick = () => {
+        document.getElementById('login-email').value = 'viewer@igridlab.edu.in';
+        document.getElementById('login-password').value = 'Viewer@123';
+        showToast('Filled Viewer Credentials. Logging in...');
+        document.getElementById('btn-login-submit').click();
+      };
+    }
 
     // Role Switcher in Signup Form
     let currentSignupRole = 'viewer';

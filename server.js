@@ -2022,10 +2022,28 @@ DATA: ${JSON.stringify({
 });
 
 // Start Server
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`====================================================`);
   console.log(`🚀 IGRID Innovation Lab PM Dashboard is running!`);
   console.log(`🌐 Local Access:   http://localhost:${PORT}`);
   console.log(`📡 Network/Docker: http://0.0.0.0:${PORT}`);
   console.log(`====================================================`);
+
+  // Auto-connect to permanent Ngrok domain
+  try {
+    const ngrok = require('@ngrok/ngrok');
+    const NGROK_DOMAIN = process.env.NGROK_DOMAIN || 'kabob-suspect-mandate.ngrok-free.dev';
+    const NGROK_AUTHTOKEN = process.env.NGROK_AUTHTOKEN || '3Hr56NkQmK7fScedP090Ry6c8ll_78W6QjADbCB92cWhD8ZpT';
+    
+    console.log(`Connecting to permanent Ngrok public domain: ${NGROK_DOMAIN}...`);
+    const listener = await ngrok.forward({
+      addr: PORT,
+      authtoken: NGROK_AUTHTOKEN,
+      domain: NGROK_DOMAIN
+    });
+    console.log(`🎉 LIVE PUBLIC URL (PERMANENT FIXED DOMAIN): ${listener.url()}`);
+    console.log(`====================================================`);
+  } catch (ngrokErr) {
+    console.warn(`[Ngrok Notice] ${ngrokErr.message || ngrokErr}`);
+  }
 });
