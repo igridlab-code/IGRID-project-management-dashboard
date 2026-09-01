@@ -3086,11 +3086,20 @@ function renderProjectGanttTimeline(project, tasks = []) {
     todayLeftPct = ((todayDay - 1) / totalYearDays) * 100;
   }
 
+  const isAdmin = isUserAdmin();
+  const isStudent = isUserStudent();
+  const canManageTasks = isAdmin || isStudent;
+
+  const topAddTaskBtn = document.getElementById('btn-add-project-task');
+  if (topAddTaskBtn) {
+    topAddTaskBtn.style.display = canManageTasks ? 'inline-flex' : 'none';
+  }
+
   if (summaryEl) {
     summaryEl.innerHTML = `
       <span style="color:#0f172a; font-weight:700;">${escapeHTML(project.title)}</span> &bull; 
       Schedule Year: <span style="color:#2563eb; font-weight:700;">${currentYear}</span> &bull; 
-      Total Tasks: <span style="color:#10b981; font-weight:700;">${tasks.length} items</span>
+      Total Tasks: <span style="color:#10b981; font-weight:700;" id="gantt-total-tasks-badge">${tasks.length} item${tasks.length === 1 ? '' : 's'}</span>
     `;
   }
 
@@ -3112,11 +3121,11 @@ function renderProjectGanttTimeline(project, tasks = []) {
   if (tasks.length === 0) {
     taskRowsHTML = `
       <tr>
-        <td class="ref-gantt-td-taskname">No Tasks</td>
+        <td class="ref-gantt-td-taskname" style="background:#f8fafc !important; color:#64748b; font-style:italic;">No Tasks</td>
         <td colspan="12" class="ref-gantt-td-grid">
           <div class="ref-grid-bg">${monthGridBgHTML}</div>
           <div style="padding:20px; text-align:center; color:#64748b; font-size:13px; font-weight:500;">
-            No timeline tasks added yet. Click "+ Add Task" to create your first task.
+            No timeline tasks added yet. ${canManageTasks ? 'Click "+ Add Task" to create your first task.' : ''}
           </div>
         </td>
       </tr>
@@ -3154,22 +3163,28 @@ function renderProjectGanttTimeline(project, tasks = []) {
         ? `<span class="ref-bar-overflow-right" title="Extends beyond Dec 31, ${currentYear}">▶</span>`
         : `<span class="ref-bar-marker">✓</span>`;
 
-      const richTooltip = `${task.task_name} | ${task.priority || 'Normal'} Priority | ${task.status || 'In Progress'}\nFrom: ${formatDateShort(task.start_date)} → To: ${formatDateShort(task.end_date)} (${durationDays} days)${isOverflowLeft ? ' [Starts before Jan 1]' : ''}${isOverflowRight ? ' [Extends beyond Dec 31]' : ''}`;
+      const richTooltip = `${task.task_name} | ${task.priority || 'Normal'} Priority | ${task.status || 'In Progress'}\nFrom: ${formatDateShort(task.start_date)} → To: ${formatDateShort(task.end_date)} (${durationDays} days)${task.assigned_member ? `\nAssignee: ${task.assigned_member}` : ''}${isOverflowLeft ? ' [Starts before Jan 1]' : ''}${isOverflowRight ? ' [Extends beyond Dec 31]' : ''}`;
 
       taskRowsHTML += `
-        <tr>
-          <td class="ref-gantt-td-taskname" onclick="openTaskInfoModal('${task.id}')" style="cursor:pointer;" title="${escapeHTML(richTooltip)}">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:4px;">
-              <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHTML(task.task_name)}</span>
-              <span style="font-size:10px; padding:2px 4px; border-radius:4px; background:rgba(0,0,0,0.06); font-weight:600; flex-shrink:0;">${escapeHTML(task.priority || 'Normal')}</span>
+        <tr data-task-id="${task.id}">
+          <td class="ref-gantt-td-taskname" onclick="openTaskModalForEdit('${task.id}')" style="cursor:pointer;" title="${escapeHTML(richTooltip)}">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+              <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; color:#0f172a;" title="${escapeHTML(task.task_name)}">${escapeHTML(task.task_name)}</span>
+              <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                <span style="font-size:10px; padding:2px 4px; border-radius:4px; background:rgba(0,0,0,0.06); font-weight:600;">${escapeHTML(task.priority || 'Normal')}</span>
+                ${canManageTasks ? `
+                  <button type="button" class="btn-gantt-edit-task" onclick="event.stopPropagation(); openTaskModalForEdit('${task.id}')" title="Edit Task" style="background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; border-radius:4px; padding:2px 6px; font-size:11px; cursor:pointer; line-height:1;">✏️</button>
+                  <button type="button" class="btn-gantt-delete-task" onclick="event.stopPropagation(); deleteTask('${task.id}')" title="Delete Task" style="background:#fef2f2; color:#ef4444; border:1px solid #fecaca; border-radius:4px; padding:2px 6px; font-size:11px; cursor:pointer; line-height:1;">🗑️</button>
+                ` : ''}
+              </div>
             </div>
           </td>
           <td colspan="12" class="ref-gantt-td-grid">
             <div class="ref-grid-bg">${monthGridBgHTML}</div>
             ${todayLeftPct !== null ? `<div class="ref-today-line" style="left:${todayLeftPct}%;" title="Today"></div>` : ''}
             <div class="ref-task-bar ${statusClass}" 
-                 style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%;"
-                 onclick="openTaskInfoModal('${task.id}')"
+                 style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%; cursor:pointer;"
+                 onclick="openTaskModalForEdit('${task.id}')"
                  title="${escapeHTML(richTooltip)}">
               ${leftMarker}
               <span class="ref-bar-label">${escapeHTML(task.task_name)} (${dateLabel})</span>
@@ -3188,7 +3203,7 @@ function renderProjectGanttTimeline(project, tasks = []) {
           <h3 class="ref-gantt-title">Project Management Timeline</h3>
           <p class="ref-gantt-subtitle">${escapeHTML(project.title)} • ${currentYear} Milestone Schedule</p>
         </div>
-        <button class="ref-gantt-add-btn add-task-btn" onclick="openTaskModalForCreate()">➕ + Add Task</button>
+        ${canManageTasks ? `<button class="ref-gantt-add-btn add-task-btn" id="btn-gantt-panel-add-task" onclick="openTaskModalForCreate()">➕ + Add Task</button>` : ''}
       </div>
 
       <div class="ref-gantt-scroll-wrapper">
@@ -3209,8 +3224,8 @@ function renderProjectGanttTimeline(project, tasks = []) {
 }
 
 function syncMonthSelectsFromDates() {
-  const startVal = document.getElementById('task-start-input').value;
-  const endVal = document.getElementById('task-end-input').value;
+  const startVal = document.getElementById('task-start-input')?.value;
+  const endVal = document.getElementById('task-end-input')?.value;
 
   if (startVal) {
     const sMonth = new Date(startVal).getMonth();
@@ -3242,19 +3257,24 @@ function syncDatesFromMonthSelects() {
 }
 
 function openTaskModalForCreate() {
-  console.log('[IGRID] openTaskModalForCreate called, activeProjectId:', state.activeProjectId);
+  console.log('[IGRID] openTaskModalForCreate triggered. activeProjectId:', state.activeProjectId);
+  
+  // Ensure active project is set
   if (!state.activeProjectId) {
     if (state.projects && state.projects.length > 0) {
       state.activeProjectId = state.projects[0].id;
     } else {
-      showToast('Please create a project first before adding tasks.', 'warning');
+      showToast('Please create or open a project first.', 'warning');
       openProjectModalForCreate();
       return;
     }
   }
 
+  const activeProj = state.projects.find(p => p.id === state.activeProjectId);
   const modalTitle = document.getElementById('modal-task-title');
-  if (modalTitle) modalTitle.textContent = '➕ Add Project Task';
+  if (modalTitle) {
+    modalTitle.textContent = activeProj ? `➕ Add Task to ${activeProj.project_code || 'Project'}` : '➕ Add Project Task';
+  }
 
   const form = document.getElementById('task-form');
   if (form) form.reset();
@@ -3266,7 +3286,7 @@ function openTaskModalForCreate() {
   const todayStr = today.toISOString().split('T')[0];
   
   const end = new Date();
-  end.setDate(end.getDate() + 5);
+  end.setDate(end.getDate() + 7);
   const endStr = end.toISOString().split('T')[0];
 
   const startInput = document.getElementById('task-start-input');
@@ -3278,7 +3298,6 @@ function openTaskModalForCreate() {
   const prioInput = document.getElementById('task-priority-input');
   if (prioInput) prioInput.value = 'Normal';
 
-  const activeProj = state.projects.find(p => p.id === state.activeProjectId);
   const assignedInput = document.getElementById('task-assigned-input');
   if (assignedInput) {
     assignedInput.value = (activeProj && activeProj.team_lead) ? activeProj.team_lead : '';
@@ -3287,7 +3306,7 @@ function openTaskModalForCreate() {
   const submitBtn = document.getElementById('btn-submit-task');
   if (submitBtn) {
     submitBtn.disabled = false;
-    submitBtn.innerHTML = 'Save Task';
+    submitBtn.innerHTML = '💾 Save Task';
   }
 
   syncMonthSelectsFromDates();
@@ -3295,22 +3314,26 @@ function openTaskModalForCreate() {
 
   const taskModalEl = DOM.taskModal || document.getElementById('task-modal');
   if (taskModalEl) {
+    taskModalEl.style.zIndex = '600';
     openModal(taskModalEl);
-    console.log('[IGRID] Task modal opened successfully');
-  } else {
-    console.error('[IGRID] Task modal element not found!');
+    const nameEl = document.getElementById('task-name-input');
+    if (nameEl) setTimeout(() => nameEl.focus(), 100);
   }
 }
 
 function openTaskModalForEdit(taskId) {
+  console.log('[IGRID] openTaskModalForEdit triggered for taskId:', taskId);
   const task = state.activeProjectTasks.find(t => String(t.id) === String(taskId));
   if (!task) {
     showToast('Task details not found', 'error');
     return;
   }
 
+  // Close info modal if open
+  closeModal(DOM.taskInfoModal || document.getElementById('task-info-modal'));
+
   const modalTitle = document.getElementById('modal-task-title');
-  if (modalTitle) modalTitle.textContent = '✏️ Edit Project Task';
+  if (modalTitle) modalTitle.textContent = `✏️ Edit Project Task: ${task.task_name}`;
 
   const idInput = document.getElementById('task-id-input');
   if (idInput) idInput.value = task.id;
@@ -3332,7 +3355,7 @@ function openTaskModalForEdit(taskId) {
   const submitBtn = document.getElementById('btn-submit-task');
   if (submitBtn) {
     submitBtn.disabled = false;
-    submitBtn.innerHTML = 'Save Task';
+    submitBtn.innerHTML = '💾 Update Task';
   }
 
   syncMonthSelectsFromDates();
@@ -3340,7 +3363,10 @@ function openTaskModalForEdit(taskId) {
 
   const taskModalEl = DOM.taskModal || document.getElementById('task-modal');
   if (taskModalEl) {
+    taskModalEl.style.zIndex = '600';
     openModal(taskModalEl);
+    const nameEl = document.getElementById('task-name-input');
+    if (nameEl) setTimeout(() => nameEl.focus(), 100);
   }
 }
 
@@ -3375,7 +3401,7 @@ async function handleTaskFormSubmit(e) {
   }
   
   const submitBtn = document.getElementById('btn-submit-task');
-  const originalBtnText = submitBtn ? submitBtn.innerHTML : 'Save Task';
+  const originalBtnText = submitBtn ? submitBtn.innerHTML : '💾 Save Task';
   if (submitBtn) {
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span style="display:inline-block; animation: spin 1s linear infinite; margin-right:6px;">⏳</span> Saving...';
@@ -3409,12 +3435,9 @@ async function handleTaskFormSubmit(e) {
     }
 
     const payload = { task_name, start_date, end_date, status, priority, assigned_member, description };
-
     const projId = state.activeProjectId || (state.projects[0] ? state.projects[0].id : null);
-    if (!projId && !taskId) {
-      showToast('Please open or select a project first.', 'error');
-      return;
-    }
+
+    console.log('[TASK-SAVE] Submitting task payload:', { taskId, projId, payload });
 
     let res;
     if (taskId) {
@@ -3433,7 +3456,7 @@ async function handleTaskFormSubmit(e) {
 
     if (res.ok) {
       closeModal(DOM.taskModal || document.getElementById('task-modal'));
-      showToast(taskId ? 'Task updated successfully' : 'Task added successfully', 'success');
+      showToast(taskId ? 'Task details updated successfully' : 'Task added to timeline successfully', 'success');
       
       if (projId) {
         const tasksRes = await authFetch(`/api/projects/${projId}/tasks`);
@@ -3451,7 +3474,7 @@ async function handleTaskFormSubmit(e) {
     }
   } catch (err) {
     console.error('Error saving task:', err);
-    showToast(`Failed to save task: ${err.message || 'Server error'}`, 'error');
+    showToast(`Failed to save task: ${err.message || 'Server connection error'}`, 'error');
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
@@ -3498,12 +3521,10 @@ function openTaskInfoModal(taskId) {
   if (descEl) descEl.textContent = task.description || 'No description provided for this task.';
   if (assignedEl) assignedEl.textContent = `Assigned to: ${task.assigned_member || 'Unassigned'}`;
 
-  // Force task info modal to appear above the detail modal
   const infoModalEl = DOM.taskInfoModal || document.getElementById('task-info-modal');
   if (infoModalEl) {
-    infoModalEl.style.zIndex = '300';
-    infoModalEl.classList.add('active');
-    document.body.style.overflow = 'hidden';
+    infoModalEl.style.zIndex = '600';
+    openModal(infoModalEl);
   }
 }
 
@@ -3515,20 +3536,23 @@ async function deleteTask(taskId) {
   try {
     const res = await authFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
     if (res.ok) {
-      closeModal(DOM.taskInfoModal);
-      showToast('Task deleted successfully');
-      const tasksRes = await authFetch(`/api/projects/${state.activeProjectId}/tasks`);
-      if (tasksRes.ok) {
-        state.activeProjectTasks = await tasksRes.json();
-      } else {
-        state.activeProjectTasks = state.activeProjectTasks.filter(t => String(t.id) !== String(taskId));
-      }
-      const activeProj = state.projects.find(p => p.id === state.activeProjectId);
-      if (activeProj) {
-        renderProjectGanttTimeline(activeProj, state.activeProjectTasks);
+      closeModal(DOM.taskInfoModal || document.getElementById('task-info-modal'));
+      showToast('Task deleted successfully', 'success');
+      const projId = state.activeProjectId;
+      if (projId) {
+        const tasksRes = await authFetch(`/api/projects/${projId}/tasks`);
+        if (tasksRes.ok) {
+          state.activeProjectTasks = await tasksRes.json();
+        } else {
+          state.activeProjectTasks = state.activeProjectTasks.filter(t => String(t.id) !== String(taskId));
+        }
+        const activeProj = state.projects.find(p => p.id === projId);
+        if (activeProj) {
+          renderProjectGanttTimeline(activeProj, state.activeProjectTasks);
+        }
       }
     } else {
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       showToast(json.error || 'Failed to delete task', 'error');
     }
   } catch (err) {

@@ -1500,7 +1500,8 @@ app.get('/api/public/projects/:id/tasks', (req, res) => {
 
 // CREATE TASK FOR SPECIFIC PROJECT
 app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
-  if (req.user && (req.user.role === 'viewer' || req.user.role === 'public')) {
+  const user = req.user;
+  if (!user || user.role === 'viewer' || user.role === 'public') {
     return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
   }
 
@@ -1511,8 +1512,23 @@ app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Task Name, Start Date, and End Date are required.' });
   }
 
-  db.get('SELECT project_code FROM projects WHERE id = ?', [id], (err, proj) => {
+  db.get('SELECT * FROM projects WHERE id = ?', [id], (err, proj) => {
     if (err || !proj) return res.status(404).json({ error: 'Project not found' });
+
+    // If student: verify assignment
+    if (user.role === 'student') {
+      const userName = (user.name || '').toLowerCase();
+      const userEmail = (user.email || '').toLowerCase();
+      const isLead = proj.team_lead && userName && proj.team_lead.toLowerCase().includes(userName);
+      const isMember = proj.team_members && (
+        (Array.isArray(proj.team_members) && proj.team_members.some(m => JSON.stringify(m).toLowerCase().includes(userEmail) || JSON.stringify(m).toLowerCase().includes(userName))) ||
+        (typeof proj.team_members === 'string' && (proj.team_members.toLowerCase().includes(userEmail) || proj.team_members.toLowerCase().includes(userName)))
+      );
+      if (!isLead && !isMember && user.email !== 'admin@igridlab.edu.in') {
+        // Also check if assigned via students table
+        return res.status(403).json({ error: 'Access denied: You can only add timeline tasks to your assigned project.' });
+      }
+    }
 
     const sql = `
       INSERT INTO project_tasks (project_id, project_code, task_name, start_date, end_date, status, priority, description, assigned_member)
@@ -1523,7 +1539,11 @@ app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
       sql,
       [id, proj.project_code, task_name.trim(), start_date, end_date, status || 'in_progress', priority || 'Normal', (description || '').trim(), (assigned_member || '').trim()],
       function(err2) {
-        if (err2) return res.status(500).json({ error: err2.message });
+        if (err2) {
+          console.error(`[BACKEND-TASK] Error creating task for project #${id}:`, err2.message);
+          return res.status(500).json({ error: err2.message });
+        }
+        console.log(`[BACKEND-TASK] ✅ Created task #${this.lastID} ("${task_name.trim()}") for Project #${id} (${proj.project_code})`);
         res.status(201).json({ id: this.lastID, message: 'Task created successfully.' });
       }
     );
@@ -1532,7 +1552,8 @@ app.post('/api/projects/:id/tasks', requireAuth, (req, res) => {
 
 // UPDATE TASK
 app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
-  if (req.user && (req.user.role === 'viewer' || req.user.role === 'public')) {
+  const user = req.user;
+  if (!user || user.role === 'viewer' || user.role === 'public') {
     return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
   }
 
@@ -1543,37 +1564,50 @@ app.put('/api/tasks/:taskId', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Task Name, Start Date, and End Date are required.' });
   }
 
-  const sql = `
-    UPDATE project_tasks SET
-      task_name = ?,
-      start_date = ?,
-      end_date = ?,
-      status = ?,
-      priority = ?,
-      description = ?,
-      assigned_member = ?
-    WHERE id = ?
-  `;
+  db.get('SELECT * FROM project_tasks WHERE id = ?', [taskId], (err, task) => {
+    if (err || !task) return res.status(404).json({ error: 'Task not found' });
 
-  db.run(
-    sql,
-    [task_name.trim(), start_date, end_date, status || 'in_progress', priority || 'Normal', (description || '').trim(), (assigned_member || '').trim(), taskId],
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: 'Task updated successfully.' });
-    }
-  );
+    const sql = `
+      UPDATE project_tasks SET
+        task_name = ?,
+        start_date = ?,
+        end_date = ?,
+        status = ?,
+        priority = ?,
+        description = ?,
+        assigned_member = ?
+      WHERE id = ?
+    `;
+
+    db.run(
+      sql,
+      [task_name.trim(), start_date, end_date, status || 'in_progress', priority || 'Normal', (description || '').trim(), (assigned_member || '').trim(), taskId],
+      function(err2) {
+        if (err2) {
+          console.error(`[BACKEND-TASK] Error updating task #${taskId}:`, err2.message);
+          return res.status(500).json({ error: err2.message });
+        }
+        console.log(`[BACKEND-TASK] ✅ Updated task #${taskId} ("${task_name.trim()}"): dates ${start_date} -> ${end_date}`);
+        res.json({ message: 'Task updated successfully.' });
+      }
+    );
+  });
 });
 
 // DELETE TASK
 app.delete('/api/tasks/:taskId', requireAuth, (req, res) => {
-  if (req.user && (req.user.role === 'viewer' || req.user.role === 'public')) {
+  const user = req.user;
+  if (!user || user.role === 'viewer' || user.role === 'public') {
     return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
   }
 
   const { taskId } = req.params;
   db.run('DELETE FROM project_tasks WHERE id = ?', [taskId], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) {
+      console.error(`[BACKEND-TASK] Error deleting task #${taskId}:`, err.message);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log(`[BACKEND-TASK] ✅ Deleted task #${taskId}`);
     res.json({ message: 'Task deleted successfully.' });
   });
 });
