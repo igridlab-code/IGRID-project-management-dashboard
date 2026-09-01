@@ -37,7 +37,9 @@ const state = {
     event_type: 'all',
     start_date: '',
     end_date: ''
-  }
+  },
+  studentViewMode: 'cards',
+  expandedStudentCards: new Set()
 };
 
 // DOM Elements
@@ -1134,6 +1136,25 @@ function initEventListeners() {
   const studentSortBy = document.getElementById('student-sort-by');
   if (studentSortBy) studentSortBy.addEventListener('change', renderStudents);
 
+  const btnStudentViewCards = document.getElementById('btn-student-view-cards');
+  const btnStudentViewTable = document.getElementById('btn-student-view-table');
+  if (btnStudentViewCards) {
+    btnStudentViewCards.addEventListener('click', () => {
+      state.studentViewMode = 'cards';
+      btnStudentViewCards.classList.add('active');
+      if (btnStudentViewTable) btnStudentViewTable.classList.remove('active');
+      renderStudents();
+    });
+  }
+  if (btnStudentViewTable) {
+    btnStudentViewTable.addEventListener('click', () => {
+      state.studentViewMode = 'table';
+      btnStudentViewTable.classList.add('active');
+      if (btnStudentViewCards) btnStudentViewCards.classList.remove('active');
+      renderStudents();
+    });
+  }
+
   // Calendar Activity Modal Listeners
   const closeCalModal = document.getElementById('close-calendar-activity-modal');
   if (closeCalModal) closeCalModal.addEventListener('click', () => closeModal(document.getElementById('calendar-activity-modal')));
@@ -1940,15 +1961,34 @@ function isUserAdmin() {
   return role === 'admin' || email === 'admin@igridlab.edu.in';
 }
 
-// 9. RENDER STUDENTS DIRECTORY
+// 9. RENDER STUDENTS & INNOVATOR TEAMS DIRECTORY
+function toggleStudentCardExpand(studentId) {
+  const card = document.getElementById(`student-team-card-${studentId}`);
+  const btn = document.getElementById(`btn-expand-${studentId}`);
+  if (!card) return;
+
+  const isExpanded = card.classList.contains('is-expanded');
+  if (isExpanded) {
+    card.classList.remove('is-expanded');
+    state.expandedStudentCards.delete(Number(studentId));
+    if (btn) btn.innerHTML = '<span>▼ View Full Details</span>';
+  } else {
+    card.classList.add('is-expanded');
+    state.expandedStudentCards.add(Number(studentId));
+    if (btn) btn.innerHTML = '<span>▲ Collapse Details</span>';
+  }
+}
+
 function renderStudents() {
   if (!DOM.studentsGridRoot) return;
   if (state.students.length === 0) {
-    DOM.studentsGridRoot.innerHTML = '<div style="padding:20px; color:var(--text-dim);">No registered student profiles found.</div>';
+    DOM.studentsGridRoot.innerHTML = '<div style="padding:20px; color:var(--text-dim); text-align:center;">No registered student profiles found.</div>';
     return;
   }
 
   const isAdmin = isUserAdmin();
+  const currentEmail = (state.currentUser && state.currentUser.email || '').toLowerCase();
+  const currentName = (state.currentUser && state.currentUser.name || '').toLowerCase();
 
   // Search & Filters
   const searchInput = document.getElementById('student-search-input');
@@ -1971,7 +2011,9 @@ function renderStudents() {
       const matchName = (s.name || '').toLowerCase().includes(query);
       const matchRoll = (s.roll_no || '').toLowerCase().includes(query);
       const matchProject = (s.assigned_project || s.project_title || '').toLowerCase().includes(query);
-      if (!matchName && !matchRoll && !matchProject) return false;
+      const matchDept = (s.department || '').toLowerCase().includes(query);
+      const matchGuide = (s.guide || '').toLowerCase().includes(query);
+      if (!matchName && !matchRoll && !matchProject && !matchDept && !matchGuide) return false;
     }
     if (selectedDept !== 'All' && (s.department || '').toLowerCase() !== selectedDept.toLowerCase()) {
       return false;
@@ -1995,81 +2037,341 @@ function renderStudents() {
   });
 
   if (filtered.length === 0) {
-    DOM.studentsGridRoot.innerHTML = '<div style="padding:20px; color:var(--text-dim);">No student profiles match the filter criteria.</div>';
+    DOM.studentsGridRoot.innerHTML = '<div style="padding:40px; color:var(--text-dim); text-align:center;">No student profiles match the filter criteria.</div>';
     return;
   }
 
-  let html = `
-    <div class="students-table-outer" style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-card); margin-top: 16px;">
-      <table class="students-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
-        <thead>
-          <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
-            <th style="padding: 12px 16px;">Student</th>
-            <th style="padding: 12px 16px;">Register No</th>
-            <th style="padding: 12px 16px;">Dept & Year</th>
-            <th style="padding: 12px 16px;">Project & Guide</th>
-            <th style="padding: 12px 16px;">Progress</th>
-            <th style="padding: 12px 16px;">Status</th>
-            <th style="padding: 12px 16px; text-align: right;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-  `;
+  // TABLE VIEW MODE
+  if (state.studentViewMode === 'table') {
+    let tableHtml = `
+      <div class="students-table-outer" style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-card); margin-top: 16px;">
+        <table class="students-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+          <thead>
+            <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
+              <th style="padding: 12px 16px;">Student</th>
+              <th style="padding: 12px 16px;">Register No</th>
+              <th style="padding: 12px 16px;">Dept & Year</th>
+              <th style="padding: 12px 16px;">Project & Guide</th>
+              <th style="padding: 12px 16px;">Progress</th>
+              <th style="padding: 12px 16px;">Status</th>
+              <th style="padding: 12px 16px; text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
 
+    filtered.forEach(s => {
+      const photo = s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=${(s.avatar_color || '6366f1').replace('#','')}&color=fff`;
+      const statusText = s.status || 'Active';
+      const statusBadge = statusText === 'Active' ? 'badge-success' : 'badge-normal';
+      const projName = s.assigned_project || s.project_title || 'Unassigned';
+      const guideName = s.guide || 'Not assigned';
+      const prog = s.progress || 0;
+      const isOwner = (s.email && s.email.toLowerCase() === currentEmail) || (s.name && s.name.toLowerCase() === currentName);
+
+      tableHtml += `
+        <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.15s ease;" class="student-table-row">
+          <td style="padding: 12px 16px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <img src="${photo}" alt="${escapeHTML(s.name)}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid ${s.avatar_color || '#6366f1'};">
+              <div>
+                <div style="font-weight: 700; color: var(--text-main);">${escapeHTML(s.name)}</div>
+                <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.email || '')}</div>
+              </div>
+            </div>
+          </td>
+          <td style="padding: 12px 16px; font-weight: 600; color: var(--text-muted);">${escapeHTML(s.roll_no)}</td>
+          <td style="padding: 12px 16px;">
+            <div style="font-weight: 600; color: var(--text-main);">${escapeHTML(s.department || 'Lab')}</div>
+            <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.year || 'Student')} ${s.section ? '• ' + escapeHTML(s.section) : ''}</div>
+          </td>
+          <td style="padding: 12px 16px;">
+            <div style="font-weight: 600; color: #60a5fa;">${escapeHTML(projName)}</div>
+            <div style="font-size: 11px; color: var(--text-dim);">Guide: ${escapeHTML(guideName)}</div>
+          </td>
+          <td style="padding: 12px 16px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="flex:1; height:6px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden; min-width:60px;">
+                <div style="width:${prog}%; height:100%; background:linear-gradient(90deg, #2563eb, #10b981); border-radius:4px;"></div>
+              </div>
+              <span style="font-size:11px; font-weight:700; color:var(--text-main);">${prog}%</span>
+            </div>
+          </td>
+          <td style="padding: 12px 16px;">
+            <span class="badge ${statusBadge}">${escapeHTML(statusText)}</span>
+          </td>
+          <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
+            <button class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" style="margin-right: 6px;">👁️ View Profile</button>
+            ${(isAdmin || isOwner) ? `<button class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})">✏️ Edit</button>` : ''}
+          </td>
+        </tr>
+      `;
+    });
+
+    tableHtml += `
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    DOM.studentsGridRoot.innerHTML = tableHtml;
+    return;
+  }
+
+  // EXPANDABLE CARDS GRID VIEW MODE (DEFAULT)
+  let cardsHtml = '';
   filtered.forEach(s => {
+    const isExpanded = state.expandedStudentCards.has(Number(s.id));
     const photo = s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=${(s.avatar_color || '6366f1').replace('#','')}&color=fff`;
     const statusText = s.status || 'Active';
     const statusBadge = statusText === 'Active' ? 'badge-success' : 'badge-normal';
-    const projName = s.assigned_project || s.project_title || 'Unassigned';
-    const guideName = s.guide || 'Not assigned';
     const prog = s.progress || 0;
+    const isOwner = (s.email && s.email.toLowerCase() === currentEmail) || (s.name && s.name.toLowerCase() === currentName);
 
-    html += `
-      <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.15s ease;" class="student-table-row">
-        <td style="padding: 12px 16px;">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <img src="${photo}" alt="${escapeHTML(s.name)}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid ${s.avatar_color || '#6366f1'};">
-            <div>
-              <div style="font-weight: 700; color: var(--text-main);">${escapeHTML(s.name)}</div>
-              <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.email || '')}</div>
+    // Cross-reference with Project Database
+    const matchedProject = state.projects.find(p => 
+      (p.project_code && s.assigned_project && p.project_code.toLowerCase() === s.assigned_project.toLowerCase()) ||
+      (p.title && s.project_title && p.title.toLowerCase() === s.project_title.toLowerCase()) ||
+      (s.assigned_project && p.project_code && p.project_code.toLowerCase().includes(s.assigned_project.toLowerCase())) ||
+      (s.assigned_project && p.title && p.title.toLowerCase().includes(s.assigned_project.toLowerCase()))
+    );
+
+    const projectTitle = matchedProject ? matchedProject.title : (s.project_title || s.assigned_project || 'IGRID Innovation Project');
+    const projectCode = matchedProject ? matchedProject.project_code : (s.assigned_project || 'IGRID-PROJ');
+    const projectDesc = matchedProject ? (matchedProject.description || 'System architecture & engineering prototype development.') : (s.bio || 'Project under development in IGRID Innovation Lab.');
+    const projectPriority = matchedProject ? (matchedProject.priority || 'Normal') : 'Normal';
+    const projectStatus = matchedProject ? formatStatus(matchedProject.status) : statusText;
+    const projectAction = matchedProject ? (matchedProject.immediate_action || 'Ongoing sprint milestones & testing') : 'System architecture & component benchmarking';
+    const projectDeliverables = matchedProject ? (matchedProject.deliverables || 'Working Hardware Prototype, Technical Documentation, GitHub Codebase') : 'Project deliverables and showcase assets.';
+    
+    // Dates in IST
+    const startIST = matchedProject && matchedProject.start_date ? formatISTDateTime(matchedProject.start_date) : '01 Sep 2026 IST';
+    const dueIST = matchedProject && matchedProject.due_date ? formatISTDateTime(matchedProject.due_date) : '25 Mar 2026 IST';
+
+    // Tags
+    const tagsList = matchedProject && matchedProject.tags ? matchedProject.tags.split(',').map(t => t.trim()).filter(Boolean) : ['#Innovation', '#Engineering'];
+
+    // Media Links
+    const githubLink = (matchedProject && matchedProject.github_repo) || s.github_url || '';
+    const reportLink = (matchedProject && matchedProject.doc_url) || '';
+    const videoLink = (matchedProject && matchedProject.youtube_url) || '';
+    const linkedinLink = (matchedProject && matchedProject.linkedin_url) || s.linkedin_url || '';
+    const heroImage = (matchedProject && matchedProject.image_url) || '';
+
+    // Team members list
+    let teamMembersFormatted = s.team_members || s.name;
+    if (matchedProject && matchedProject.team_members) {
+      if (Array.isArray(matchedProject.team_members) && matchedProject.team_members.length > 0) {
+        teamMembersFormatted = matchedProject.team_members.map(m => typeof m === 'object' ? (m.name || m.email || JSON.stringify(m)) : String(m)).join(', ');
+      } else if (typeof matchedProject.team_members === 'string') {
+        teamMembersFormatted = matchedProject.team_members;
+      }
+    }
+
+    // Skills
+    const skillsList = (s.skills || '').split(',').map(sk => sk.trim()).filter(Boolean);
+
+    cardsHtml += `
+      <div class="student-team-card ${isExpanded ? 'is-expanded' : ''}" id="student-team-card-${s.id}">
+        <!-- Top Compact Summary Header -->
+        <div class="student-card-header">
+          <div class="student-card-lead-wrap">
+            <img src="${photo}" alt="${escapeHTML(s.name)}" class="student-card-avatar" style="border-color:${s.avatar_color || '#6366f1'};">
+            <div class="student-card-main-info">
+              <h4>${escapeHTML(s.name)}</h4>
+              <div class="student-card-email">${escapeHTML(s.email || '')}</div>
+              <div class="student-card-roll">Reg: ${escapeHTML(s.roll_no)}</div>
             </div>
           </div>
-        </td>
-        <td style="padding: 12px 16px; font-weight: 600; color: var(--text-muted);">${escapeHTML(s.roll_no)}</td>
-        <td style="padding: 12px 16px;">
-          <div style="font-weight: 600; color: var(--text-main);">${escapeHTML(s.department || 'Lab')}</div>
-          <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.year || 'Student')} ${s.section ? '• ' + escapeHTML(s.section) : ''}</div>
-        </td>
-        <td style="padding: 12px 16px;">
-          <div style="font-weight: 600; color: #60a5fa;">${escapeHTML(projName)}</div>
-          <div style="font-size: 11px; color: var(--text-dim);">Guide: ${escapeHTML(guideName)}</div>
-        </td>
-        <td style="padding: 12px 16px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <div style="flex:1; height:6px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden; min-width:60px;">
-              <div style="width:${prog}%; height:100%; background:linear-gradient(90deg, #2563eb, #10b981); border-radius:4px;"></div>
-            </div>
-            <span style="font-size:11px; font-weight:700; color:var(--text-main);">${prog}%</span>
-          </div>
-        </td>
-        <td style="padding: 12px 16px;">
           <span class="badge ${statusBadge}">${escapeHTML(statusText)}</span>
-        </td>
-        <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
-          <button class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" style="margin-right: 6px;">👁️ View Profile</button>
-          ${isAdmin ? `<button class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})">✏️ Edit</button>` : ''}
-        </td>
-      </tr>
+        </div>
+
+        <!-- Badges Bar -->
+        <div class="student-card-badges">
+          <span class="badge badge-blue">${escapeHTML(s.department || 'Lab')}</span>
+          <span class="badge badge-normal">${escapeHTML(s.year || 'Student')}${s.section ? ' • Sec ' + escapeHTML(s.section) : ''}</span>
+          ${matchedProject ? `<span class="badge badge-primary">${escapeHTML(projectCode)}</span>` : ''}
+        </div>
+
+        <!-- Project Title & Domain -->
+        <div class="student-card-project-title" title="${escapeHTML(projectTitle)}">
+          <span>🚀</span>
+          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHTML(projectTitle)}</span>
+        </div>
+
+        <!-- Progress Bar -->
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-top:2px;">
+          <span style="color:var(--text-dim);">Milestone Progress</span>
+          <strong style="color:var(--text-main);">${prog}%</strong>
+        </div>
+        <div class="student-card-progress-bar">
+          <div class="student-card-progress-fill" style="width:${prog}%;"></div>
+        </div>
+
+        <!-- Compact Actions Row -->
+        <div class="student-card-actions">
+          <button type="button" class="btn btn-sm btn-secondary btn-toggle-expand" id="btn-expand-${s.id}" onclick="toggleStudentCardExpand(${s.id})" style="font-weight:600;">
+            <span>${isExpanded ? '▲ Collapse Details' : '▼ View Full Details'}</span>
+          </button>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" title="View Complete Student Profile & Monthly Calendar">
+              👤 Profile
+            </button>
+            ${matchedProject ? `
+              <button type="button" class="btn btn-sm btn-secondary" onclick="openProjectDetail(${matchedProject.id})" title="Open Project Details & Gantt Schedule">
+                📅 Project
+              </button>
+            ` : ''}
+            ${(isAdmin || isOwner) ? `
+              <button type="button" class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})" title="Edit Profile Details">
+                ✏️ Edit
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- EXPANDABLE FULL INFORMATION SECTION -->
+        <div class="student-card-expanded-body">
+          <!-- 1. Team & Innovator Section -->
+          <div class="expanded-section">
+            <h5>👥 Team & Innovator Information</h5>
+            <div class="expanded-grid-2col" style="font-size:12px;">
+              <div>
+                <span style="color:var(--text-dim); display:block; font-size:11px;">Team Lead / Student:</span>
+                <strong style="color:var(--text-main);">${escapeHTML(s.name)}</strong> (${escapeHTML(s.role || 'Lead')})
+              </div>
+              <div>
+                <span style="color:var(--text-dim); display:block; font-size:11px;">Faculty Guide / Mentor:</span>
+                <strong style="color:#60a5fa;">${escapeHTML(s.guide || 'Not assigned')}</strong>
+              </div>
+              <div style="grid-column:1 / -1;">
+                <span style="color:var(--text-dim); display:block; font-size:11px;">Team Members:</span>
+                <span style="color:var(--text-main); font-weight:600;">${escapeHTML(teamMembersFormatted)}</span>
+              </div>
+              <div>
+                <span style="color:var(--text-dim); display:block; font-size:11px;">Institution / College:</span>
+                <span style="color:var(--text-muted);">${escapeHTML(s.college || 'Indra Ganesan College of Engineering')}</span>
+              </div>
+              <div>
+                <span style="color:var(--text-dim); display:block; font-size:11px;">Phone / Contact:</span>
+                <span style="color:var(--text-muted); font-family:var(--font-mono);">${escapeHTML(s.phone || 'Available in Lab Directory')}</span>
+              </div>
+            </div>
+            ${skillsList.length > 0 ? `
+              <div style="margin-top:10px;">
+                <span style="color:var(--text-dim); display:block; font-size:11px; margin-bottom:4px;">Technical Skills:</span>
+                <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                  ${skillsList.map(sk => `<span class="card-tag-pill" style="font-size:10px; padding:2px 6px;">${escapeHTML(sk)}</span>`).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- 2. Project Milestone & Timeline Section -->
+          <div class="expanded-section">
+            <h5>📊 Project Milestone & Timeline (IST)</h5>
+            <p style="font-size:12px; color:var(--text-dim); margin:0 0 10px 0; line-height:1.4;">${escapeHTML(projectDesc)}</p>
+            
+            <div class="expanded-grid-2col" style="font-size:12px;">
+              <div>
+                <span style="color:var(--text-dim); display:block; font-size:11px;">Current Stage / Status:</span>
+                <span class="badge ${statusBadge}" style="margin-top:2px;">${escapeHTML(projectStatus)}</span>
+              </div>
+              <div>
+                <span style="color:var(--text-dim); display:block; font-size:11px;">Priority Level:</span>
+                <span class="badge ${projectPriority === 'High' ? 'badge-high' : 'badge-normal'}" style="margin-top:2px;">${escapeHTML(projectPriority)} Priority</span>
+              </div>
+              <div>
+                <span style="color:var(--text-dim); display:block; font-size:11px;">Start Date (IST):</span>
+                <strong style="color:var(--text-main); font-family:var(--font-mono); font-size:11px;">${startIST}</strong>
+              </div>
+              <div>
+                <span style="color:var(--text-dim); display:block; font-size:11px;">Deadline / Due Date (IST):</span>
+                <strong style="color:#fbbf24; font-family:var(--font-mono); font-size:11px;">${dueIST}</strong>
+              </div>
+            </div>
+
+            <!-- Tags Cloud -->
+            <div style="margin-top:10px;">
+              <span style="color:var(--text-dim); display:block; font-size:11px; margin-bottom:4px;">Technology Categorization:</span>
+              <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                ${tagsList.map(tag => `<span class="card-tag-pill" style="font-size:11px; padding:2px 7px; color:#93c5fd; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3);">${escapeHTML(tag.startsWith('#') ? tag : '#' + tag)}</span>`).join('')}
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Immediate Action / Blocker -->
+          <div class="expanded-section" style="border-left:3px solid #f59e0b; background:rgba(245,158,11,0.05);">
+            <h5 style="color:#fbbf24;">⚡ Sprint Action Item & Blocker</h5>
+            <div style="font-size:12px; color:var(--text-main);">${escapeHTML(projectAction)}</div>
+          </div>
+
+          <!-- 4. Deliverables & Specifications -->
+          <div class="expanded-section">
+            <h5>📦 Deliverables & Specifications</h5>
+            <div style="font-size:12px; color:var(--text-muted); line-height:1.4;">${escapeHTML(projectDeliverables)}</div>
+          </div>
+
+          <!-- 5. Media & Showcase Resources -->
+          <div class="expanded-section">
+            <h5>🔗 Showcase Media & Resources</h5>
+            ${heroImage ? `
+              <div style="margin-bottom:10px; border-radius:8px; overflow:hidden; border:1px solid var(--border-color); max-height:140px;">
+                <img src="${heroImage}" alt="Project Photo" style="width:100%; height:140px; object-fit:cover;">
+              </div>
+            ` : ''}
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              ${githubLink ? `
+                <a href="${githubLink}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github" style="font-size:11px; padding:4px 10px;">
+                  🐙 GitHub Codebase
+                </a>
+              ` : `
+                <span class="btn-media btn-media-disabled" style="opacity:0.5; font-size:11px; padding:4px 10px;">🐙 No GitHub Link</span>
+              `}
+
+              ${reportLink ? `
+                <a href="${reportLink}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc" style="font-size:11px; padding:4px 10px;">
+                  📄 Technical Report
+                </a>
+              ` : `
+                <span class="btn-media btn-media-disabled" style="opacity:0.5; font-size:11px; padding:4px 10px;">📄 No Report Uploaded</span>
+              `}
+
+              ${videoLink ? `
+                <a href="${videoLink}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube" style="font-size:11px; padding:4px 10px;">
+                  🎥 Video Demo
+                </a>
+              ` : ''}
+
+              ${linkedinLink ? `
+                <a href="${linkedinLink}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin" style="font-size:11px; padding:4px 10px;">
+                  💼 LinkedIn Showcase
+                </a>
+              ` : ''}
+            </div>
+          </div>
+
+          <!-- Bottom Action Footer in Expanded View -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:10px; border-top:1px solid var(--border-color); flex-wrap:wrap; gap:8px;">
+            ${matchedProject ? `
+              <button type="button" class="btn btn-sm btn-primary" onclick="openProjectDetail(${matchedProject.id})">
+                📅 Open Project Details & Discussions
+              </button>
+            ` : `
+              <button type="button" class="btn btn-sm btn-primary" onclick="openStudentViewModal(${s.id})">
+                👁️ View Complete Student Profile
+              </button>
+            `}
+            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleStudentCardExpand(${s.id})">
+              ▲ Collapse
+            </button>
+          </div>
+        </div>
+      </div>
     `;
   });
 
-  html += `
-        </tbody>
-      </table>
-    </div>
-  `;
-
-  DOM.studentsGridRoot.innerHTML = html;
+  DOM.studentsGridRoot.innerHTML = cardsHtml;
 }
 
 function openStudentViewModal(studentId) {
@@ -4420,4 +4722,5 @@ function initAuditLogListeners() {
 // Expose globals for inline onclicks
 window.openAdminDateEditModal = openAdminDateEditModal;
 window.openAdminAuditEditModal = openAdminAuditEditModal;
+window.toggleStudentCardExpand = toggleStudentCardExpand;
 
