@@ -109,21 +109,16 @@ async function startNgrokSdk() {
   if (ngrokListener) return;
   try {
     const ngrok = require('@ngrok/ngrok');
-    log(`Connecting to Ngrok cloud for domain ${NGROK_DOMAIN}...`);
+    log(`Connecting to Ngrok cloud for domain ${NGROK_DOMAIN} forwarding to port ${PORT}...`);
 
-    ngrokSession = await new ngrok.SessionBuilder()
-      .authtoken(NGROK_AUTHTOKEN)
-      .connect();
-
-    ngrokListener = await ngrokSession.httpEndpoint()
-      .domain(NGROK_DOMAIN)
-      .listen();
+    ngrokListener = await ngrok.forward({
+      addr: PORT,
+      authtoken: NGROK_AUTHTOKEN,
+      domain: NGROK_DOMAIN
+    });
 
     const liveUrl = ngrokListener.url();
     log(`🎉 NGROK CONNECTED SUCCESSFULLY! Live URL: ${liveUrl}`);
-    
-    // Forward traffic to local server on configured port
-    ngrokListener.forward(`http://localhost:${PORT}`);
 
     savePublicUrl(liveUrl, true);
   } catch (err) {
