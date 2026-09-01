@@ -624,11 +624,11 @@
               </select>
             </div>
             <div style="display: flex; gap: 6px; align-items: center;">
-              <button type="button" class="btn btn-secondary btn-sm student-view-toggle active" id="btn-student-view-table" title="Student Teams Table View" style="padding: 7px 12px; font-weight: 600;">
-                📋 Table View
+              <button type="button" class="btn btn-secondary btn-sm student-view-toggle active" id="btn-student-view-cards" title="Expandable Cards Grid View" style="padding: 7px 12px; font-weight: 600;">
+                🗂️ Cards
               </button>
-              <button type="button" class="btn btn-secondary btn-sm student-view-toggle" id="btn-student-view-cards" title="Expandable Cards Grid View" style="padding: 7px 12px; font-weight: 600;">
-                🗂️ Cards View
+              <button type="button" class="btn btn-secondary btn-sm student-view-toggle" id="btn-student-view-table" title="Compact Table View" style="padding: 7px 12px; font-weight: 600;">
+                📋 Table
               </button>
             </div>
           </div>
@@ -987,10 +987,11 @@
   <div class="modal-overlay" id="detail-modal">
     <div class="modal-card modal-lg">
       <div class="modal-header">
-        <div class="detail-header-left">
+        <div class="detail-header-left" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           <span class="badge badge-code" id="detail-code">IGRID-AI-01</span>
           <span class="badge badge-domain" id="detail-domain">AI</span>
           <span class="badge" id="detail-priority">High Priority</span>
+          <div id="detail-active-toggle-container" style="margin-left: 4px;"></div>
         </div>
         <button class="modal-close" id="close-detail-modal">&times;</button>
       </div>

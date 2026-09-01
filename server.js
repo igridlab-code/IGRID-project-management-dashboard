@@ -898,7 +898,8 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
       title, description, domain, tags, status, priority,
       progress, start_date, due_date, immediate_action, github_repo,
       youtube_url, linkedin_url, doc_url, image_url,
-      bom_status, team_name, team_lead, team_lead_photo, team_members, deliverables
+      bom_status, team_name, team_lead, team_lead_photo, team_members, deliverables,
+      is_active, isActive
     } = req.body;
 
     const membersJson = team_members !== undefined
@@ -908,6 +909,12 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
     const progressNum = (progress !== undefined && progress !== null && progress !== '')
       ? Number(progress)
       : null;
+
+    let activeStateNum = null;
+    if (is_active !== undefined || isActive !== undefined) {
+      const activeRaw = is_active !== undefined ? is_active : isActive;
+      activeStateNum = (activeRaw === true || activeRaw === 1 || activeRaw === '1' || activeRaw === 'true') ? 1 : 0;
+    }
 
     const sql = `
       UPDATE projects SET
@@ -933,6 +940,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         team_lead_photo = COALESCE(?, team_lead_photo),
         team_members = COALESCE(?, team_members),
         deliverables = COALESCE(?, deliverables),
+        is_active = COALESCE(?, is_active, 1),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
@@ -945,7 +953,9 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         progressNum,
         start_date, due_date, immediate_action, github_repo,
         youtube_url, linkedin_url, doc_url, image_url,
-        bom_status, team_name, team_lead, team_lead_photo, membersJson, deliverables, id
+        bom_status, team_name, team_lead, team_lead_photo, membersJson, deliverables,
+        activeStateNum,
+        id
       ],
       function(err4) {
         if (err4) return res.status(500).json({ error: err4.message });
@@ -961,8 +971,9 @@ const handleProjectStageUpdate = (req, res) => {
   const status = req.body.status || req.body.stage;
   const progress = req.body.progress;
 
-  if (!['in_queue', 'in_progress', 'testing', 'completed'].includes(status)) {
-    return res.status(400).json({ error: 'Invalid status/stage. Must be one of: in_queue, in_progress, testing, completed.' });
+  const validStatuses = ['in_queue', 'in_progress', 'testing', 'completed'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ error: `Invalid status/stage. Must be one of: ${validStatuses.join(', ')}` });
   }
 
   let newProgress = progress;
@@ -983,11 +994,13 @@ const handleProjectStageUpdate = (req, res) => {
 
   db.run(sql, [status, newProgress, id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) return res.status(404).json({ error: 'Project not found' });
 
-    const adminName = (req.user && req.user.name) ? req.user.name : 'Lab Coordinator';
+    const adminName = (req.user && (req.user.name || req.user.email)) || 'Administrator';
     db.run(
       'INSERT INTO activities (project_id, author, author_role, message, type) VALUES (?, ?, ?, ?, ?)',
-      [id, adminName, 'Coordinator', `Moved status to ${status.replace('_', ' ').toUpperCase()} (Progress: ${newProgress}%)`, 'status_change']
+      [id, adminName, 'Coordinator', `Moved status to ${status.replace('_', ' ').toUpperCase()} (Progress: ${newProgress}%)`, 'status_change'],
+      () => {}
     );
 
     res.json({ message: 'Stage updated successfully', status, progress: newProgress });
@@ -997,6 +1010,87 @@ const handleProjectStageUpdate = (req, res) => {
 app.put('/api/projects/:id/status', requireAuth, requireAdmin, handleProjectStageUpdate);
 app.patch('/api/projects/:id/status', requireAuth, requireAdmin, handleProjectStageUpdate);
 app.patch('/api/projects/:id/stage', requireAuth, requireAdmin, handleProjectStageUpdate);
+
+// ADMIN ONLY: TOGGLE PROJECT ACTIVE / INACTIVE (ON/OFF) STATUS
+function handleProjectActiveToggle(req, res) {
+  const { id } = req.params;
+  const user = req.user;
+
+  try {
+    db.get('SELECT * FROM projects WHERE id = ?', [id], (err, project) => {
+      if (err) {
+        console.error('[Error] Failed to fetch project for toggle:', err);
+        return res.status(500).json({ error: `Database query failed: ${err.message}` });
+      }
+      if (!project) {
+        return res.status(404).json({ error: `Project #${id} not found.` });
+      }
+
+      let newActiveState;
+      const bodyVal = req.body
+        ? (req.body.is_active !== undefined ? req.body.is_active : (req.body.isActive !== undefined ? req.body.isActive : req.body.active))
+        : undefined;
+
+      if (bodyVal !== undefined) {
+        if (typeof bodyVal === 'boolean') {
+          newActiveState = bodyVal ? 1 : 0;
+        } else if (typeof bodyVal === 'string') {
+          const str = bodyVal.trim().toLowerCase();
+          newActiveState = (str === 'true' || str === '1' || str === 'active' || str === 'on') ? 1 : 0;
+        } else if (typeof bodyVal === 'number') {
+          newActiveState = bodyVal === 1 ? 1 : 0;
+        } else {
+          newActiveState = bodyVal ? 1 : 0;
+        }
+      } else {
+        const current = (project.is_active === undefined || project.is_active === null) ? 1 : Number(project.is_active);
+        newActiveState = current === 1 ? 0 : 1;
+      }
+
+      const updateSql = `UPDATE projects SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+      db.run(updateSql, [newActiveState, id], function(updateErr) {
+        if (updateErr) {
+          console.error('[Error] Failed to update project is_active:', updateErr);
+          return res.status(500).json({ error: `Failed to update project status: ${updateErr.message}` });
+        }
+
+        // Log audit event
+        logAuditEvent({
+          email: user.email,
+          role: 'admin',
+          team_name: user.team_name || project.team_name || 'Admin',
+          event_type: 'PROJECT_STATUS_TOGGLE',
+          method: 'Project Status Toggle',
+          status: 'SUCCESS',
+          ip_address: getClientIp(req),
+          details: `Project "${project.project_code} - ${project.title}" toggled to ${newActiveState === 1 ? 'ACTIVE (ON)' : 'INACTIVE (OFF)'}`
+        });
+
+        db.get('SELECT * FROM projects WHERE id = ?', [id], (fetchErr, updatedProject) => {
+          const finalProj = updatedProject || { ...project, is_active: newActiveState };
+          res.json({
+            message: `Project ${finalProj.project_code} is now ${newActiveState === 1 ? 'Active (ON)' : 'Inactive (OFF)'}`,
+            is_active: newActiveState,
+            isActive: newActiveState === 1,
+            project: {
+              ...finalProj,
+              is_active: newActiveState,
+              isActive: newActiveState === 1
+            }
+          });
+        });
+      });
+    });
+  } catch (ex) {
+    console.error('[Unhandled Error in handleProjectActiveToggle]:', ex);
+    res.status(500).json({ error: `Internal server error: ${ex.message}` });
+  }
+}
+
+app.patch('/api/projects/:id/toggle-active', requireAuth, requireAdmin, handleProjectActiveToggle);
+app.post('/api/projects/:id/toggle-active', requireAuth, requireAdmin, handleProjectActiveToggle);
+app.patch('/api/projects/:id/active', requireAuth, requireAdmin, handleProjectActiveToggle);
+app.put('/api/projects/:id/active', requireAuth, requireAdmin, handleProjectActiveToggle);
 
 // ADMIN ONLY: UPDATE PROJECT DATES / DEADLINE
 app.patch('/api/projects/:id/dates', requireAuth, requireAdmin, (req, res) => {
@@ -1183,58 +1277,6 @@ app.put('/api/students/:id', requireAuth, (req, res) => {
         });
       });
     }
-  });
-});
-
-// DELETE STUDENT / TEAM RECORD (ADMIN ONLY - CASCADE DELETE)
-app.delete('/api/students/:id', requireAuth, requireAdmin, (req, res) => {
-  const reqStudentId = Number(req.params.id);
-
-  db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err, student) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!student) return res.status(404).json({ error: 'Student team record not found.' });
-
-    const studentName = student.name;
-    const teamName = student.assigned_project || student.project_title || student.name;
-
-    // Delete calendar activities for this student
-    db.run('DELETE FROM student_calendar WHERE student_id = ?', [reqStudentId], (errCal) => {
-      if (errCal) console.error('Error deleting calendar activities:', errCal);
-
-      // Check if this student is associated with an owned project
-      db.get('SELECT id FROM projects WHERE team_lead = ? OR project_code = ? OR title = ?', [studentName, student.assigned_project, student.project_title], (errProj, proj) => {
-        if (proj) {
-          // Cascade delete project tasks, activities, BOMs, and project
-          db.run('DELETE FROM project_tasks WHERE project_id = ?', [proj.id], () => {});
-          db.run('DELETE FROM activities WHERE project_id = ?', [proj.id], () => {});
-          db.run('DELETE FROM boms WHERE project_id = ? OR project_code = ?', [proj.id, student.assigned_project], () => {});
-          db.run('DELETE FROM projects WHERE id = ?', [proj.id], () => {});
-        }
-
-        // Delete student record
-        db.run('DELETE FROM students WHERE id = ?', [reqStudentId], function(errDel) {
-          if (errDel) return res.status(500).json({ error: errDel.message });
-
-          // Record in Audit Trail
-          logAuditEvent({
-            email: req.user.email,
-            role: req.user.role,
-            team_name: teamName,
-            method: 'Admin Action',
-            ip_address: getClientIp(req),
-            event_type: 'TEAM_DELETE',
-            status: 'SUCCESS',
-            details: `Deleted student team "${studentName}" (${teamName}) and all associated project data.`
-          });
-
-          res.json({
-            success: true,
-            message: `Team "${studentName}" and all associated project data deleted successfully.`,
-            deleted_id: reqStudentId
-          });
-        });
-      });
-    });
   });
 });
 

@@ -1378,6 +1378,95 @@ body {
   100% { border-color: rgba(239, 68, 68, 0.4); }
 }
 
+/* ==========================================================================
+   PROJECT ACTIVE / INACTIVE (ON/OFF) TOGGLE SWITCH
+   ========================================================================== */
+.project-active-toggle-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.project-toggle-switch {
+  position: relative;
+  width: 42px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.25s ease, border-color 0.25s ease, opacity 0.2s ease;
+  border: 1px solid var(--border-color);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+}
+
+.project-toggle-switch.is-active {
+  background: #10b981;
+  border-color: #059669;
+}
+
+.project-toggle-switch.is-inactive {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.project-toggle-thumb {
+  width: 16px;
+  height: 16px;
+  background: #ffffff;
+  border-radius: 50%;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.project-toggle-switch.is-active .project-toggle-thumb {
+  transform: translateX(20px);
+}
+
+.project-toggle-switch.is-inactive .project-toggle-thumb {
+  transform: translateX(0px);
+}
+
+.project-toggle-switch.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.project-toggle-switch.toggle-loading {
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.project-toggle-switch.toggle-loading .project-toggle-thumb {
+  animation: toggleSpin 0.7s linear infinite;
+  border: 2px solid #ffffff;
+  border-top-color: transparent;
+  background: transparent;
+}
+
+@keyframes toggleSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.project-toggle-label {
+  font-size: 10px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.project-toggle-label.on {
+  color: #10b981;
+}
+
+.project-toggle-label.off {
+  color: #ef4444;
+}
+
 .card-title {
   font-size: 14px;
   font-weight: 700;
