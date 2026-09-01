@@ -3918,11 +3918,22 @@ async function handleProjectFormSubmit(e) {
     console.log('[PROJECT-SAVE] 4. API response status:', res.status);
 
     if (res.ok) {
-      console.log('[PROJECT-SAVE] 5. Refreshing state & views...');
-      closeModal(DOM.projectModal);
-      showToast(id ? 'Project details updated successfully' : 'New project created successfully', 'success');
+      const resData = await res.json().catch(() => ({}));
+      console.log('[PROJECT-SAVE] 5. Server response payload:', resData);
 
-      // Immediate state refresh
+      if (resData.project && resData.project.id) {
+        const idx = state.projects.findIndex(p => String(p.id) === String(resData.project.id));
+        if (idx !== -1) {
+          state.projects[idx] = { ...state.projects[idx], ...resData.project };
+        } else {
+          state.projects.unshift(resData.project);
+        }
+      }
+
+      closeModal(DOM.projectModal);
+      showToast(resData.message || (id ? 'Project details saved successfully.' : 'Project created successfully.'), 'success');
+
+      // Comprehensive state refresh and view re-render
       await Promise.all([fetchProjects(), fetchNotifications()]);
       renderAllViews();
       updateStatsSummary();
@@ -3933,15 +3944,15 @@ async function handleProjectFormSubmit(e) {
         await openProjectDetail(id);
       }
 
-      console.log('[PROJECT-SAVE] 6. Save flow completed successfully!');
+      console.log('[PROJECT-SAVE] 6. Save flow completed and UI synchronized with database!');
     } else {
       const errData = await res.json().catch(() => ({}));
       console.error('[PROJECT-SAVE] Server error response:', res.status, errData);
-      showToast(errData.error || `Failed to save project: Server returned HTTP ${res.status}`, 'error');
+      showToast(errData.error || `Failed to save: Server returned HTTP ${res.status}`, 'error');
     }
   } catch (err) {
     console.error('[PROJECT-SAVE] Exception during save flow:', err);
-    showToast(`Failed to save project: ${err.message || 'Connection error'}`, 'error');
+    showToast(`Failed to save: ${err.message || 'Connection error'}`, 'error');
   } finally {
     if (saveBtn) {
       saveBtn.disabled = false;

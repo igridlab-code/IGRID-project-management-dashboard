@@ -884,8 +884,23 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
           updateSql,
           [github_repo, youtube_url, linkedin_url, doc_url, image_url, team_lead_photo, deliverables, id],
           function(err3) {
-            if (err3) return res.status(500).json({ error: err3.message });
-            res.json({ message: 'Project links and deliverables updated successfully.', changes: this.changes });
+            if (err3) {
+              console.error(`[BACKEND-SAVE] Error updating project #${id} by Student:`, err3.message);
+              return res.status(500).json({ error: err3.message });
+            }
+            db.get('SELECT * FROM projects WHERE id = ?', [id], (errFetch, updatedProj) => {
+              console.log(`[BACKEND-SAVE] ✅ Project #${id} ("${updatedProj ? updatedProj.title : id}") links & deliverables successfully saved to SQLite:`, {
+                id: updatedProj ? updatedProj.id : id,
+                github_repo: updatedProj ? updatedProj.github_repo : null,
+                doc_url: updatedProj ? updatedProj.doc_url : null,
+                deliverables: updatedProj ? updatedProj.deliverables : null
+              });
+              res.json({
+                message: 'Project links and deliverables saved successfully.',
+                project: updatedProj,
+                changes: this.changes
+              });
+            });
           }
         );
       });
@@ -958,8 +973,24 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         id
       ],
       function(err4) {
-        if (err4) return res.status(500).json({ error: err4.message });
-        res.json({ message: 'Project updated successfully by Administrator.', changes: this.changes });
+        if (err4) {
+          console.error(`[BACKEND-SAVE] Error updating project #${id} by Admin:`, err4.message);
+          return res.status(500).json({ error: err4.message });
+        }
+        db.get('SELECT * FROM projects WHERE id = ?', [id], (errFetch, updatedProj) => {
+          console.log(`[BACKEND-SAVE] ✅ Project #${id} ("${updatedProj ? updatedProj.title : id}") details successfully saved to SQLite database:`, {
+            id: updatedProj ? updatedProj.id : id,
+            title: updatedProj ? updatedProj.title : null,
+            progress: updatedProj ? updatedProj.progress : null,
+            status: updatedProj ? updatedProj.status : null,
+            due_date: updatedProj ? updatedProj.due_date : null
+          });
+          res.json({
+            message: 'Project details saved successfully.',
+            project: updatedProj,
+            changes: this.changes
+          });
+        });
       }
     );
   });
