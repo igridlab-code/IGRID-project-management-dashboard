@@ -1008,7 +1008,7 @@ function initEventListeners() {
   DOM.closeDetailModal.addEventListener('click', () => closeModal(DOM.detailModal));
   DOM.btnCloseDetail.addEventListener('click', () => closeModal(DOM.detailModal));
   DOM.btnEditCurrentProject.addEventListener('click', () => {
-    const project = state.projects.find(p => p.id === state.activeProjectId);
+    const project = state.projects.find(p => String(p.id) === String(state.activeProjectId));
     if (project) {
       closeModal(DOM.detailModal);
       openProjectModalForEdit(project);
@@ -1022,7 +1022,7 @@ function initEventListeners() {
   });
 
   DOM.btnQuickAddBom.addEventListener('click', () => {
-    const project = state.projects.find(p => p.id === state.activeProjectId);
+    const project = state.projects.find(p => String(p.id) === String(state.activeProjectId));
     if (project) {
       openBomModal(project.project_code);
     }
@@ -3861,18 +3861,6 @@ async function handleProjectFormSubmit(e) {
     }
 
     let docUrl = normalizeUrl(document.getElementById('form-doc-url') ? document.getElementById('form-doc-url').value : '');
-    if (docUrl) {
-      const isDriveLink = docUrl.includes('drive.google.com') ||
-                          docUrl.includes('docs.google.com') ||
-                          docUrl.includes('google.com/drive');
-      if (!isDriveLink) {
-        console.warn('[PROJECT-SAVE] Validation failed: Invalid Google Drive/Docs URL');
-        showToast('Please paste a valid Google Drive or Docs link (e.g. drive.google.com)', 'error');
-        const docInput = document.getElementById('form-doc-url');
-        if (docInput) docInput.focus();
-        return;
-      }
-    }
 
     const payload = {
       project_code: (document.getElementById('form-code') ? document.getElementById('form-code').value : (existingProject ? existingProject.project_code : '')).trim(),
@@ -3921,6 +3909,10 @@ async function handleProjectFormSubmit(e) {
       const resData = await res.json().catch(() => ({}));
       console.log('[PROJECT-SAVE] 5. Server response payload:', resData);
 
+      if (saveBtn) {
+        saveBtn.innerHTML = '✅ Saved!';
+      }
+
       if (resData.project && resData.project.id) {
         const idx = state.projects.findIndex(p => String(p.id) === String(resData.project.id));
         if (idx !== -1) {
@@ -3930,8 +3922,7 @@ async function handleProjectFormSubmit(e) {
         }
       }
 
-      closeModal(DOM.projectModal);
-      showToast(resData.message || (id ? 'Project details saved successfully.' : 'Project created successfully.'), 'success');
+      showToast('Saved - Project details saved successfully.', 'success');
 
       // Comprehensive state refresh and view re-render
       await Promise.all([fetchProjects(), fetchNotifications()]);
@@ -3944,7 +3935,17 @@ async function handleProjectFormSubmit(e) {
         await openProjectDetail(id);
       }
 
+      setTimeout(() => {
+        closeModal(DOM.projectModal);
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = originalBtnText;
+        }
+        syncBodyScrollLock();
+      }, 400);
+
       console.log('[PROJECT-SAVE] 6. Save flow completed and UI synchronized with database!');
+      return;
     } else {
       const errData = await res.json().catch(() => ({}));
       console.error('[PROJECT-SAVE] Server error response:', res.status, errData);
@@ -3954,10 +3955,12 @@ async function handleProjectFormSubmit(e) {
     console.error('[PROJECT-SAVE] Exception during save flow:', err);
     showToast(`Failed to save: ${err.message || 'Connection error'}`, 'error');
   } finally {
-    if (saveBtn) {
+    if (saveBtn && saveBtn.innerHTML !== '✅ Saved!') {
       saveBtn.disabled = false;
       saveBtn.innerHTML = originalBtnText;
     }
+    syncBodyScrollLock();
+  }
     syncBodyScrollLock();
   }
 }
@@ -4945,6 +4948,8 @@ window.openAdminAuditEditModal = openAdminAuditEditModal;
 window.toggleStudentCardExpand = toggleStudentCardExpand;
 window.handleToggleProjectActive = handleToggleProjectActive;
 window.renderProjectActiveToggleHTML = renderProjectActiveToggleHTML;
+window.openProjectModalForEdit = openProjectModalForEdit;
+window.openProjectModalForCreate = openProjectModalForCreate;
 window.openTaskModalForCreate = openTaskModalForCreate;
 window.openTaskModalForEdit = openTaskModalForEdit;
 window.openTaskInfoModal = openTaskInfoModal;
