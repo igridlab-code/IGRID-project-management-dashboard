@@ -254,6 +254,15 @@
           </svg>
           <span>Analytics</span>
         </button>
+
+        <button class="tab-btn admin-only-tab" data-view="audit" id="tab-audit" style="display:none;">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            <circle cx="12" cy="11" r="3"></circle>
+            <path d="M12 14v3"></path>
+          </svg>
+          <span>Login Activity</span>
+        </button>
       </nav>
 
       <!-- Right Controls -->
@@ -651,6 +660,147 @@
               <div class="analytics-card">
                 <h4>⚡ Projects by Status</h4>
                 <div id="analytics-page-status-bars" class="analytics-bars-container"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 9. AUDIT LOG / LOGIN ACTIVITY VIEW (ADMIN ONLY) -->
+      <div class="view-panel" id="view-audit">
+        <div class="audit-page-container" style="max-width: 1300px; margin: 0 auto;">
+          <div class="page-header" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+            <div>
+              <h2 style="font-size: 22px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                <span>🛡️</span> Login Activity & Audit Log
+                <span class="badge badge-primary" style="font-size: 11px;">Admin Only</span>
+              </h2>
+              <p style="color: var(--text-dim); font-size: 13px; margin-top: 4px;">
+                Comprehensive authentication history, session tracking, and IP anomaly security monitoring.
+              </p>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <button class="btn btn-secondary" id="btn-export-audit-csv" title="Download audit log as CSV">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span>Export CSV</span>
+              </button>
+              <button class="btn btn-primary" id="btn-refresh-audit-logs">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                <span>Refresh</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Audit Stats KPI Grid -->
+          <div class="analytics-metrics-grid" style="margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+            <div class="metric-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 18px; display: flex; align-items: center; gap: 14px;">
+              <div class="metric-icon" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; font-size: 24px; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">🔐</div>
+              <div class="metric-info">
+                <span class="metric-label" style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Total Recorded Logins</span>
+                <span class="metric-val" id="audit-stat-total" style="font-size: 22px; font-weight: 800; color: var(--text-main); display: block;">0</span>
+                <span class="metric-sub" style="font-size: 11px; color: var(--text-dim);">Across all user accounts</span>
+              </div>
+            </div>
+            <div class="metric-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 18px; display: flex; align-items: center; gap: 14px;">
+              <div class="metric-icon" style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 24px; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">👥</div>
+              <div class="metric-info">
+                <span class="metric-label" style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Unique Active Users</span>
+                <span class="metric-val" id="audit-stat-unique" style="font-size: 22px; font-weight: 800; color: var(--text-main); display: block;">0</span>
+                <span class="metric-sub" style="font-size: 11px; color: var(--text-dim);">Distinct authenticated users</span>
+              </div>
+            </div>
+            <div class="metric-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 18px; display: flex; align-items: center; gap: 14px;">
+              <div class="metric-icon" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; font-size: 24px; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">⚡</div>
+              <div class="metric-info">
+                <span class="metric-label" style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Logins Today</span>
+                <span class="metric-val" id="audit-stat-today" style="font-size: 22px; font-weight: 800; color: var(--text-main); display: block;">0</span>
+                <span class="metric-sub" style="font-size: 11px; color: var(--text-dim);">Last 24 hours</span>
+              </div>
+            </div>
+            <div class="metric-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 18px; display: flex; align-items: center; gap: 14px;">
+              <div class="metric-icon" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; font-size: 24px; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">⚠️</div>
+              <div class="metric-info">
+                <span class="metric-label" style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Security Alerts</span>
+                <span class="metric-val" id="audit-stat-flags" style="font-size: 22px; font-weight: 800; color: var(--text-main); display: block;">0</span>
+                <span class="metric-sub" id="audit-stat-flags-sub" style="font-size: 11px; color: var(--text-dim);">Multi-IP flags</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Audit Filter Toolbar -->
+          <div class="audit-filter-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; margin-bottom: 20px;">
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+              <div style="flex: 1; min-width: 200px;">
+                <input type="text" id="audit-search-input" placeholder="Search by email, team, or IP..." style="width: 100%; padding: 8px 12px; background: var(--bg-card-sub); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main); font-size: 13px;">
+              </div>
+              <div style="width: 140px;">
+                <select id="audit-role-filter" style="width: 100%; padding: 8px 10px; background: var(--bg-card-sub); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main); font-size: 13px;">
+                  <option value="all">All Roles</option>
+                  <option value="admin">👑 Admin</option>
+                  <option value="student">🎓 Student</option>
+                  <option value="viewer">👁️ Viewer</option>
+                </select>
+              </div>
+              <div style="width: 150px;">
+                <select id="audit-event-filter" style="width: 100%; padding: 8px 10px; background: var(--bg-card-sub); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main); font-size: 13px;">
+                  <option value="all">All Events</option>
+                  <option value="LOGIN">Successful Login</option>
+                  <option value="LOGIN_FAILED">Failed Login</option>
+                  <option value="LOGOUT">Logout</option>
+                  <option value="SIGNUP">Registration</option>
+                </select>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 12px; color: var(--text-dim);">From:</span>
+                <input type="date" id="audit-date-from" style="padding: 6px 8px; background: var(--bg-card-sub); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main); font-size: 12px;">
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 12px; color: var(--text-dim);">To:</span>
+                <input type="date" id="audit-date-to" style="padding: 6px 8px; background: var(--bg-card-sub); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main); font-size: 12px;">
+              </div>
+              <button class="btn btn-secondary" id="btn-reset-audit-filters" style="font-size: 12px; padding: 7px 12px;">Reset</button>
+            </div>
+          </div>
+
+          <!-- Audit Logs Table -->
+          <div class="audit-table-wrapper" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden;">
+            <div style="overflow-x: auto;">
+              <table class="data-table" id="audit-logs-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+                <thead>
+                  <tr style="background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid var(--border-color);">
+                    <th style="padding: 12px 16px; font-weight: 700; color: var(--text-dim); font-size: 11px; text-transform: uppercase;">Timestamp (IST)</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: var(--text-dim); font-size: 11px; text-transform: uppercase;">User / Email</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: var(--text-dim); font-size: 11px; text-transform: uppercase;">Role</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: var(--text-dim); font-size: 11px; text-transform: uppercase;">Team / Project</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: var(--text-dim); font-size: 11px; text-transform: uppercase;">Login Method</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: var(--text-dim); font-size: 11px; text-transform: uppercase;">IP Address</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: var(--text-dim); font-size: 11px; text-transform: uppercase;">Event / Status</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: var(--text-dim); font-size: 11px; text-transform: uppercase;">Security Flag</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-logs-tbody">
+                  <tr>
+                    <td colspan="8" style="padding: 32px; text-align: center; color: var(--text-dim);">Loading login activity...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Bar -->
+            <div class="audit-pagination" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-top: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.01);">
+              <span style="font-size: 12px; color: var(--text-dim);" id="audit-pagination-info">Showing 0 of 0 entries</span>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button class="btn btn-secondary" id="btn-audit-prev-page" style="font-size: 12px; padding: 4px 10px;" disabled>Previous</button>
+                <span style="font-size: 12px; color: var(--text-main); font-weight: 600;" id="audit-page-indicator">Page 1 of 1</span>
+                <button class="btn btn-secondary" id="btn-audit-next-page" style="font-size: 12px; padding: 4px 10px;" disabled>Next</button>
               </div>
             </div>
           </div>

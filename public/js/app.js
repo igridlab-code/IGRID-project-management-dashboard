@@ -24,7 +24,20 @@ const state = {
   searchQuery: '',
   sortBy: 'due_date',
   activeProjectId: null,
-  draggedCardId: null
+  draggedCardId: null,
+  auditLogs: [],
+  auditTotal: 0,
+  auditPage: 1,
+  auditLimit: 50,
+  auditTotalPages: 1,
+  auditSummary: {},
+  auditFilters: {
+    search: '',
+    role: 'all',
+    event_type: 'all',
+    start_date: '',
+    end_date: ''
+  }
 };
 
 // DOM Elements
@@ -309,6 +322,9 @@ function updateUserNavbarUI() {
     if (loginBtn) loginBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = 'inline-block';
 
+    const tabAudit = document.getElementById('tab-audit');
+    if (tabAudit) tabAudit.style.display = isAdmin ? 'inline-flex' : 'none';
+
     if (!isAdmin) {
       if (openAddStudentBtn) openAddStudentBtn.style.display = 'none';
       if (openAddProjectBtn) openAddProjectBtn.style.display = 'none';
@@ -320,6 +336,9 @@ function updateUserNavbarUI() {
     }
   } else {
     // GUEST PUBLIC SHOWCASE (READ-ONLY)
+    const tabAudit = document.getElementById('tab-audit');
+    if (tabAudit) tabAudit.style.display = 'none';
+
     if (userNameText) userNameText.textContent = 'Public Visitor';
     if (avatarImg) avatarImg.src = `https://ui-avatars.com/api/?name=Public+Visitor&background=3b82f6&color=fff`;
     if (userRoleBadge) {
@@ -1135,6 +1154,21 @@ function initEventListeners() {
 
   const btnRetryAnalytics = document.getElementById('btn-retry-analytics');
   if (btnRetryAnalytics) btnRetryAnalytics.addEventListener('click', loadAnalyticsData);
+
+  const navLogoutBtn = document.getElementById('btn-logout-nav');
+  if (navLogoutBtn) {
+    navLogoutBtn.addEventListener('click', async () => {
+      try {
+        await authFetch('/api/auth/logout', { method: 'POST' });
+      } catch(e) {}
+      localStorage.removeItem('igrid_session');
+      showToast('Signed out successfully');
+      window.location.href = '/login';
+    });
+  }
+
+  // Audit Logs listeners
+  initAuditLogListeners();
 }
 
 function switchView(viewName) {
@@ -1211,6 +1245,9 @@ function renderAllViews() {
   renderCompleted();
   renderStudents();
   renderAnalytics();
+  if (state.currentView === 'audit' && isUserAdmin()) {
+    fetchAndRenderAuditLogs();
+  }
   populateBomProjectSelect();
 }
 
@@ -3863,4 +3900,279 @@ function escapeHTML(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+// ----------------------------------------------------
+// 10. AUDIT LOG & LOGIN ACTIVITY (ADMIN ONLY)
+// ----------------------------------------------------
+async function fetchAndRenderAuditLogs() {
+  if (!isUserAdmin()) return;
+
+  const tbody = document.getElementById('audit-logs-tbody');
+  if (tbody && state.auditLogs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:32px; text-align:center; color:var(--text-dim);">Fetching login activity records...</td></tr>';
+  }
+
+  const params = new URLSearchParams();
+  if (state.auditFilters.search) params.append('search', state.auditFilters.search);
+  if (state.auditFilters.role && state.auditFilters.role !== 'all') params.append('role', state.auditFilters.role);
+  if (state.auditFilters.event_type && state.auditFilters.event_type !== 'all') params.append('event_type', state.auditFilters.event_type);
+  if (state.auditFilters.start_date) params.append('start_date', state.auditFilters.start_date);
+  if (state.auditFilters.end_date) params.append('end_date', state.auditFilters.end_date);
+  params.append('page', state.auditPage || 1);
+  params.append('limit', state.auditLimit || 50);
+
+  try {
+    const res = await authFetch(`/api/admin/audit-logs?${params.toString()}`);
+    if (!res.ok) {
+      if (res.status === 403) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="padding:32px; text-align:center; color:#ef4444;">🔒 Access Denied. Administrator credentials required.</td></tr>';
+        return;
+      }
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    state.auditLogs = data.logs || [];
+    state.auditTotal = data.total || 0;
+    state.auditPage = data.page || 1;
+    state.auditTotalPages = data.total_pages || 1;
+    state.auditSummary = data.summary || {};
+
+    renderAuditLogsUI();
+  } catch (err) {
+    console.error('Error fetching audit logs:', err);
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="8" style="padding:32px; text-align:center; color:#ef4444;">Failed to load audit logs: ${escapeHTML(err.message)}</td></tr>`;
+    }
+  }
+}
+
+function renderAuditLogsUI() {
+  // Update KPI counters
+  const totalEl = document.getElementById('audit-stat-total');
+  const uniqueEl = document.getElementById('audit-stat-unique');
+  const todayEl = document.getElementById('audit-stat-today');
+  const flagsEl = document.getElementById('audit-stat-flags');
+  const flagsSub = document.getElementById('audit-stat-flags-sub');
+
+  if (totalEl) totalEl.textContent = Number(state.auditSummary.total_logins || 0).toLocaleString('en-IN');
+  if (uniqueEl) uniqueEl.textContent = Number(state.auditSummary.unique_users || 0).toLocaleString('en-IN');
+  if (todayEl) todayEl.textContent = Number(state.auditSummary.today_logins || 0).toLocaleString('en-IN');
+  if (flagsEl) {
+    const flagCount = state.auditSummary.suspicious_accounts_count || 0;
+    flagsEl.textContent = flagCount;
+    flagsEl.style.color = flagCount > 0 ? '#ef4444' : '#10b981';
+    if (flagsSub) flagsSub.textContent = flagCount > 0 ? `${flagCount} account(s) on multiple IPs` : 'All sessions normal';
+  }
+
+  // Update Pagination Info
+  const startIdx = state.auditTotal > 0 ? ((state.auditPage - 1) * state.auditLimit) + 1 : 0;
+  const endIdx = Math.min(state.auditPage * state.auditLimit, state.auditTotal);
+  const infoEl = document.getElementById('audit-pagination-info');
+  const indicatorEl = document.getElementById('audit-page-indicator');
+  const prevBtn = document.getElementById('btn-audit-prev-page');
+  const nextBtn = document.getElementById('btn-audit-next-page');
+
+  if (infoEl) infoEl.textContent = `Showing ${startIdx}-${endIdx} of ${state.auditTotal} entries`;
+  if (indicatorEl) indicatorEl.textContent = `Page ${state.auditPage} of ${state.auditTotalPages}`;
+  if (prevBtn) prevBtn.disabled = state.auditPage <= 1;
+  if (nextBtn) nextBtn.disabled = state.auditPage >= state.auditTotalPages;
+
+  // Render Table Rows
+  const tbody = document.getElementById('audit-logs-tbody');
+  if (!tbody) return;
+
+  if (state.auditLogs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:40px; text-align:center; color:var(--text-dim);">No login activity records match the selected filters.</td></tr>';
+    return;
+  }
+
+  let rowsHTML = '';
+  state.auditLogs.forEach(log => {
+    // Format timestamp in local / IST
+    let formattedTime = 'N/A';
+    try {
+      const dt = new Date(log.timestamp);
+      formattedTime = dt.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+    } catch(e) {
+      formattedTime = log.timestamp;
+    }
+
+    // Role badge
+    let roleBadge = '<span class="badge badge-success">🎓 Student</span>';
+    if (log.role === 'admin') roleBadge = '<span class="badge badge-primary">👑 Admin</span>';
+    else if (log.role === 'viewer') roleBadge = '<span class="badge badge-blue">👁️ Viewer</span>';
+
+    // Status badge
+    let statusBadge = '<span style="color:#10b981; font-weight:600;">✓ Success</span>';
+    if (log.status === 'FAILED' || log.event_type === 'LOGIN_FAILED') {
+      statusBadge = '<span style="color:#ef4444; font-weight:600;">✕ Failed</span>';
+    } else if (log.event_type === 'LOGOUT') {
+      statusBadge = '<span style="color:var(--text-dim); font-weight:600;">🚪 Logout</span>';
+    } else if (log.event_type === 'SIGNUP') {
+      statusBadge = '<span style="color:#8b5cf6; font-weight:600;">✨ New User</span>';
+    }
+
+    // Security anomaly pill
+    let anomalyPill = '<span style="color:#10b981; font-size:11px; background:rgba(16,185,129,0.1); padding:2px 6px; border-radius:4px;">✓ Normal</span>';
+    if (log.is_suspicious) {
+      anomalyPill = `<span style="color:#ef4444; font-size:11px; font-weight:700; background:rgba(239,68,68,0.15); padding:3px 8px; border-radius:4px; border:1px solid rgba(239,68,68,0.3);" title="${escapeHTML(log.suspicious_reason || 'Multi-IP login')}">⚠️ Multi-IP Alert</span>`;
+    }
+
+    const emailPrefix = (log.email || '').split('@')[0];
+    const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(emailPrefix)}&background=${log.role === 'admin' ? '6366f1' : (log.role === 'viewer' ? '0284c7' : '10b981')}&color=fff`;
+
+    rowsHTML += `
+      <tr style="border-bottom:1px solid var(--border-color); transition:background 0.15s ease;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+        <td style="padding:12px 16px; font-family:var(--font-mono); font-size:12px; color:var(--text-muted); white-space:nowrap;">
+          ${formattedTime}
+        </td>
+        <td style="padding:12px 16px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <img src="${avatarUrl}" style="width:24px; height:24px; border-radius:50%;" alt="Avatar">
+            <span style="font-weight:600; color:var(--text-main);">${escapeHTML(log.email)}</span>
+          </div>
+        </td>
+        <td style="padding:12px 16px;">${roleBadge}</td>
+        <td style="padding:12px 16px; color:var(--text-dim); max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          ${escapeHTML(log.team_name || 'N/A')}
+        </td>
+        <td style="padding:12px 16px;">
+          <span style="font-size:12px; background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:4px; font-family:var(--font-mono);">
+            ${escapeHTML(log.method || 'Email / Password')}
+          </span>
+        </td>
+        <td style="padding:12px 16px; font-family:var(--font-mono); font-size:12px; color:#60a5fa;">
+          ${escapeHTML(log.ip_address || '127.0.0.1')}
+        </td>
+        <td style="padding:12px 16px;">${statusBadge}</td>
+        <td style="padding:12px 16px;">${anomalyPill}</td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = rowsHTML;
+}
+
+function initAuditLogListeners() {
+  const searchInput = document.getElementById('audit-search-input');
+  const roleSelect = document.getElementById('audit-role-filter');
+  const eventSelect = document.getElementById('audit-event-filter');
+  const dateFrom = document.getElementById('audit-date-from');
+  const dateTo = document.getElementById('audit-date-to');
+  const btnReset = document.getElementById('btn-reset-audit-filters');
+  const btnRefresh = document.getElementById('btn-refresh-audit-logs');
+  const btnExport = document.getElementById('btn-export-audit-csv');
+  const btnPrev = document.getElementById('btn-audit-prev-page');
+  const btnNext = document.getElementById('btn-audit-next-page');
+
+  let debounceTimer;
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        state.auditFilters.search = searchInput.value.trim();
+        state.auditPage = 1;
+        fetchAndRenderAuditLogs();
+      }, 300);
+    });
+  }
+
+  if (roleSelect) {
+    roleSelect.addEventListener('change', () => {
+      state.auditFilters.role = roleSelect.value;
+      state.auditPage = 1;
+      fetchAndRenderAuditLogs();
+    });
+  }
+
+  if (eventSelect) {
+    eventSelect.addEventListener('change', () => {
+      state.auditFilters.event_type = eventSelect.value;
+      state.auditPage = 1;
+      fetchAndRenderAuditLogs();
+    });
+  }
+
+  if (dateFrom) {
+    dateFrom.addEventListener('change', () => {
+      state.auditFilters.start_date = dateFrom.value;
+      state.auditPage = 1;
+      fetchAndRenderAuditLogs();
+    });
+  }
+
+  if (dateTo) {
+    dateTo.addEventListener('change', () => {
+      state.auditFilters.end_date = dateTo.value;
+      state.auditPage = 1;
+      fetchAndRenderAuditLogs();
+    });
+  }
+
+  if (btnReset) {
+    btnReset.addEventListener('click', () => {
+      if (searchInput) searchInput.value = '';
+      if (roleSelect) roleSelect.value = 'all';
+      if (eventSelect) eventSelect.value = 'all';
+      if (dateFrom) dateFrom.value = '';
+      if (dateTo) dateTo.value = '';
+
+      state.auditFilters = { search: '', role: 'all', event_type: 'all', start_date: '', end_date: '' };
+      state.auditPage = 1;
+      fetchAndRenderAuditLogs();
+      showToast('Audit filters reset');
+    });
+  }
+
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', () => {
+      fetchAndRenderAuditLogs();
+      showToast('Login activity refreshed');
+    });
+  }
+
+  if (btnPrev) {
+    btnPrev.addEventListener('click', () => {
+      if (state.auditPage > 1) {
+        state.auditPage--;
+        fetchAndRenderAuditLogs();
+      }
+    });
+  }
+
+  if (btnNext) {
+    btnNext.addEventListener('click', () => {
+      if (state.auditPage < state.auditTotalPages) {
+        state.auditPage++;
+        fetchAndRenderAuditLogs();
+      }
+    });
+  }
+
+  if (btnExport) {
+    btnExport.addEventListener('click', () => {
+      const params = new URLSearchParams();
+      if (state.auditFilters.search) params.append('search', state.auditFilters.search);
+      if (state.auditFilters.role && state.auditFilters.role !== 'all') params.append('role', state.auditFilters.role);
+      if (state.auditFilters.event_type && state.auditFilters.event_type !== 'all') params.append('event_type', state.auditFilters.event_type);
+      if (state.auditFilters.start_date) params.append('start_date', state.auditFilters.start_date);
+      if (state.auditFilters.end_date) params.append('end_date', state.auditFilters.end_date);
+
+      const token = getSessionToken();
+      if (token) params.append('token', token);
+
+      showToast('Generating official audit CSV report...');
+      window.location.href = `/api/admin/audit-logs/export?${params.toString()}`;
+    });
+  }
 }

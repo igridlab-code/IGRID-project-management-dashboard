@@ -206,6 +206,24 @@ function initDb() {
       )
     `);
 
+    // Audit / Login Activity Logs Table (Admin Only Security & Tracking)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL,
+        role TEXT NOT NULL,
+        team_name TEXT DEFAULT 'N/A',
+        method TEXT DEFAULT 'Email / Password',
+        ip_address TEXT DEFAULT '127.0.0.1',
+        event_type TEXT DEFAULT 'LOGIN',
+        status TEXT DEFAULT 'SUCCESS',
+        details TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_audit_email_time ON audit_logs(email, timestamp)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp DESC)`);
+
     // Seed default domains if domains table is empty
     db.get('SELECT COUNT(*) as count FROM domains', (err, row) => {
       if (!err && (!row || row.count === 0)) {

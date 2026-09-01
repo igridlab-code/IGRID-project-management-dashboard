@@ -79,6 +79,56 @@ function requireAdmin(req, res, next) {
 }
 
 // ----------------------------------------------------
+// AUDIT LOGGING HELPER
+// ----------------------------------------------------
+function getClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    const list = String(forwarded).split(',');
+    return list[0].trim();
+  }
+  return req.ip || (req.socket && req.socket.remoteAddress) || '127.0.0.1';
+}
+
+function logAuditEvent({ email, role, team_name, ip_address, method, event_type, status, details }) {
+  const cleanEmail = (email || '').toLowerCase().trim();
+  const userRole = role || 'student';
+  const loginMethod = method || 'Email / Password';
+  const ip = ip_address || '127.0.0.1';
+  const type = event_type || 'LOGIN';
+  const logStatus = status || 'SUCCESS';
+  const detailStr = details ? (typeof details === 'object' ? JSON.stringify(details) : String(details)) : '';
+
+  if (team_name && team_name !== 'N/A') {
+    insertLog(team_name);
+  } else {
+    db.get('SELECT team_name, assigned_project, project_title FROM students WHERE LOWER(email) = ?', [cleanEmail], (err, row) => {
+      let resolvedTeam = 'N/A';
+      if (userRole === 'admin') {
+        resolvedTeam = 'IGRID Lab Admin Core';
+      } else if (userRole === 'viewer') {
+        resolvedTeam = 'Public Viewer';
+      } else if (row) {
+        resolvedTeam = row.team_name || row.assigned_project || row.project_title || 'Student Innovator';
+      }
+      insertLog(resolvedTeam);
+    });
+  }
+
+  function insertLog(team) {
+    const sql = `
+      INSERT INTO audit_logs (email, role, team_name, method, ip_address, event_type, status, details, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `;
+    db.run(sql, [cleanEmail, userRole, team || 'N/A', loginMethod, ip, type, logStatus, detailStr], function(err) {
+      if (err) {
+        console.error('[Audit Log Insert Error]', err.message);
+      }
+    });
+  }
+}
+
+// ----------------------------------------------------
 // AUTHENTICATION ROUTES (UNPROTECTED)
 // ----------------------------------------------------
 
@@ -135,6 +185,27 @@ app.post('/api/auth/signup', (req, res) => {
         student_id: null
       }, JWT_SECRET, { expiresIn: '7d' });
 
+      logAuditEvent({
+        email: cleanEmail,
+        role: 'viewer',
+        team_name: 'Public Viewer',
+        ip_address: getClientIp(req),
+        method: 'Registration',
+        event_type: 'SIGNUP',
+        status: 'SUCCESS',
+        details: 'Public Showcase Viewer Signup'
+      });
+      logAuditEvent({
+        email: cleanEmail,
+        role: 'viewer',
+        team_name: 'Public Viewer',
+        ip_address: getClientIp(req),
+        method: 'Instant Auth',
+        event_type: 'LOGIN',
+        status: 'SUCCESS',
+        details: 'Initial Session'
+      });
+
       return res.status(201).json({
         message: 'Public Viewer account created successfully',
         token,
@@ -175,6 +246,27 @@ app.post('/api/auth/signup', (req, res) => {
           student_id: studentId
         }, JWT_SECRET, { expiresIn: '7d' });
 
+        logAuditEvent({
+          email: cleanEmail,
+          role: role,
+          team_name: project_title || (stRow ? stRow.team_name : 'Student Innovator'),
+          ip_address: getClientIp(req),
+          method: 'Registration',
+          event_type: 'SIGNUP',
+          status: 'SUCCESS',
+          details: `${role} Registration`
+        });
+        logAuditEvent({
+          email: cleanEmail,
+          role: role,
+          team_name: project_title || (stRow ? stRow.team_name : 'Student Innovator'),
+          ip_address: getClientIp(req),
+          method: 'Account First Login',
+          event_type: 'LOGIN',
+          status: 'SUCCESS',
+          details: 'Initial Session'
+        });
+
         res.status(201).json({
           message: 'Account created successfully',
           token,
@@ -199,18 +291,38 @@ app.post('/api/auth/login', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
 
     if (!user || !user.password_hash) {
+      logAuditEvent({
+        email: cleanEmail,
+        role: cleanEmail === ADMIN_EMAIL ? 'admin' : 'unknown',
+        team_name: 'N/A',
+        ip_address: getClientIp(req),
+        method: req.body.auth_provider === 'google' ? 'Google OAuth' : 'Email / Password',
+        event_type: 'LOGIN_FAILED',
+        status: 'FAILED',
+        details: 'User does not exist'
+      });
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
     const match = bcrypt.compareSync(password, user.password_hash);
     if (!match) {
+      logAuditEvent({
+        email: cleanEmail,
+        role: user.role || 'student',
+        team_name: 'N/A',
+        ip_address: getClientIp(req),
+        method: req.body.auth_provider === 'google' ? 'Google OAuth' : 'Email / Password',
+        event_type: 'LOGIN_FAILED',
+        status: 'FAILED',
+        details: 'Password mismatch'
+      });
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
     const userRole = user.role || (cleanEmail === ADMIN_EMAIL ? 'admin' : 'student');
 
     // Find student record if any
-    db.get('SELECT id FROM students WHERE user_id = ? OR email = ?', [user.id, cleanEmail], (err2, student) => {
+    db.get('SELECT id, team_name, assigned_project, project_title FROM students WHERE user_id = ? OR email = ?', [user.id, cleanEmail], (err2, student) => {
       const studentId = student ? student.id : null;
 
       const token = jwt.sign({
@@ -220,6 +332,16 @@ app.post('/api/auth/login', (req, res) => {
         role: userRole,
         student_id: studentId
       }, JWT_SECRET, { expiresIn: '7d' });
+
+      logAuditEvent({
+        email: user.email,
+        role: userRole,
+        team_name: student ? (student.team_name || student.assigned_project || student.project_title) : (userRole === 'admin' ? 'IGRID Lab Admin Core' : (userRole === 'viewer' ? 'Public Viewer' : 'N/A')),
+        ip_address: getClientIp(req),
+        method: req.body.auth_provider === 'google' ? 'Google OAuth' : 'Email / Password',
+        event_type: 'LOGIN',
+        status: 'SUCCESS'
+      });
 
       res.json({
         message: 'Login successful',
@@ -233,6 +355,193 @@ app.post('/api/auth/login', (req, res) => {
         }
       });
     });
+  });
+});
+
+// LOGOUT ENDPOINT (Audit Trail)
+app.post('/api/auth/logout', optionalAuth, (req, res) => {
+  if (req.user && req.user.email) {
+    logAuditEvent({
+      email: req.user.email,
+      role: req.user.role || 'student',
+      ip_address: getClientIp(req),
+      method: 'User Interface',
+      event_type: 'LOGOUT',
+      status: 'SUCCESS',
+      details: 'User initiated logout'
+    });
+  }
+  res.json({ message: 'Logged out successfully' });
+});
+
+// ----------------------------------------------------
+// ADMIN AUDIT LOGS ENDPOINTS (ADMIN ONLY)
+// ----------------------------------------------------
+app.get('/api/admin/audit-logs', requireAuth, requireAdmin, (req, res) => {
+  const { search, role, event_type, start_date, end_date, page = 1, limit = 50 } = req.query;
+
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.max(1, Math.min(200, parseInt(limit, 10) || 50));
+  const offset = (pageNum - 1) * limitNum;
+
+  let whereClauses = ['1=1'];
+  let params = [];
+
+  if (search) {
+    whereClauses.push('(email LIKE ? OR team_name LIKE ? OR ip_address LIKE ? OR method LIKE ?)');
+    const s = `%${search.trim()}%`;
+    params.push(s, s, s, s);
+  }
+
+  if (role && role !== 'all') {
+    whereClauses.push('LOWER(role) = ?');
+    params.push(role.toLowerCase());
+  }
+
+  if (event_type && event_type !== 'all') {
+    whereClauses.push('event_type = ?');
+    params.push(event_type);
+  }
+
+  if (start_date) {
+    whereClauses.push('date(timestamp) >= date(?)');
+    params.push(start_date);
+  }
+
+  if (end_date) {
+    whereClauses.push('date(timestamp) <= date(?)');
+    params.push(end_date);
+  }
+
+  const whereSql = whereClauses.join(' AND ');
+
+  // 1. Total Count for pagination
+  db.get(`SELECT COUNT(*) as total FROM audit_logs WHERE ${whereSql}`, params, (errCount, countRow) => {
+    if (errCount) return res.status(500).json({ error: errCount.message });
+    const total = countRow ? countRow.total : 0;
+
+    // 2. Fetch paginated records
+    const querySql = `
+      SELECT * FROM audit_logs
+      WHERE ${whereSql}
+      ORDER BY timestamp DESC, id DESC
+      LIMIT ? OFFSET ?
+    `;
+    const queryParams = [...params, limitNum, offset];
+
+    db.all(querySql, queryParams, (errLogs, logs) => {
+      if (errLogs) return res.status(500).json({ error: errLogs.message });
+
+      // 3. Compute Anomaly / Multi-IP flags
+      db.all(`
+        SELECT email, COUNT(DISTINCT ip_address) as distinct_ips
+        FROM audit_logs
+        WHERE timestamp >= datetime('now', '-24 hours') AND event_type = 'LOGIN' AND status = 'SUCCESS'
+        GROUP BY email
+        HAVING distinct_ips > 1
+      `, [], (errAnom, anomRows) => {
+        const suspiciousEmails = new Set((anomRows || []).map(r => r.email.toLowerCase()));
+
+        const processedLogs = (logs || []).map(l => {
+          const isSuspicious = suspiciousEmails.has((l.email || '').toLowerCase()) && l.event_type === 'LOGIN';
+          return {
+            ...l,
+            is_suspicious: isSuspicious,
+            suspicious_reason: isSuspicious ? 'Multiple distinct IP logins detected within 24h' : null
+          };
+        });
+
+        // 4. Compute Summary Stats
+        db.get(`
+          SELECT 
+            COUNT(CASE WHEN event_type = 'LOGIN' AND status = 'SUCCESS' THEN 1 END) as total_logins,
+            COUNT(DISTINCT CASE WHEN event_type = 'LOGIN' AND status = 'SUCCESS' THEN email END) as unique_users,
+            COUNT(CASE WHEN event_type = 'LOGIN' AND status = 'SUCCESS' AND date(timestamp) = date('now') THEN 1 END) as today_logins,
+            COUNT(CASE WHEN event_type = 'LOGIN_FAILED' THEN 1 END) as failed_logins
+          FROM audit_logs
+        `, [], (errSummary, summary) => {
+          res.json({
+            logs: processedLogs,
+            total,
+            page: pageNum,
+            limit: limitNum,
+            total_pages: Math.ceil(total / limitNum) || 1,
+            summary: {
+              total_logins: summary ? (summary.total_logins || 0) : 0,
+              unique_users: summary ? (summary.unique_users || 0) : 0,
+              today_logins: summary ? (summary.today_logins || 0) : 0,
+              failed_logins: summary ? (summary.failed_logins || 0) : 0,
+              suspicious_accounts_count: suspiciousEmails.size
+            }
+          });
+        });
+      });
+    });
+  });
+});
+
+// CSV EXPORT ENDPOINT (ADMIN ONLY)
+app.get('/api/admin/audit-logs/export', requireAuth, requireAdmin, (req, res) => {
+  const { search, role, event_type, start_date, end_date } = req.query;
+
+  let whereClauses = ['1=1'];
+  let params = [];
+
+  if (search) {
+    whereClauses.push('(email LIKE ? OR team_name LIKE ? OR ip_address LIKE ? OR method LIKE ?)');
+    const s = `%${search.trim()}%`;
+    params.push(s, s, s, s);
+  }
+  if (role && role !== 'all') {
+    whereClauses.push('LOWER(role) = ?');
+    params.push(role.toLowerCase());
+  }
+  if (event_type && event_type !== 'all') {
+    whereClauses.push('event_type = ?');
+    params.push(event_type);
+  }
+  if (start_date) {
+    whereClauses.push('date(timestamp) >= date(?)');
+    params.push(start_date);
+  }
+  if (end_date) {
+    whereClauses.push('date(timestamp) <= date(?)');
+    params.push(end_date);
+  }
+
+  const sql = `
+    SELECT id, email, role, team_name, method, ip_address, event_type, status, details, timestamp
+    FROM audit_logs
+    WHERE ${whereClauses.join(' AND ')}
+    ORDER BY timestamp DESC
+    LIMIT 5000
+  `;
+
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    const csvHeaders = 'ID,Timestamp_UTC,Email,Role,Team,Method,IP_Address,Event_Type,Status,Details\n';
+    const csvRows = (rows || []).map(r => {
+      return [
+        r.id,
+        `"${r.timestamp}"`,
+        `"${r.email}"`,
+        `"${r.role}"`,
+        `"${(r.team_name || '').replace(/"/g, '""')}"`,
+        `"${(r.method || '').replace(/"/g, '""')}"`,
+        `"${r.ip_address}"`,
+        `"${r.event_type}"`,
+        `"${r.status}"`,
+        `"${(r.details || '').replace(/"/g, '""')}"`
+      ].join(',');
+    }).join('\n');
+
+    const csvContent = csvHeaders + csvRows;
+    const filename = `igrid_audit_logs_${new Date().toISOString().split('T')[0]}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csvContent);
   });
 });
 
