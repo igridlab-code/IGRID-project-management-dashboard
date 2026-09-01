@@ -1029,8 +1029,18 @@
               <span class="meta-val" id="detail-status">On Progress</span>
             </div>
             <div class="meta-item">
-              <span class="meta-label">Due Date</span>
-              <span class="meta-val" id="detail-due-date">25 March 2026</span>
+              <span class="meta-label">Start Date (IST)</span>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <span class="meta-val" id="detail-start-date">-</span>
+                <button type="button" class="btn btn-secondary admin-only-date-btn" id="btn-quick-edit-start-date" title="Admin: Edit Timeline" style="display:none; padding: 2px 8px; font-size: 11px;">✏️ Edit</button>
+              </div>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Deadline / Due Date (IST)</span>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <span class="meta-val" id="detail-due-date">-</span>
+                <button type="button" class="btn btn-secondary admin-only-date-btn" id="btn-quick-edit-due-date" title="Admin: Edit Deadline" style="display:none; padding: 2px 8px; font-size: 11px;">✏️ Edit</button>
+              </div>
             </div>
             <div class="meta-item">
               <span class="meta-label">Team Name & Lead</span>
@@ -1567,6 +1577,78 @@
       <div class="modal-footer">
         <button class="btn btn-primary" id="btn-close-analytics">Close</button>
       </div>
+  <!-- 8. ADMIN QUICK DATE & DEADLINE EDIT MODAL (ADMIN ONLY) -->
+  <div class="modal-overlay" id="admin-date-edit-modal">
+    <div class="modal-card modal-md" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="display:flex; align-items:center; gap:8px;">
+          <span>📅</span> Edit Project Timeline & Deadline
+          <span class="badge badge-primary" style="font-size:11px;">Admin Only</span>
+        </h3>
+        <button class="modal-close" id="close-admin-date-edit-modal">&times;</button>
+      </div>
+      <form id="admin-date-edit-form">
+        <input type="hidden" id="admin-date-edit-project-id">
+        <div class="modal-body">
+          <div style="background:var(--bg-card-sub); padding:12px 14px; border-radius:8px; border:1px solid var(--border-color); margin-bottom:16px;">
+            <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; font-weight:700;">Selected Project</div>
+            <div style="font-size:14px; font-weight:700; color:var(--text-main); margin-top:2px;" id="admin-date-edit-project-title">-</div>
+          </div>
+
+          <div class="form-group">
+            <label for="admin-date-edit-start">Start Date & Time (India Standard Time - IST) *</label>
+            <input type="datetime-local" id="admin-date-edit-start" required style="width:100%;">
+            <small class="form-help">Enter date/time in IST. Stored in UTC in database.</small>
+          </div>
+
+          <div class="form-group" style="margin-top:14px;">
+            <label for="admin-date-edit-due">Deadline / Due Date & Time (India Standard Time - IST) *</label>
+            <input type="datetime-local" id="admin-date-edit-due" required style="width:100%;">
+            <small class="form-help">Milestone delivery cutoff time in IST.</small>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-admin-date-edit">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-admin-date-edit">💾 Save & Update in IST</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 9. ADMIN AUDIT LOG TIMESTAMP EDIT MODAL (ADMIN ONLY) -->
+  <div class="modal-overlay" id="admin-audit-edit-modal">
+    <div class="modal-card modal-md" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 style="display:flex; align-items:center; gap:8px;">
+          <span>✏️</span> Edit Audit Log Timestamp
+          <span class="badge badge-primary" style="font-size:11px;">Admin Only</span>
+        </h3>
+        <button class="modal-close" id="close-admin-audit-edit-modal">&times;</button>
+      </div>
+      <form id="admin-audit-edit-form">
+        <input type="hidden" id="admin-audit-edit-id">
+        <div class="modal-body">
+          <div style="background:var(--bg-card-sub); padding:12px 14px; border-radius:8px; border:1px solid var(--border-color); margin-bottom:16px;">
+            <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; font-weight:700;">Account / Event</div>
+            <div style="font-size:14px; font-weight:700; color:var(--text-main); margin-top:2px;" id="admin-audit-edit-desc">-</div>
+          </div>
+
+          <div class="form-group">
+            <label for="admin-audit-edit-timestamp">Timestamp (India Standard Time - IST) *</label>
+            <input type="datetime-local" id="admin-audit-edit-timestamp" required style="width:100%;">
+            <small class="form-help">Edit timestamp in IST. Automatically converted to UTC for database storage.</small>
+          </div>
+
+          <div class="form-group" style="margin-top:14px;">
+            <label for="admin-audit-edit-details">Admin Remarks / Audit Details</label>
+            <input type="text" id="admin-audit-edit-details" placeholder="Optional audit modification note...">
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-admin-audit-edit">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-admin-audit-edit">💾 Save Audit Record</button>
+        </div>
+      </form>
     </div>
   </div>
 

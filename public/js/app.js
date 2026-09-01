@@ -2554,14 +2554,27 @@ async function openProjectDetail(projectId) {
     document.getElementById('detail-progress-val').textContent = `${progVal}%`;
     document.getElementById('detail-progress-fill').style.width = `${Math.min(100, Math.max(0, progVal))}%`;
 
-    // Status & Timeline
+    // Status & Timeline in IST
     document.getElementById('detail-status').textContent = formatStatus(project.status || 'in_progress');
     
-    let timelineText = formatDate(project.due_date);
-    if (project.start_date) {
-      timelineText = `${formatDate(project.start_date)} → ${timelineText}`;
+    const startDateEl = document.getElementById('detail-start-date');
+    const dueDateEl = document.getElementById('detail-due-date');
+    const btnQuickEditStart = document.getElementById('btn-quick-edit-start-date');
+    const btnQuickEditDue = document.getElementById('btn-quick-edit-due-date');
+
+    const isAdminUser = isUserAdmin();
+
+    if (startDateEl) startDateEl.textContent = project.start_date ? formatISTDateTime(project.start_date) : 'Not specified';
+    if (dueDateEl) dueDateEl.textContent = project.due_date ? formatISTDateTime(project.due_date) : 'Not specified';
+
+    if (btnQuickEditStart) {
+      btnQuickEditStart.style.display = isAdminUser ? 'inline-block' : 'none';
+      btnQuickEditStart.onclick = () => openAdminDateEditModal(project.id);
     }
-    document.getElementById('detail-due-date').textContent = timelineText || 'No due date set';
+    if (btnQuickEditDue) {
+      btnQuickEditDue.style.display = isAdminUser ? 'inline-block' : 'none';
+      btnQuickEditDue.onclick = () => openAdminDateEditModal(project.id);
+    }
 
     // Team & Lead, and Team Members List
     document.getElementById('detail-team').textContent = `${project.team_name || 'Team'} (${project.team_lead || 'Lead'})`;
@@ -3877,19 +3890,105 @@ function formatStatus(status) {
   return map[status] || status;
 }
 
-function formatDate(dateStr) {
+// ----------------------------------------------------
+// INDIA STANDARD TIME (IST = UTC+05:30) TIMEZONE HELPERS
+// ----------------------------------------------------
+function parseToUTCDate(dateInput) {
+  if (!dateInput) return null;
+  if (dateInput instanceof Date) return isNaN(dateInput.getTime()) ? null : dateInput;
+  const str = String(dateInput).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return new Date(`${str}T00:00:00Z`);
+  }
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(str)) {
+    return new Date(`${str.replace(' ', 'T')}Z`);
+  }
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function formatISTDateTime(dateTimeStr, includeSeconds = false) {
+  if (!dateTimeStr) return '';
+  const d = parseToUTCDate(dateTimeStr);
+  if (!d) return String(dateTimeStr);
+
+  const options = {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  };
+  if (includeSeconds) {
+    options.second = '2-digit';
+  }
+
+  const formatted = new Intl.DateTimeFormat('en-IN', options).format(d);
+  return `${formatted} IST`;
+}
+
+function formatISTDate(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
-  const options = { day: '2-digit', month: 'short', year: 'numeric' };
-  return d.toLocaleDateString('en-GB', options);
+  const d = parseToUTCDate(dateStr);
+  if (!d) return String(dateStr);
+
+  const options = {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  };
+  return `${new Intl.DateTimeFormat('en-IN', options).format(d)} IST`;
+}
+
+function convertISTInputToUTC(istDateTimeStr) {
+  if (!istDateTimeStr) return '';
+  if (istDateTimeStr.includes('T')) {
+    const offsetString = `${istDateTimeStr}:00+05:30`;
+    const dt = new Date(offsetString);
+    return isNaN(dt.getTime()) ? istDateTimeStr : dt.toISOString();
+  }
+  return istDateTimeStr;
+}
+
+function convertUTCToISTInput(utcDateStr) {
+  if (!utcDateStr) return '';
+  const d = parseToUTCDate(utcDateStr);
+  if (!d) return '';
+
+  const istFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const parts = istFormatter.formatToParts(d);
+  const getPart = (type) => (parts.find(p => p.type === type) || {}).value;
+  return `${getPart('year')}-${getPart('month')}-${getPart('day')}T${getPart('hour')}:${getPart('minute')}`;
+}
+
+function formatDate(dateStr) {
+  return formatISTDate(dateStr);
 }
 
 function formatDateTime(dateTimeStr) {
-  if (!dateTimeStr) return '';
-  const d = new Date(dateTimeStr);
-  if (isNaN(d.getTime())) return dateTimeStr;
-  return `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  return formatISTDateTime(dateTimeStr);
+}
+
+function formatDateShort(dateStr) {
+  if (!dateStr) return '';
+  const d = parseToUTCDate(dateStr);
+  if (!d) return String(dateStr);
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short'
+  }).format(d);
 }
 
 function escapeHTML(str) {
@@ -3900,6 +3999,136 @@ function escapeHTML(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+// ----------------------------------------------------
+// ADMIN DATE & DEADLINE MODAL EDIT HANDLERS (ADMIN ONLY)
+// ----------------------------------------------------
+function openAdminDateEditModal(projectId) {
+  if (!isUserAdmin()) {
+    showToast('Access denied: Date edits are restricted to Administrator.', 'error');
+    return;
+  }
+
+  const project = state.projects.find(p => p.id === Number(projectId));
+  if (!project) return;
+
+  const modal = document.getElementById('admin-date-edit-modal');
+  const formId = document.getElementById('admin-date-edit-project-id');
+  const titleEl = document.getElementById('admin-date-edit-project-title');
+  const startInput = document.getElementById('admin-date-edit-start');
+  const dueInput = document.getElementById('admin-date-edit-due');
+
+  if (formId) formId.value = project.id;
+  if (titleEl) titleEl.textContent = `${project.project_code} - ${project.title}`;
+  if (startInput) startInput.value = convertUTCToISTInput(project.start_date || new Date().toISOString());
+  if (dueInput) dueInput.value = convertUTCToISTInput(project.due_date || new Date().toISOString());
+
+  openModal(modal);
+}
+
+async function handleAdminDateEditSubmit(e) {
+  e.preventDefault();
+  if (!isUserAdmin()) {
+    showToast('Access denied: Administrator privileges required.', 'error');
+    return;
+  }
+
+  const projectId = document.getElementById('admin-date-edit-project-id').value;
+  const startInput = document.getElementById('admin-date-edit-start');
+  const dueInput = document.getElementById('admin-date-edit-due');
+
+  const startUTC = convertISTInputToUTC(startInput.value);
+  const dueUTC = convertISTInputToUTC(dueInput.value);
+
+  const project = state.projects.find(p => p.id === Number(projectId));
+  const projTitle = project ? `${project.project_code} - ${project.title}` : `Project #${projectId}`;
+  const formattedDueIST = formatISTDateTime(dueUTC);
+
+  // Admin Confirmation Dialog
+  const confirmed = confirm(`Are you sure you want to change the deadline and timeline for "${projTitle}" to ${formattedDueIST}?`);
+  if (!confirmed) return;
+
+  try {
+    const res = await authFetch(`/api/projects/${projectId}/dates`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start_date: startUTC, due_date: dueUTC })
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || `Server error ${res.status}`);
+    }
+
+    showToast(`Updated deadline for ${projTitle} to ${formattedDueIST}`);
+
+    closeModal(document.getElementById('admin-date-edit-modal'));
+
+    // Update state & re-render
+    if (project) {
+      project.start_date = startUTC;
+      project.due_date = dueUTC;
+    }
+    await Promise.all([fetchProjects(), fetchNotifications()]);
+    renderAllViews();
+
+    if (state.activeProjectId === Number(projectId)) {
+      openProjectDetail(projectId);
+    }
+  } catch (err) {
+    console.error('Error updating project dates:', err);
+    showToast(`Failed to update dates: ${err.message}`, 'error');
+  }
+}
+
+function openAdminAuditEditModal(auditId) {
+  if (!isUserAdmin()) return;
+  const log = state.auditLogs.find(l => l.id === Number(auditId));
+  if (!log) return;
+
+  const modal = document.getElementById('admin-audit-edit-modal');
+  document.getElementById('admin-audit-edit-id').value = log.id;
+  document.getElementById('admin-audit-edit-desc').textContent = `${log.email} (${log.event_type} - ${log.role})`;
+  document.getElementById('admin-audit-edit-timestamp').value = convertUTCToISTInput(log.timestamp);
+  document.getElementById('admin-audit-edit-details').value = log.details || '';
+
+  openModal(modal);
+}
+
+async function handleAdminAuditEditSubmit(e) {
+  e.preventDefault();
+  if (!isUserAdmin()) return;
+
+  const auditId = document.getElementById('admin-audit-edit-id').value;
+  const timeInput = document.getElementById('admin-audit-edit-timestamp');
+  const detailsInput = document.getElementById('admin-audit-edit-details');
+
+  const timestampUTC = convertISTInputToUTC(timeInput.value);
+  const details = detailsInput.value.trim();
+
+  const confirmed = confirm(`Are you sure you want to update this audit log timestamp to ${formatISTDateTime(timestampUTC)}?`);
+  if (!confirmed) return;
+
+  try {
+    const res = await authFetch(`/api/admin/audit-logs/${auditId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timestamp: timestampUTC, details })
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || `Server error ${res.status}`);
+    }
+
+    showToast('Audit log timestamp updated in IST');
+    closeModal(document.getElementById('admin-audit-edit-modal'));
+    fetchAndRenderAuditLogs();
+  } catch (err) {
+    console.error('Error updating audit log:', err);
+    showToast(`Failed to update audit log: ${err.message}`, 'error');
+  }
 }
 
 // ----------------------------------------------------
@@ -3988,24 +4217,12 @@ function renderAuditLogsUI() {
     return;
   }
 
+  const isAdmin = isUserAdmin();
+
   let rowsHTML = '';
   state.auditLogs.forEach(log => {
-    // Format timestamp in local / IST
-    let formattedTime = 'N/A';
-    try {
-      const dt = new Date(log.timestamp);
-      formattedTime = dt.toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      });
-    } catch(e) {
-      formattedTime = log.timestamp;
-    }
+    // Format timestamp in IST (Always displays "IST" suffix)
+    const formattedTime = formatISTDateTime(log.timestamp, true);
 
     // Role badge
     let roleBadge = '<span class="badge badge-success">🎓 Student</span>';
@@ -4020,6 +4237,8 @@ function renderAuditLogsUI() {
       statusBadge = '<span style="color:var(--text-dim); font-weight:600;">🚪 Logout</span>';
     } else if (log.event_type === 'SIGNUP') {
       statusBadge = '<span style="color:#8b5cf6; font-weight:600;">✨ New User</span>';
+    } else if (log.event_type === 'DATE_UPDATE') {
+      statusBadge = '<span style="color:#f59e0b; font-weight:600;">📅 Date Change</span>';
     }
 
     // Security anomaly pill
@@ -4031,10 +4250,15 @@ function renderAuditLogsUI() {
     const emailPrefix = (log.email || '').split('@')[0];
     const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(emailPrefix)}&background=${log.role === 'admin' ? '6366f1' : (log.role === 'viewer' ? '0284c7' : '10b981')}&color=fff`;
 
+    const editBtnHTML = isAdmin ? `<button type="button" class="btn btn-secondary" onclick="openAdminAuditEditModal(${log.id})" title="Admin: Edit Timestamp" style="padding:2px 6px; font-size:10px; margin-left:6px;">✏️</button>` : '';
+
     rowsHTML += `
       <tr style="border-bottom:1px solid var(--border-color); transition:background 0.15s ease;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
         <td style="padding:12px 16px; font-family:var(--font-mono); font-size:12px; color:var(--text-muted); white-space:nowrap;">
-          ${formattedTime}
+          <div style="display:flex; align-items:center;">
+            <span>${formattedTime}</span>
+            ${editBtnHTML}
+          </div>
         </td>
         <td style="padding:12px 16px;">
           <div style="display:flex; align-items:center; gap:8px;">
@@ -4074,6 +4298,22 @@ function initAuditLogListeners() {
   const btnExport = document.getElementById('btn-export-audit-csv');
   const btnPrev = document.getElementById('btn-audit-prev-page');
   const btnNext = document.getElementById('btn-audit-next-page');
+
+  // Date Edit Modal Listeners
+  const dateEditForm = document.getElementById('admin-date-edit-form');
+  if (dateEditForm) dateEditForm.addEventListener('submit', handleAdminDateEditSubmit);
+  const closeDateEditModal = document.getElementById('close-admin-date-edit-modal');
+  if (closeDateEditModal) closeDateEditModal.addEventListener('click', () => closeModal(document.getElementById('admin-date-edit-modal')));
+  const cancelDateEditBtn = document.getElementById('btn-cancel-admin-date-edit');
+  if (cancelDateEditBtn) cancelDateEditBtn.addEventListener('click', () => closeModal(document.getElementById('admin-date-edit-modal')));
+
+  // Audit Edit Modal Listeners
+  const auditEditForm = document.getElementById('admin-audit-edit-form');
+  if (auditEditForm) auditEditForm.addEventListener('submit', handleAdminAuditEditSubmit);
+  const closeAuditEditModal = document.getElementById('close-admin-audit-edit-modal');
+  if (closeAuditEditModal) closeAuditEditModal.addEventListener('click', () => closeModal(document.getElementById('admin-audit-edit-modal')));
+  const cancelAuditEditBtn = document.getElementById('btn-cancel-admin-audit-edit');
+  if (cancelAuditEditBtn) cancelAuditEditBtn.addEventListener('click', () => closeModal(document.getElementById('admin-audit-edit-modal')));
 
   let debounceTimer;
   if (searchInput) {
@@ -4176,3 +4416,8 @@ function initAuditLogListeners() {
     });
   }
 }
+
+// Expose globals for inline onclicks
+window.openAdminDateEditModal = openAdminDateEditModal;
+window.openAdminAuditEditModal = openAdminAuditEditModal;
+

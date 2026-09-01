@@ -998,6 +998,77 @@ app.put('/api/projects/:id/status', requireAuth, requireAdmin, handleProjectStag
 app.patch('/api/projects/:id/status', requireAuth, requireAdmin, handleProjectStageUpdate);
 app.patch('/api/projects/:id/stage', requireAuth, requireAdmin, handleProjectStageUpdate);
 
+// ADMIN ONLY: UPDATE PROJECT DATES / DEADLINE
+app.patch('/api/projects/:id/dates', requireAuth, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { start_date, due_date } = req.body;
+
+  if (!start_date && !due_date) {
+    return res.status(400).json({ error: 'At least one date (start_date or due_date) must be provided.' });
+  }
+
+  const sql = `
+    UPDATE projects SET
+      start_date = COALESCE(?, start_date),
+      due_date = COALESCE(?, due_date),
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `;
+
+  db.run(sql, [start_date || null, due_date || null, id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) return res.status(404).json({ error: 'Project not found' });
+
+    db.get('SELECT id, project_code, title, start_date, due_date, updated_at FROM projects WHERE id = ?', [id], (err2, project) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+
+      // Log date update in audit logs
+      logAuditEvent({
+        email: req.user.email,
+        role: 'admin',
+        team_name: 'IGRID Lab Admin Core',
+        ip_address: getClientIp(req),
+        method: 'Admin Quick Date Edit',
+        event_type: 'DATE_UPDATE',
+        status: 'SUCCESS',
+        details: `Updated dates for project ${project.project_code} (Start: ${project.start_date}, Due: ${project.due_date})`
+      });
+
+      res.json({
+        message: 'Project timeline dates updated successfully by administrator.',
+        project
+      });
+    });
+  });
+});
+
+// ADMIN ONLY: UPDATE AUDIT LOG ENTRY (TIMESTAMP / DETAILS)
+app.patch('/api/admin/audit-logs/:id', requireAuth, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { timestamp, details } = req.body;
+
+  if (!timestamp && !details) {
+    return res.status(400).json({ error: 'At least timestamp or details must be provided.' });
+  }
+
+  const sql = `
+    UPDATE audit_logs SET
+      timestamp = COALESCE(?, timestamp),
+      details = COALESCE(?, details)
+    WHERE id = ?
+  `;
+
+  db.run(sql, [timestamp || null, details || null, id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) return res.status(404).json({ error: 'Audit log record not found' });
+
+    db.get('SELECT * FROM audit_logs WHERE id = ?', [id], (err2, row) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      res.json({ message: 'Audit log record updated successfully.', log: row });
+    });
+  });
+});
+
 // DELETE PROJECT (ADMIN ONLY)
 app.delete('/api/projects/:id', requireAuth, requireAdmin, (req, res) => {
   const { id } = req.params;
