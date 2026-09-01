@@ -990,10 +990,8 @@ function initEventListeners() {
   const saveProjBtn = document.getElementById('save-project-btn');
   if (saveProjBtn) {
     saveProjBtn.addEventListener('click', (e) => {
-      // If clicked inside form, submit handler will fire; if not, invoke handler
-      if (e.target.type !== 'submit' && DOM.projectForm) {
-        handleProjectFormSubmit(e);
-      }
+      e.preventDefault();
+      handleProjectFormSubmit(e);
     });
   }
   initEditFormLinkProtection();
@@ -3589,8 +3587,11 @@ function openProjectModalForEdit(project) {
       (Array.isArray(project.team_members) && project.team_members.some(m => JSON.stringify(m).toLowerCase().includes(userEmail) || JSON.stringify(m).toLowerCase().includes(userName))) ||
       (typeof project.team_members === 'string' && (project.team_members.toLowerCase().includes(userEmail) || project.team_members.toLowerCase().includes(userName)))
     );
-    if (!isLead && !isMember) {
-      showToast('Access denied: You can only edit your own assigned project.', 'error');
+    const studentRecord = state.students && state.students.find(s => s.user_id === state.currentUser?.id || (s.email && s.email.toLowerCase() === userEmail));
+    const isAssigned = studentRecord && (studentRecord.assigned_project === project.project_code || studentRecord.project_title === project.title);
+
+    if (!isLead && !isMember && !isAssigned) {
+      showToast('Access denied: You can only edit your own assigned project links and deliverables.', 'error');
       return;
     }
   }
@@ -3603,6 +3604,7 @@ function openProjectModalForEdit(project) {
 
   const saveBtn = document.getElementById('save-project-btn');
   if (saveBtn) {
+    saveBtn.disabled = false;
     saveBtn.innerHTML = isAdmin ? '💾 Save Project Details' : '💾 Save Links & Deliverables';
   }
 
@@ -3723,48 +3725,65 @@ function openProjectModalForEdit(project) {
 }
 
 async function handleProjectFormSubmit(e) {
-  if (e && e.preventDefault) e.preventDefault();
+  if (e) {
+    if (e.preventDefault) e.preventDefault();
+    if (e.stopPropagation) e.stopPropagation();
+  }
   
   console.log('[PROJECT-SAVE] 1. Save button clicked / form submit triggered');
   const saveBtn = document.getElementById('save-project-btn');
   const originalBtnText = saveBtn ? saveBtn.innerHTML : '💾 Save Project Details';
   if (saveBtn) {
     saveBtn.disabled = true;
-    saveBtn.innerHTML = '⏳ Saving...';
+    saveBtn.innerHTML = '<span style="display:inline-block; animation: spin 1s linear infinite; margin-right:6px;">⏳</span> Saving...';
   }
 
   try {
     const id = document.getElementById('form-project-id') ? document.getElementById('form-project-id').value : '';
+    const isAdmin = isUserAdmin();
+    const existingProject = id ? state.projects.find(p => String(p.id) === String(id)) : null;
 
-    const titleInput = document.getElementById('form-title');
-    const title = titleInput ? titleInput.value.trim() : '';
+    let title = (document.getElementById('form-title') ? document.getElementById('form-title').value : '').trim();
+    if (!title && existingProject) {
+      title = existingProject.title;
+    }
+
     if (!title) {
       console.warn('[PROJECT-SAVE] Validation failed: Missing Project Title');
       showToast('Project Title is required.', 'error');
-      if (titleInput) titleInput.focus();
+      const titleInput = document.getElementById('form-title');
+      if (titleInput && !titleInput.disabled) titleInput.focus();
       return;
     }
 
     const domainSelect = document.getElementById('form-domain');
-    const domain = domainSelect ? domainSelect.value : 'AI';
+    const domain = (domainSelect && domainSelect.value) ? domainSelect.value : (existingProject ? existingProject.domain : 'AI');
 
     const startDateInput = document.getElementById('form-start-date');
     const dueDateInput = document.getElementById('form-due-date');
-    const start_date = startDateInput ? startDateInput.value : '';
-    const due_date = dueDateInput ? dueDateInput.value : '';
+    let start_date = startDateInput ? startDateInput.value : '';
+    let due_date = dueDateInput ? dueDateInput.value : '';
 
-    if (!start_date || !due_date) {
-      console.warn('[PROJECT-SAVE] Validation failed: Missing From Date or To Date');
-      showToast('Both From Date and To Date are required.', 'error');
-      if (!start_date && startDateInput) startDateInput.focus();
-      else if (!due_date && dueDateInput) dueDateInput.focus();
-      return;
+    if (!start_date && existingProject && existingProject.start_date) {
+      start_date = existingProject.start_date.split('T')[0];
+    }
+    if (!due_date && existingProject && existingProject.due_date) {
+      due_date = existingProject.due_date.split('T')[0];
     }
 
-    if (new Date(due_date) < new Date(start_date)) {
+    if (!start_date) {
+      start_date = new Date().toISOString().split('T')[0];
+    }
+    if (!due_date) {
+      const nextMonth = new Date();
+      nextMonth.setDate(nextMonth.getDate() + 30);
+      due_date = nextMonth.toISOString().split('T')[0];
+    }
+
+    if (start_date && due_date && new Date(due_date) < new Date(start_date)) {
       console.warn('[PROJECT-SAVE] Validation failed: To Date earlier than From Date');
       showToast('To Date cannot be earlier than From Date.', 'error');
-      if (dueDateInput) dueDateInput.focus();
+      if (dueDateInput && !dueDateInput.disabled) dueDateInput.focus();
       return;
     }
 
@@ -3783,29 +3802,29 @@ async function handleProjectFormSubmit(e) {
     }
 
     const payload = {
-      project_code: (document.getElementById('form-code') ? document.getElementById('form-code').value : '').trim(),
+      project_code: (document.getElementById('form-code') ? document.getElementById('form-code').value : (existingProject ? existingProject.project_code : '')).trim(),
       title: title,
-      description: (document.getElementById('form-description') ? document.getElementById('form-description').value : '').trim(),
+      description: (document.getElementById('form-description') ? document.getElementById('form-description').value : (existingProject ? existingProject.description : '')).trim(),
       domain: domain,
-      priority: document.getElementById('form-priority') ? document.getElementById('form-priority').value : 'Normal',
-      status: document.getElementById('form-status') ? document.getElementById('form-status').value : 'in_progress',
-      tags: (document.getElementById('form-tags') ? document.getElementById('form-tags').value : '').trim(),
-      progress: Number(document.getElementById('form-progress') ? document.getElementById('form-progress').value : 0) || 0,
+      priority: document.getElementById('form-priority') ? document.getElementById('form-priority').value : (existingProject ? existingProject.priority : 'Normal'),
+      status: document.getElementById('form-status') ? document.getElementById('form-status').value : (existingProject ? existingProject.status : 'in_progress'),
+      tags: (document.getElementById('form-tags') ? document.getElementById('form-tags').value : (existingProject ? existingProject.tags : '')).trim(),
+      progress: Number(document.getElementById('form-progress') ? document.getElementById('form-progress').value : (existingProject ? existingProject.progress : 0)) || 0,
       start_date: start_date,
       due_date: due_date,
-      immediate_action: (document.getElementById('form-action-item') ? document.getElementById('form-action-item').value : '').trim(),
+      immediate_action: (document.getElementById('form-action-item') ? document.getElementById('form-action-item').value : (existingProject ? existingProject.immediate_action : '')).trim(),
       github_repo: normalizeUrl(document.getElementById('form-github') ? document.getElementById('form-github').value : ''),
       youtube_url: normalizeUrl(document.getElementById('form-youtube') ? document.getElementById('form-youtube').value : ''),
       doc_url: docUrl,
       linkedin_url: normalizeUrl(document.getElementById('form-linkedin') ? document.getElementById('form-linkedin').value : ''),
       image_url: normalizeUrl(document.getElementById('form-image-url') ? document.getElementById('form-image-url').value : ''),
-      team_name: (document.getElementById('form-team-name') ? document.getElementById('form-team-name').value : '').trim(),
-      team_lead: (document.getElementById('form-team-lead') ? document.getElementById('form-team-lead').value : '').trim(),
+      team_name: (document.getElementById('form-team-name') ? document.getElementById('form-team-name').value : (existingProject ? existingProject.team_name : '')).trim(),
+      team_lead: (document.getElementById('form-team-lead') ? document.getElementById('form-team-lead').value : (existingProject ? existingProject.team_lead : '')).trim(),
       team_lead_photo: normalizeUrl(document.getElementById('form-team-lead-photo') ? document.getElementById('form-team-lead-photo').value : ''),
-      deliverables: (document.getElementById('form-deliverables') ? document.getElementById('form-deliverables').value : '').trim()
+      deliverables: (document.getElementById('form-deliverables') ? document.getElementById('form-deliverables').value : (existingProject ? existingProject.deliverables : '')).trim()
     };
 
-    console.log('[PROJECT-SAVE] 2. Form validation passed. Payload:', payload);
+    console.log('[PROJECT-SAVE] 2. Form payload:', payload);
     console.log('[PROJECT-SAVE] 3. Sending API request:', id ? `PUT /api/projects/${id}` : 'POST /api/projects');
 
     let res;
@@ -3823,12 +3842,12 @@ async function handleProjectFormSubmit(e) {
       });
     }
 
-    console.log('[PROJECT-SAVE] 4. API response received. Status:', res.status);
+    console.log('[PROJECT-SAVE] 4. API response status:', res.status);
 
     if (res.ok) {
-      console.log('[PROJECT-SAVE] 5. Refreshing state & Timeline/Gantt view...');
+      console.log('[PROJECT-SAVE] 5. Refreshing state & views...');
       closeModal(DOM.projectModal);
-      showToast(id ? 'Project details updated successfully' : 'New project created successfully');
+      showToast(id ? 'Project details updated successfully' : 'New project created successfully', 'success');
 
       // Immediate state refresh
       await Promise.all([fetchProjects(), fetchNotifications()]);
