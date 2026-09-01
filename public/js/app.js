@@ -38,7 +38,7 @@ const state = {
     start_date: '',
     end_date: ''
   },
-  studentViewMode: 'cards',
+  studentViewMode: 'table',
   expandedStudentCards: new Set()
 };
 
@@ -2041,20 +2041,31 @@ function renderStudents() {
     return;
   }
 
-  // TABLE VIEW MODE
+  // TABLE VIEW MODE (DEFAULT)
   if (state.studentViewMode === 'table') {
     let tableHtml = `
-      <div class="students-table-outer" style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-card); margin-top: 16px;">
-        <table class="students-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+      <div class="students-table-outer" style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-card); margin-top: 16px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);">
+        <table class="students-table data-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
           <thead>
             <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
-              <th style="padding: 12px 16px;">Student</th>
-              <th style="padding: 12px 16px;">Register No</th>
-              <th style="padding: 12px 16px;">Dept & Year</th>
-              <th style="padding: 12px 16px;">Project & Guide</th>
-              <th style="padding: 12px 16px;">Progress</th>
-              <th style="padding: 12px 16px;">Status</th>
-              <th style="padding: 12px 16px; text-align: right;">Actions</th>
+              <th style="padding: 12px 16px; cursor: pointer;" onclick="setStudentSort('name')" title="Sort by Team Name / Lead">
+                Team Name & Lead <span style="font-size:10px;">↕</span>
+              </th>
+              <th style="padding: 12px 16px; cursor: pointer;" onclick="setStudentSort('members')" title="Sort by Members">
+                Members <span style="font-size:10px;">↕</span>
+              </th>
+              <th style="padding: 12px 16px; cursor: pointer;" onclick="setStudentSort('progress_desc')" title="Sort by Progress">
+                Progress % <span style="font-size:10px;">↕</span>
+              </th>
+              <th style="padding: 12px 16px; cursor: pointer;" onclick="setStudentSort('status')" title="Sort by Status">
+                Current Status <span style="font-size:10px;">↕</span>
+              </th>
+              <th style="padding: 12px 16px; cursor: pointer;" onclick="setStudentSort('deadline')" title="Sort by Deadline">
+                Deadline (IST) <span style="font-size:10px;">↕</span>
+              </th>
+              <th style="padding: 12px 16px; text-align: center;">GitHub Link</th>
+              <th style="padding: 12px 16px; text-align: center;">Tech Report Link</th>
+              <th style="padding: 12px 16px; text-align: right; min-width: 160px;">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -2063,46 +2074,127 @@ function renderStudents() {
     filtered.forEach(s => {
       const photo = s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=${(s.avatar_color || '6366f1').replace('#','')}&color=fff`;
       const statusText = s.status || 'Active';
-      const statusBadge = statusText === 'Active' ? 'badge-success' : 'badge-normal';
-      const projName = s.assigned_project || s.project_title || 'Unassigned';
-      const guideName = s.guide || 'Not assigned';
       const prog = s.progress || 0;
       const isOwner = (s.email && s.email.toLowerCase() === currentEmail) || (s.name && s.name.toLowerCase() === currentName);
 
+      // Cross-reference with Project Database
+      const matchedProject = state.projects.find(p => 
+        (p.project_code && s.assigned_project && p.project_code.toLowerCase() === s.assigned_project.toLowerCase()) ||
+        (p.title && s.project_title && p.title.toLowerCase() === s.project_title.toLowerCase()) ||
+        (s.assigned_project && p.project_code && p.project_code.toLowerCase().includes(s.assigned_project.toLowerCase())) ||
+        (s.assigned_project && p.title && p.title.toLowerCase().includes(s.assigned_project.toLowerCase()))
+      );
+
+      const teamNameDisplay = (matchedProject && matchedProject.team_name) || s.assigned_project || s.project_title || `${s.name}'s Team`;
+      const projectCode = matchedProject ? matchedProject.project_code : 'IGRID-PROJ';
+      const projectTitle = matchedProject ? matchedProject.title : (s.project_title || 'Innovation Project');
+      const projectStatus = matchedProject ? formatStatus(matchedProject.status) : statusText;
+      const statusBadge = (projectStatus === 'Completed' || statusText === 'Active') ? 'badge-success' : 'badge-normal';
+
+      // Deadline in IST
+      const dueIST = matchedProject && matchedProject.due_date ? formatISTDateTime(matchedProject.due_date) : '25 Mar 2026 IST';
+
+      // Links
+      const githubLink = (matchedProject && matchedProject.github_repo) || s.github_url || '';
+      const reportLink = (matchedProject && matchedProject.doc_url) || '';
+
+      // Team Members formatted
+      let membersFormatted = s.team_members || s.name;
+      if (matchedProject && matchedProject.team_members) {
+        if (Array.isArray(matchedProject.team_members) && matchedProject.team_members.length > 0) {
+          membersFormatted = matchedProject.team_members.map(m => typeof m === 'object' ? (m.name || m.email || JSON.stringify(m)) : String(m)).join(', ');
+        } else if (typeof matchedProject.team_members === 'string') {
+          membersFormatted = matchedProject.team_members;
+        }
+      }
+
+      // Safe escaped team name for onclick
+      const safeTeamName = escapeHTML(teamNameDisplay).replace(/'/g, "\\'");
+
       tableHtml += `
-        <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.15s ease;" class="student-table-row">
+        <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.15s ease;" class="student-table-row" id="student-row-${s.id}">
+          <!-- Team Name & Lead -->
           <td style="padding: 12px 16px;">
             <div style="display: flex; align-items: center; gap: 12px;">
-              <img src="${photo}" alt="${escapeHTML(s.name)}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid ${s.avatar_color || '#6366f1'};">
+              <img src="${photo}" alt="${escapeHTML(s.name)}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid ${s.avatar_color || '#6366f1'}; flex-shrink: 0;">
               <div>
-                <div style="font-weight: 700; color: var(--text-main);">${escapeHTML(s.name)}</div>
-                <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.email || '')}</div>
+                <div style="font-weight: 700; color: var(--text-main); font-size: 13px;">
+                  ${escapeHTML(teamNameDisplay)}
+                </div>
+                <div style="font-size: 11px; color: var(--text-dim); margin-top: 1px;">
+                  Lead: <strong style="color:#60a5fa;">${escapeHTML(s.name)}</strong> (${escapeHTML(s.roll_no)})
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted); margin-top: 1px;">
+                  ${escapeHTML(s.department || 'Lab')} • ${escapeHTML(s.year || 'Student')}${s.section ? ' (' + escapeHTML(s.section) + ')' : ''}
+                </div>
               </div>
             </div>
           </td>
-          <td style="padding: 12px 16px; font-weight: 600; color: var(--text-muted);">${escapeHTML(s.roll_no)}</td>
-          <td style="padding: 12px 16px;">
-            <div style="font-weight: 600; color: var(--text-main);">${escapeHTML(s.department || 'Lab')}</div>
-            <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.year || 'Student')} ${s.section ? '• ' + escapeHTML(s.section) : ''}</div>
+
+          <!-- Members -->
+          <td style="padding: 12px 16px; max-width: 220px;">
+            <div style="color: var(--text-main); font-size: 12px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;" title="${escapeHTML(membersFormatted)}">
+              ${escapeHTML(membersFormatted)}
+            </div>
           </td>
-          <td style="padding: 12px 16px;">
-            <div style="font-weight: 600; color: #60a5fa;">${escapeHTML(projName)}</div>
-            <div style="font-size: 11px; color: var(--text-dim);">Guide: ${escapeHTML(guideName)}</div>
-          </td>
-          <td style="padding: 12px 16px;">
+
+          <!-- Progress % -->
+          <td style="padding: 12px 16px; min-width: 120px;">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <div style="flex:1; height:6px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden; min-width:60px;">
-                <div style="width:${prog}%; height:100%; background:linear-gradient(90deg, #2563eb, #10b981); border-radius:4px;"></div>
+              <div style="flex: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; min-width: 60px;">
+                <div style="width: ${prog}%; height: 100%; background: linear-gradient(90deg, #2563eb, #10b981); border-radius: 4px;"></div>
               </div>
-              <span style="font-size:11px; font-weight:700; color:var(--text-main);">${prog}%</span>
+              <span style="font-size: 11px; font-weight: 700; color: var(--text-main); font-family: var(--font-mono);">${prog}%</span>
             </div>
           </td>
-          <td style="padding: 12px 16px;">
-            <span class="badge ${statusBadge}">${escapeHTML(statusText)}</span>
+
+          <!-- Current Status -->
+          <td style="padding: 12px 16px; white-space: nowrap;">
+            <span class="badge ${statusBadge}">${escapeHTML(projectStatus)}</span>
           </td>
+
+          <!-- Deadline in IST -->
+          <td style="padding: 12px 16px; font-size: 12px; color: #fbbf24; font-family: var(--font-mono); white-space: nowrap;">
+            ${dueIST}
+          </td>
+
+          <!-- GitHub Link -->
+          <td style="padding: 12px 16px; text-align: center; white-space: nowrap;">
+            ${githubLink ? `
+              <a href="${githubLink}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github" style="font-size: 11px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px;">
+                🐙 GitHub
+              </a>
+            ` : `
+              <span class="btn-media btn-media-disabled" style="opacity: 0.4; font-size: 11px; padding: 4px 8px;">-</span>
+            `}
+          </td>
+
+          <!-- Tech Report Link -->
+          <td style="padding: 12px 16px; text-align: center; white-space: nowrap;">
+            ${reportLink ? `
+              <a href="${reportLink}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc" style="font-size: 11px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px;">
+                📄 Report
+              </a>
+            ` : `
+              <span class="btn-media btn-media-disabled" style="opacity: 0.4; font-size: 11px; padding: 4px 8px;">-</span>
+            `}
+          </td>
+
+          <!-- Actions Column -->
           <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
-            <button class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" style="margin-right: 6px;">👁️ View Profile</button>
-            ${(isAdmin || isOwner) ? `<button class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})">✏️ Edit</button>` : ''}
+            <button type="button" class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" title="View Complete Team Details & Calendar" style="margin-right: 4px; padding: 4px 8px; font-size: 12px;">
+              👁️ View
+            </button>
+            ${(isAdmin || isOwner) ? `
+              <button type="button" class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})" title="Edit Team / Profile" style="margin-right: 4px; padding: 4px 8px; font-size: 12px;">
+                ✏️ Edit
+              </button>
+            ` : ''}
+            ${isAdmin ? `
+              <button type="button" class="btn btn-sm btn-danger" onclick="handleDeleteStudentTeam(${s.id}, '${safeTeamName}')" title="Admin: Delete Team and Project Data" style="padding: 4px 8px; font-size: 12px; background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.4);">
+                🗑️ Delete
+              </button>
+            ` : ''}
           </td>
         </tr>
       `;
@@ -2372,6 +2464,68 @@ function renderStudents() {
   });
 
   DOM.studentsGridRoot.innerHTML = cardsHtml;
+}
+
+// ----------------------------------------------------
+// DELETE STUDENT TEAM (ADMIN ONLY - CASCADE DELETE)
+// ----------------------------------------------------
+async function handleDeleteStudentTeam(studentId, teamName) {
+  if (!isUserAdmin()) {
+    showToast('Access denied: Only administrator can delete student teams.', 'error');
+    return;
+  }
+
+  const cleanTeamName = teamName ? String(teamName).replace(/\\'/g, "'") : 'this team';
+  const confirmPrompt = `Delete ${cleanTeamName}? This will permanently remove the team and all their project data. This can't be undone.`;
+  const confirmed = confirm(confirmPrompt);
+  if (!confirmed) return;
+
+  try {
+    const res = await authFetch(`/api/students/${studentId}`, {
+      method: 'DELETE'
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || `Server returned error ${res.status}`);
+    }
+
+    showToast(`Team "${cleanTeamName}" and project data deleted successfully`, 'success');
+
+    // Immediately remove row from DOM
+    const rowEl = document.getElementById(`student-row-${studentId}`);
+    if (rowEl) rowEl.remove();
+
+    const cardEl = document.getElementById(`student-team-card-${studentId}`);
+    if (cardEl) cardEl.remove();
+
+    // Update state & re-render
+    state.students = state.students.filter(s => Number(s.id) !== Number(studentId));
+    await Promise.all([fetchProjects(), fetchNotifications()]);
+    renderStudents();
+    updateStatsSummary();
+  } catch (err) {
+    console.error('Error deleting student team:', err);
+    showToast(`Failed to delete team: ${err.message}`, 'error');
+  }
+}
+
+function setStudentSort(field) {
+  const sortSelect = document.getElementById('student-sort-by');
+  if (sortSelect) {
+    if (field === 'name') {
+      sortSelect.value = sortSelect.value === 'name_asc' ? 'name_desc' : 'name_asc';
+    } else if (field === 'progress_desc') {
+      sortSelect.value = sortSelect.value === 'progress_desc' ? 'name_asc' : 'progress_desc';
+    } else if (field === 'deadline') {
+      sortSelect.value = 'roll_asc';
+    } else if (field === 'members') {
+      sortSelect.value = 'name_asc';
+    } else if (field === 'status') {
+      sortSelect.value = 'name_asc';
+    }
+  }
+  renderStudents();
 }
 
 function openStudentViewModal(studentId) {
@@ -4723,4 +4877,6 @@ function initAuditLogListeners() {
 window.openAdminDateEditModal = openAdminDateEditModal;
 window.openAdminAuditEditModal = openAdminAuditEditModal;
 window.toggleStudentCardExpand = toggleStudentCardExpand;
+window.handleDeleteStudentTeam = handleDeleteStudentTeam;
+window.setStudentSort = setStudentSort;
 

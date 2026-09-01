@@ -1186,6 +1186,58 @@ app.put('/api/students/:id', requireAuth, (req, res) => {
   });
 });
 
+// DELETE STUDENT / TEAM RECORD (ADMIN ONLY - CASCADE DELETE)
+app.delete('/api/students/:id', requireAuth, requireAdmin, (req, res) => {
+  const reqStudentId = Number(req.params.id);
+
+  db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err, student) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!student) return res.status(404).json({ error: 'Student team record not found.' });
+
+    const studentName = student.name;
+    const teamName = student.assigned_project || student.project_title || student.name;
+
+    // Delete calendar activities for this student
+    db.run('DELETE FROM student_calendar WHERE student_id = ?', [reqStudentId], (errCal) => {
+      if (errCal) console.error('Error deleting calendar activities:', errCal);
+
+      // Check if this student is associated with an owned project
+      db.get('SELECT id FROM projects WHERE team_lead = ? OR project_code = ? OR title = ?', [studentName, student.assigned_project, student.project_title], (errProj, proj) => {
+        if (proj) {
+          // Cascade delete project tasks, activities, BOMs, and project
+          db.run('DELETE FROM project_tasks WHERE project_id = ?', [proj.id], () => {});
+          db.run('DELETE FROM activities WHERE project_id = ?', [proj.id], () => {});
+          db.run('DELETE FROM boms WHERE project_id = ? OR project_code = ?', [proj.id, student.assigned_project], () => {});
+          db.run('DELETE FROM projects WHERE id = ?', [proj.id], () => {});
+        }
+
+        // Delete student record
+        db.run('DELETE FROM students WHERE id = ?', [reqStudentId], function(errDel) {
+          if (errDel) return res.status(500).json({ error: errDel.message });
+
+          // Record in Audit Trail
+          logAuditEvent({
+            email: req.user.email,
+            role: req.user.role,
+            team_name: teamName,
+            method: 'Admin Action',
+            ip_address: getClientIp(req),
+            event_type: 'TEAM_DELETE',
+            status: 'SUCCESS',
+            details: `Deleted student team "${studentName}" (${teamName}) and all associated project data.`
+          });
+
+          res.json({
+            success: true,
+            message: `Team "${studentName}" and all associated project data deleted successfully.`,
+            deleted_id: reqStudentId
+          });
+        });
+      });
+    });
+  });
+});
+
 // ----------------------------------------------------
 // MONTH-WISE STUDENT CALENDAR API ROUTES
 // ----------------------------------------------------
