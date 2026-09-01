@@ -85,16 +85,6 @@ const DOM = {
   formDomain: document.getElementById('form-domain'),
   drawerDomainSelect: document.getElementById('drawer-domain-select'),
 
-  // Task Management Modals
-  taskModal: document.getElementById('task-modal'),
-  closeTaskModal: document.getElementById('close-task-modal'),
-  btnCancelTask: document.getElementById('btn-cancel-task'),
-  taskForm: document.getElementById('task-form'),
-  btnAddProjectTask: document.getElementById('btn-add-project-task'),
-  taskInfoModal: document.getElementById('task-info-modal'),
-  closeTaskInfoModal: document.getElementById('close-task-info-modal'),
-  btnCloseTaskInfo: document.getElementById('btn-close-task-info'),
-
   // Executive Management Showcase
   execShowcaseGridRoot: document.getElementById('exec-showcase-grid-root'),
   execAvgProgress: document.getElementById('exec-avg-progress'),
@@ -1030,69 +1020,12 @@ function initEventListeners() {
 
   DOM.addCommentForm.addEventListener('submit', handleCommentSubmit);
 
-  // Topbar Add Task / Project button
-  const topbarAddTaskBtn = document.getElementById('open-add-task-modal');
-  if (topbarAddTaskBtn) {
-    topbarAddTaskBtn.addEventListener('click', (e) => {
+  // Topbar New Project button
+  const topbarNewProjectBtn = document.getElementById('open-add-task-modal');
+  if (topbarNewProjectBtn) {
+    topbarNewProjectBtn.addEventListener('click', (e) => {
       e.preventDefault();
       openProjectModalForCreate();
-    });
-  }
-
-  // Global Event Delegation for all Add Task Buttons (Yellow & Blue buttons)
-  document.addEventListener('click', (e) => {
-    const addBtn = e.target.closest('.add-task-btn, #btn-add-project-task, .ref-gantt-add-btn, [data-action="add-task"]');
-    if (addBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      openTaskModalForCreate();
-    }
-  });
-
-  // Project Task Management Modal Actions
-  if (DOM.closeTaskModal) DOM.closeTaskModal.addEventListener('click', () => closeModal(DOM.taskModal));
-  if (DOM.btnCancelTask) DOM.btnCancelTask.addEventListener('click', () => closeModal(DOM.taskModal));
-  if (DOM.taskForm) DOM.taskForm.addEventListener('submit', handleTaskFormSubmit);
-
-  const submitTaskBtn = document.getElementById('btn-submit-task');
-  if (submitTaskBtn) {
-    submitTaskBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      handleTaskFormSubmit(e);
-    });
-  }
-
-  const taskStartInput = document.getElementById('task-start-input');
-  const taskEndInput = document.getElementById('task-end-input');
-  if (taskStartInput) {
-    taskStartInput.addEventListener('input', syncMonthSelectsFromDates);
-    taskStartInput.addEventListener('change', syncMonthSelectsFromDates);
-  }
-  if (taskEndInput) {
-    taskEndInput.addEventListener('input', syncMonthSelectsFromDates);
-    taskEndInput.addEventListener('change', syncMonthSelectsFromDates);
-  }
-
-  const startMonthSel = document.getElementById('task-start-month-select');
-  const endMonthSel = document.getElementById('task-end-month-select');
-  if (startMonthSel) startMonthSel.addEventListener('change', syncDatesFromMonthSelects);
-  if (endMonthSel) endMonthSel.addEventListener('change', syncDatesFromMonthSelects);
-
-  if (DOM.closeTaskInfoModal) DOM.closeTaskInfoModal.addEventListener('click', () => closeModal(DOM.taskInfoModal));
-  if (DOM.btnCloseTaskInfo) DOM.btnCloseTaskInfo.addEventListener('click', () => closeModal(DOM.taskInfoModal));
-
-  const btnEditTaskInfo = document.getElementById('btn-edit-task-info');
-  if (btnEditTaskInfo) {
-    btnEditTaskInfo.addEventListener('click', () => {
-      closeModal(DOM.taskInfoModal);
-      if (selectedTaskIdForInfo) openTaskModalForEdit(selectedTaskIdForInfo);
-    });
-  }
-
-  const btnDeleteTaskInfo = document.getElementById('btn-delete-task-info');
-  if (btnDeleteTaskInfo) {
-    btnDeleteTaskInfo.addEventListener('click', () => {
-      if (selectedTaskIdForInfo) deleteTask(selectedTaskIdForInfo);
     });
   }
 
@@ -3086,20 +3019,11 @@ function renderProjectGanttTimeline(project, tasks = []) {
     todayLeftPct = ((todayDay - 1) / totalYearDays) * 100;
   }
 
-  const isAdmin = isUserAdmin();
-  const isStudent = isUserStudent();
-  const canManageTasks = isAdmin || isStudent;
-
-  const topAddTaskBtn = document.getElementById('btn-add-project-task');
-  if (topAddTaskBtn) {
-    topAddTaskBtn.style.display = canManageTasks ? 'inline-flex' : 'none';
-  }
-
   if (summaryEl) {
     summaryEl.innerHTML = `
       <span style="color:#0f172a; font-weight:700;">${escapeHTML(project.title)}</span> &bull; 
       Schedule Year: <span style="color:#2563eb; font-weight:700;">${currentYear}</span> &bull; 
-      Total Tasks: <span style="color:#10b981; font-weight:700;" id="gantt-total-tasks-badge">${tasks.length} item${tasks.length === 1 ? '' : 's'}</span>
+      Total Tasks: <span style="color:#10b981; font-weight:700;">${tasks.length} item${tasks.length === 1 ? '' : 's'}</span>
     `;
   }
 
@@ -3125,7 +3049,7 @@ function renderProjectGanttTimeline(project, tasks = []) {
         <td colspan="12" class="ref-gantt-td-grid">
           <div class="ref-grid-bg">${monthGridBgHTML}</div>
           <div style="padding:20px; text-align:center; color:#64748b; font-size:13px; font-weight:500;">
-            No timeline tasks added yet. ${canManageTasks ? 'Click "+ Add Task" to create your first task.' : ''}
+            No timeline tasks added yet.
           </div>
         </td>
       </tr>
@@ -3167,24 +3091,17 @@ function renderProjectGanttTimeline(project, tasks = []) {
 
       taskRowsHTML += `
         <tr data-task-id="${task.id}">
-          <td class="ref-gantt-td-taskname" onclick="openTaskModalForEdit('${task.id}')" style="cursor:pointer;" title="${escapeHTML(richTooltip)}">
+          <td class="ref-gantt-td-taskname" title="${escapeHTML(richTooltip)}">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
               <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; color:#0f172a;" title="${escapeHTML(task.task_name)}">${escapeHTML(task.task_name)}</span>
-              <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
-                <span style="font-size:10px; padding:2px 4px; border-radius:4px; background:rgba(0,0,0,0.06); font-weight:600;">${escapeHTML(task.priority || 'Normal')}</span>
-                ${canManageTasks ? `
-                  <button type="button" class="btn-gantt-edit-task" onclick="event.stopPropagation(); openTaskModalForEdit('${task.id}')" title="Edit Task" style="background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; border-radius:4px; padding:2px 6px; font-size:11px; cursor:pointer; line-height:1;">✏️</button>
-                  <button type="button" class="btn-gantt-delete-task" onclick="event.stopPropagation(); deleteTask('${task.id}')" title="Delete Task" style="background:#fef2f2; color:#ef4444; border:1px solid #fecaca; border-radius:4px; padding:2px 6px; font-size:11px; cursor:pointer; line-height:1;">🗑️</button>
-                ` : ''}
-              </div>
+              <span style="font-size:10px; padding:2px 4px; border-radius:4px; background:rgba(0,0,0,0.06); font-weight:600; flex-shrink:0;">${escapeHTML(task.priority || 'Normal')}</span>
             </div>
           </td>
           <td colspan="12" class="ref-gantt-td-grid">
             <div class="ref-grid-bg">${monthGridBgHTML}</div>
             ${todayLeftPct !== null ? `<div class="ref-today-line" style="left:${todayLeftPct}%;" title="Today"></div>` : ''}
             <div class="ref-task-bar ${statusClass}" 
-                 style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%; cursor:pointer;"
-                 onclick="openTaskModalForEdit('${task.id}')"
+                 style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%;"
                  title="${escapeHTML(richTooltip)}">
               ${leftMarker}
               <span class="ref-bar-label">${escapeHTML(task.task_name)} (${dateLabel})</span>
@@ -3203,7 +3120,6 @@ function renderProjectGanttTimeline(project, tasks = []) {
           <h3 class="ref-gantt-title">Project Management Timeline</h3>
           <p class="ref-gantt-subtitle">${escapeHTML(project.title)} • ${currentYear} Milestone Schedule</p>
         </div>
-        ${canManageTasks ? `<button class="ref-gantt-add-btn add-task-btn" id="btn-gantt-panel-add-task" onclick="openTaskModalForCreate()">➕ + Add Task</button>` : ''}
       </div>
 
       <div class="ref-gantt-scroll-wrapper">
@@ -3221,344 +3137,6 @@ function renderProjectGanttTimeline(project, tasks = []) {
       </div>
     </div>
   `;
-}
-
-function syncMonthSelectsFromDates() {
-  const startVal = document.getElementById('task-start-input')?.value;
-  const endVal = document.getElementById('task-end-input')?.value;
-
-  if (startVal) {
-    const sMonth = new Date(startVal).getMonth();
-    const sSel = document.getElementById('task-start-month-select');
-    if (sSel && !isNaN(sMonth)) sSel.value = String(sMonth);
-  }
-
-  if (endVal) {
-    const eMonth = new Date(endVal).getMonth();
-    const eSel = document.getElementById('task-end-month-select');
-    if (eSel && !isNaN(eMonth)) eSel.value = String(eMonth);
-  }
-
-  updateTaskDurationPreview();
-}
-
-function syncDatesFromMonthSelects() {
-  const currentYear = new Date().getFullYear();
-  const sMonth = parseInt(document.getElementById('task-start-month-select').value, 10);
-  const eMonth = parseInt(document.getElementById('task-end-month-select').value, 10);
-
-  const sDateStr = `${currentYear}-${String(sMonth + 1).padStart(2, '0')}-01`;
-  const lastDay = new Date(currentYear, eMonth + 1, 0).getDate();
-  const eDateStr = `${currentYear}-${String(eMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-  document.getElementById('task-start-input').value = sDateStr;
-  document.getElementById('task-end-input').value = eDateStr;
-  updateTaskDurationPreview();
-}
-
-function openTaskModalForCreate() {
-  console.log('[IGRID] openTaskModalForCreate triggered. activeProjectId:', state.activeProjectId);
-  
-  // Ensure active project is set
-  if (!state.activeProjectId) {
-    if (state.projects && state.projects.length > 0) {
-      state.activeProjectId = state.projects[0].id;
-    } else {
-      showToast('Please create or open a project first.', 'warning');
-      openProjectModalForCreate();
-      return;
-    }
-  }
-
-  const activeProj = state.projects.find(p => p.id === state.activeProjectId);
-  const modalTitle = document.getElementById('modal-task-title');
-  if (modalTitle) {
-    modalTitle.textContent = activeProj ? `➕ Add Task to ${activeProj.project_code || 'Project'}` : '➕ Add Project Task';
-  }
-
-  const form = document.getElementById('task-form');
-  if (form) form.reset();
-
-  const idInput = document.getElementById('task-id-input');
-  if (idInput) idInput.value = '';
-
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
-  
-  const end = new Date();
-  end.setDate(end.getDate() + 7);
-  const endStr = end.toISOString().split('T')[0];
-
-  const startInput = document.getElementById('task-start-input');
-  if (startInput) startInput.value = todayStr;
-  const endInput = document.getElementById('task-end-input');
-  if (endInput) endInput.value = endStr;
-  const statusInput = document.getElementById('task-status-input');
-  if (statusInput) statusInput.value = 'in_progress';
-  const prioInput = document.getElementById('task-priority-input');
-  if (prioInput) prioInput.value = 'Normal';
-
-  const assignedInput = document.getElementById('task-assigned-input');
-  if (assignedInput) {
-    assignedInput.value = (activeProj && activeProj.team_lead) ? activeProj.team_lead : '';
-  }
-
-  const submitBtn = document.getElementById('btn-submit-task');
-  if (submitBtn) {
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = '💾 Save Task';
-  }
-
-  syncMonthSelectsFromDates();
-  updateTaskDurationPreview();
-
-  const taskModalEl = DOM.taskModal || document.getElementById('task-modal');
-  if (taskModalEl) {
-    taskModalEl.style.zIndex = '600';
-    openModal(taskModalEl);
-    const nameEl = document.getElementById('task-name-input');
-    if (nameEl) setTimeout(() => nameEl.focus(), 100);
-  }
-}
-
-function openTaskModalForEdit(taskId) {
-  console.log('[IGRID] openTaskModalForEdit triggered for taskId:', taskId);
-  const task = state.activeProjectTasks.find(t => String(t.id) === String(taskId));
-  if (!task) {
-    showToast('Task details not found', 'error');
-    return;
-  }
-
-  // Close info modal if open
-  closeModal(DOM.taskInfoModal || document.getElementById('task-info-modal'));
-
-  const modalTitle = document.getElementById('modal-task-title');
-  if (modalTitle) modalTitle.textContent = `✏️ Edit Project Task: ${task.task_name}`;
-
-  const idInput = document.getElementById('task-id-input');
-  if (idInput) idInput.value = task.id;
-  const nameInput = document.getElementById('task-name-input');
-  if (nameInput) nameInput.value = task.task_name || '';
-  const startInput = document.getElementById('task-start-input');
-  if (startInput) startInput.value = (task.start_date || '').split('T')[0];
-  const endInput = document.getElementById('task-end-input');
-  if (endInput) endInput.value = (task.end_date || '').split('T')[0];
-  const statusInput = document.getElementById('task-status-input');
-  if (statusInput) statusInput.value = task.status || 'in_progress';
-  const prioInput = document.getElementById('task-priority-input');
-  if (prioInput) prioInput.value = task.priority || 'Normal';
-  const assignedInput = document.getElementById('task-assigned-input');
-  if (assignedInput) assignedInput.value = task.assigned_member || '';
-  const descInput = document.getElementById('task-desc-input');
-  if (descInput) descInput.value = task.description || '';
-
-  const submitBtn = document.getElementById('btn-submit-task');
-  if (submitBtn) {
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = '💾 Update Task';
-  }
-
-  syncMonthSelectsFromDates();
-  updateTaskDurationPreview();
-
-  const taskModalEl = DOM.taskModal || document.getElementById('task-modal');
-  if (taskModalEl) {
-    taskModalEl.style.zIndex = '600';
-    openModal(taskModalEl);
-    const nameEl = document.getElementById('task-name-input');
-    if (nameEl) setTimeout(() => nameEl.focus(), 100);
-  }
-}
-
-function updateTaskDurationPreview() {
-  const startVal = document.getElementById('task-start-input')?.value;
-  const endVal = document.getElementById('task-end-input')?.value;
-  const preview = document.getElementById('task-duration-preview');
-  if (!preview) return;
-
-  if (startVal && endVal) {
-    const s = new Date(startVal);
-    const e = new Date(endVal);
-    if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
-      const dur = Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
-      if (dur < 1) {
-        preview.style.color = '#ef4444';
-        preview.textContent = '⚠️ To Date cannot be earlier than From Date';
-      } else {
-        preview.style.color = 'var(--primary)';
-        preview.textContent = `Calculated Duration: ${dur} day${dur === 1 ? '' : 's'}`;
-      }
-      return;
-    }
-  }
-  preview.textContent = 'Calculated Duration: -';
-}
-
-async function handleTaskFormSubmit(e) {
-  if (e) {
-    if (e.preventDefault) e.preventDefault();
-    if (e.stopPropagation) e.stopPropagation();
-  }
-  
-  const submitBtn = document.getElementById('btn-submit-task');
-  const originalBtnText = submitBtn ? submitBtn.innerHTML : '💾 Save Task';
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span style="display:inline-block; animation: spin 1s linear infinite; margin-right:6px;">⏳</span> Saving...';
-  }
-
-  try {
-    const taskId = document.getElementById('task-id-input')?.value;
-    const task_name = (document.getElementById('task-name-input')?.value || '').trim();
-    const start_date = document.getElementById('task-start-input')?.value || '';
-    const end_date = document.getElementById('task-end-input')?.value || '';
-    const status = document.getElementById('task-status-input')?.value || 'in_progress';
-    const priority = document.getElementById('task-priority-input')?.value || 'Normal';
-    const assigned_member = (document.getElementById('task-assigned-input')?.value || '').trim();
-    const description = (document.getElementById('task-desc-input')?.value || '').trim();
-
-    if (!task_name) {
-      showToast('Task Name is required.', 'error');
-      const nameEl = document.getElementById('task-name-input');
-      if (nameEl) nameEl.focus();
-      return;
-    }
-
-    if (!start_date || !end_date) {
-      showToast('Both From Date and To Date are required.', 'error');
-      return;
-    }
-
-    if (new Date(end_date) < new Date(start_date)) {
-      showToast('To Date cannot be earlier than From Date.', 'error');
-      return;
-    }
-
-    const payload = { task_name, start_date, end_date, status, priority, assigned_member, description };
-    const projId = state.activeProjectId || (state.projects[0] ? state.projects[0].id : null);
-
-    console.log('[TASK-SAVE] Submitting task payload:', { taskId, projId, payload });
-
-    let res;
-    if (taskId) {
-      res = await authFetch(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } else {
-      res = await authFetch(`/api/projects/${projId}/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    }
-
-    if (res.ok) {
-      closeModal(DOM.taskModal || document.getElementById('task-modal'));
-      showToast(taskId ? 'Task details updated successfully' : 'Task added to timeline successfully', 'success');
-      
-      if (projId) {
-        const tasksRes = await authFetch(`/api/projects/${projId}/tasks`);
-        if (tasksRes.ok) {
-          state.activeProjectTasks = await tasksRes.json();
-        }
-        const activeProj = state.projects.find(p => p.id === projId);
-        if (activeProj) {
-          renderProjectGanttTimeline(activeProj, state.activeProjectTasks);
-        }
-      }
-    } else {
-      const json = await res.json().catch(() => ({}));
-      showToast(json.error || `Failed to save task (HTTP ${res.status})`, 'error');
-    }
-  } catch (err) {
-    console.error('Error saving task:', err);
-    showToast(`Failed to save task: ${err.message || 'Server connection error'}`, 'error');
-  } finally {
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = originalBtnText;
-    }
-    syncBodyScrollLock();
-  }
-}
-
-function openTaskInfoModal(taskId) {
-  const task = state.activeProjectTasks.find(t => String(t.id) === String(taskId));
-  if (!task) return;
-  selectedTaskIdForInfo = task.id;
-
-  const titleEl = document.getElementById('task-info-title');
-  const badgeEl = document.getElementById('task-info-status-badge');
-  const priorityEl = document.getElementById('task-info-priority-badge');
-  const pillEl = document.getElementById('task-info-duration-pill');
-  const datesEl = document.getElementById('task-info-dates');
-  const descEl = document.getElementById('task-info-desc');
-  const assignedEl = document.getElementById('task-info-assigned');
-
-  const dur = Math.round((new Date(task.end_date) - new Date(task.start_date)) / (1000 * 60 * 60 * 24)) + 1;
-
-  if (titleEl) titleEl.textContent = task.task_name;
-  if (badgeEl) {
-    const statusMap = {
-      'not_started': { label: 'Not Started', class: 'badge-date' },
-      'in_progress': { label: 'In Progress', class: 'badge-blue' },
-      'completed': { label: 'Completed', class: 'badge-normal' },
-      'on_hold': { label: 'On Hold', class: 'badge-high' }
-    };
-    const sInfo = statusMap[task.status] || { label: 'In Progress', class: 'badge-blue' };
-    badgeEl.textContent = sInfo.label;
-    badgeEl.className = `badge ${sInfo.class}`;
-  }
-  if (priorityEl) {
-    const prio = task.priority || 'Normal';
-    priorityEl.textContent = `${prio} Priority`;
-    priorityEl.className = `badge ${prio === 'Critical' || prio === 'High' ? 'badge-high' : (prio === 'Normal' ? 'badge-normal' : 'badge-low')}`;
-  }
-  if (pillEl) pillEl.textContent = `${dur} day${dur === 1 ? '' : 's'}`;
-  if (datesEl) datesEl.textContent = `${formatDateShort(task.start_date)} → ${formatDateShort(task.end_date)}`;
-  if (descEl) descEl.textContent = task.description || 'No description provided for this task.';
-  if (assignedEl) assignedEl.textContent = `Assigned to: ${task.assigned_member || 'Unassigned'}`;
-
-  const infoModalEl = DOM.taskInfoModal || document.getElementById('task-info-modal');
-  if (infoModalEl) {
-    infoModalEl.style.zIndex = '600';
-    openModal(infoModalEl);
-  }
-}
-
-async function deleteTask(taskId) {
-  const task = state.activeProjectTasks.find(t => String(t.id) === String(taskId));
-  const taskName = task ? task.task_name : 'this task';
-  if (!confirm(`Are you sure you want to delete task "${taskName}"?`)) return;
-
-  try {
-    const res = await authFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-    if (res.ok) {
-      closeModal(DOM.taskInfoModal || document.getElementById('task-info-modal'));
-      showToast('Task deleted successfully', 'success');
-      const projId = state.activeProjectId;
-      if (projId) {
-        const tasksRes = await authFetch(`/api/projects/${projId}/tasks`);
-        if (tasksRes.ok) {
-          state.activeProjectTasks = await tasksRes.json();
-        } else {
-          state.activeProjectTasks = state.activeProjectTasks.filter(t => String(t.id) !== String(taskId));
-        }
-        const activeProj = state.projects.find(p => p.id === projId);
-        if (activeProj) {
-          renderProjectGanttTimeline(activeProj, state.activeProjectTasks);
-        }
-      }
-    } else {
-      const json = await res.json().catch(() => ({}));
-      showToast(json.error || 'Failed to delete task', 'error');
-    }
-  } catch (err) {
-    console.error('Error deleting task:', err);
-    showToast('Failed to delete task from server', 'error');
-  }
 }
 
 function renderProjectComments(activities) {
@@ -4969,9 +4547,5 @@ window.openAdminAuditEditModal = openAdminAuditEditModal;
 window.toggleStudentCardExpand = toggleStudentCardExpand;
 window.handleToggleProjectActive = handleToggleProjectActive;
 window.renderProjectActiveToggleHTML = renderProjectActiveToggleHTML;
-window.openTaskModalForCreate = openTaskModalForCreate;
-window.openTaskModalForEdit = openTaskModalForEdit;
-window.openTaskInfoModal = openTaskInfoModal;
-window.handleTaskFormSubmit = handleTaskFormSubmit;
 
 

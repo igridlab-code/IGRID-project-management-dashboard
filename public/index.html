@@ -162,7 +162,7 @@
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          <span>Add Task / Project</span>
+          <span>➕ New Project</span>
         </button>
       </div>
     </section>
@@ -1080,7 +1080,6 @@
                   <!-- Dynamically populated summary -->
                 </div>
               </div>
-              <button class="btn btn-sm btn-primary add-task-btn" id="btn-add-project-task" onclick="openTaskModalForCreate()">➕ + Add Task</button>
             </div>
 
             <div class="gantt-container-outer" id="detail-gantt-container">
@@ -1735,145 +1734,6 @@
           <button type="submit" class="btn btn-primary" id="btn-submit-add-domain">Add Domain</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- 8. ADD / EDIT PROJECT TASK MODAL -->
-  <div class="modal-overlay" id="task-modal">
-    <div class="modal-card" style="max-width: 540px;">
-      <div class="modal-header">
-        <h3 id="modal-task-title">➕ Add Project Task</h3>
-        <button class="modal-close" id="close-task-modal">&times;</button>
-      </div>
-      <form id="task-form" novalidate>
-        <input type="hidden" id="task-id-input">
-        <div class="modal-body" style="padding: 20px;">
-          <div class="form-group" style="margin-bottom: 16px;">
-            <label for="task-name-input">Task Name *</label>
-            <input type="text" id="task-name-input" placeholder="e.g. Hardware Setup & Motor Calibration" required style="width:100%;">
-          </div>
-
-          <div class="form-row" style="margin-bottom: 16px;">
-            <div class="form-group col-6">
-              <label for="task-start-month-select">Start Month</label>
-              <select id="task-start-month-select" style="width:100%;">
-                <option value="0">January</option>
-                <option value="1">February</option>
-                <option value="2">March</option>
-                <option value="3">April</option>
-                <option value="4">May</option>
-                <option value="5">June</option>
-                <option value="6">July</option>
-                <option value="7">August</option>
-                <option value="8">September</option>
-                <option value="9">October</option>
-                <option value="10">November</option>
-                <option value="11">December</option>
-              </select>
-            </div>
-            <div class="form-group col-6">
-              <label for="task-end-month-select">End Month</label>
-              <select id="task-end-month-select" style="width:100%;">
-                <option value="0">January</option>
-                <option value="1">February</option>
-                <option value="2">March</option>
-                <option value="3">April</option>
-                <option value="4">May</option>
-                <option value="5">June</option>
-                <option value="6">July</option>
-                <option value="7">August</option>
-                <option value="8">September</option>
-                <option value="9">October</option>
-                <option value="10">November</option>
-                <option value="11">December</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-row" style="margin-bottom: 16px;">
-            <div class="form-group col-6">
-              <label for="task-start-input">From Date *</label>
-              <input type="date" id="task-start-input" required style="width:100%;">
-            </div>
-            <div class="form-group col-6">
-              <label for="task-end-input">To Date *</label>
-              <input type="date" id="task-end-input" required style="width:100%;">
-            </div>
-          </div>
-
-          <div class="form-group" style="margin-bottom: 16px;">
-            <div style="font-size: 12px; font-weight: 600; color: var(--primary);" id="task-duration-preview">
-              Calculated Duration: 1 day
-            </div>
-          </div>
-
-          <div class="form-row" style="margin-bottom: 16px;">
-            <div class="form-group col-6">
-              <label for="task-status-input">Status *</label>
-              <select id="task-status-input" style="width:100%;">
-                <option value="not_started">Not Started</option>
-                <option value="in_progress" selected>In Progress</option>
-                <option value="completed">Completed</option>
-                <option value="on_hold">On Hold</option>
-              </select>
-            </div>
-            <div class="form-group col-6">
-              <label for="task-priority-input">Priority</label>
-              <select id="task-priority-input" style="width:100%;">
-                <option value="Low">Low</option>
-                <option value="Normal" selected>Normal</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-group" style="margin-bottom: 16px;">
-            <label for="task-assigned-input">Assigned Team Member</label>
-            <input type="text" id="task-assigned-input" placeholder="e.g. Aarav Sharma" style="width:100%;">
-          </div>
-
-          <div class="form-group">
-            <label for="task-desc-input">Task Description</label>
-            <textarea id="task-desc-input" rows="3" placeholder="Brief description of task deliverables or milestones..." style="width:100%; resize:vertical; padding:10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-input); color:var(--text-main); font-family:inherit;"></textarea>
-          </div>
-        </div>
-        <div class="modal-footer" style="position: static; padding: 16px 20px; display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border-color);">
-          <button type="button" class="btn btn-secondary" id="btn-cancel-task">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="btn-submit-task">Save Task</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 9. TASK DETAIL POPUP / INFO MODAL -->
-  <div class="modal-overlay" id="task-info-modal">
-    <div class="modal-card" style="max-width: 460px;">
-      <div class="modal-header">
-        <h3 id="task-info-title">Task Details</h3>
-        <button class="modal-close" id="close-task-info-modal">&times;</button>
-      </div>
-      <div class="modal-body" style="padding: 20px;">
-        <div style="margin-bottom: 12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <span class="badge" id="task-info-status-badge">In Progress</span>
-          <span class="badge badge-normal" id="task-info-priority-badge">Normal Priority</span>
-          <span class="badge badge-date" id="task-info-duration-pill">5 days</span>
-        </div>
-        <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;" id="task-info-dates">
-          01 Sep 2026 → 05 Sep 2026
-        </div>
-        <div style="font-size: 13px; line-height: 1.6; margin-bottom: 16px; background: var(--bg-card-sub); padding: 12px; border-radius: 8px;" id="task-info-desc">
-          No description provided.
-        </div>
-        <div style="font-size: 12px; color: var(--text-dim);" id="task-info-assigned">
-          Assigned to: Unassigned
-        </div>
-      </div>
-      <div class="modal-footer" style="position: static; padding: 16px 20px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border-color);">
-        <button type="button" class="btn btn-sm btn-primary" id="btn-edit-task-info">✏️ Edit Task</button>
-        <button type="button" class="btn btn-sm btn-danger" id="btn-delete-task-info" style="background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; cursor:pointer;">🗑️ Delete Task</button>
-        <button type="button" class="btn btn-sm btn-secondary" id="btn-close-task-info">Close</button>
-      </div>
     </div>
   </div>
 

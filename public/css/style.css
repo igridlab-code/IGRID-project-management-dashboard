@@ -2234,10 +2234,6 @@ body {
   animation: modalFadeIn 0.2s ease-out;
 }
 
-#task-modal, #task-info-modal {
-  z-index: 600 !important;
-}
-
 @keyframes modalFadeIn {
   from { opacity: 0; transform: scale(0.96); }
   to { opacity: 1; transform: scale(1); }
@@ -3387,50 +3383,6 @@ h1, h2, h3, h4, h5, h6, p, span, a, label, .card-title, .card-desc, .action-item
   color: #64748b;
   margin-top: 4px;
   margin-bottom: 0;
-}
-
-#btn-add-project-task {
-  background: #f59e0b !important;
-  color: #0f172a !important;
-  font-weight: 700;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 14px;
-  font-size: 12px;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);
-  transition: all 0.2s ease;
-  position: relative;
-  z-index: 15;
-  pointer-events: auto !important;
-}
-
-#btn-add-project-task:hover {
-  background: #d97706 !important;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.45);
-}
-
-.ref-gantt-add-btn {
-  background: #2563eb !important;
-  color: #ffffff !important;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-  transition: all 0.2s ease;
-  position: relative;
-  z-index: 15;
-  pointer-events: auto !important;
-}
-
-.ref-gantt-add-btn:hover {
-  background: #1d4ed8 !important;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
 }
 
 .ref-gantt-scroll-wrapper {
