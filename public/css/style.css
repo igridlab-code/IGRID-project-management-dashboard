@@ -2443,11 +2443,43 @@ input:focus, select:focus, textarea:focus {
   color: var(--text-dim);
 }
 
-/* Detail Modal Specifics */
+/* Detail Modal Specifics & Vertical Scroll */
+#detail-modal {
+  z-index: 1000 !important;
+}
+
+#detail-modal .modal-card {
+  max-height: 85vh !important;
+  height: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  max-width: 920px !important;
+  width: 92vw !important;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85);
+}
+
+#detail-modal .modal-header,
+#detail-modal .modal-footer {
+  flex-shrink: 0 !important;
+}
+
+#detail-modal .modal-body,
 .detail-modal-body {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 18px !important;
+  overflow-y: auto !important;
+  max-height: calc(85vh - 140px) !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  padding: 24px !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: contain !important;
+  touch-action: pan-y !important;
 }
 
 .detail-main-info h2 {
@@ -3385,18 +3417,24 @@ h1, h2, h3, h4, h5, h6, p, span, a, label, .card-title, .card-desc, .action-item
 }
 
 .ref-gantt-scroll-wrapper {
-  overflow-x: auto;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   background: #ffffff;
   position: relative;
+  max-width: 100% !important;
+  width: 100% !important;
+  display: block !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: thin;
 }
 
 .ref-gantt-table {
-  width: 100%;
+  width: 100% !important;
   border-collapse: collapse;
   table-layout: fixed;
-  min-width: 980px;
+  min-width: 1100px !important;
 }
 
 .ref-gantt-table th,
@@ -3546,10 +3584,16 @@ h1, h2, h3, h4, h5, h6, p, span, a, label, .card-title, .card-desc, .action-item
   letter-spacing: 0.2px;
 }
 
-/* Task and Info modals must layer ABOVE the detail-modal */
+/* Task and Info modals must layer ABOVE the detail-modal (which is 1000) */
 #task-modal,
 #task-info-modal {
-  z-index: 300 !important;
+  z-index: 1200 !important;
+}
+
+#task-modal .modal-card,
+#task-info-modal .modal-card {
+  z-index: 1201 !important;
+  position: relative;
 }
 
 /* Missing task-bar status colors */
