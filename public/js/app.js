@@ -207,8 +207,7 @@ function getSessionToken() {
 function isUserAdmin() {
   if (!state.currentUser) return false;
   const role = (state.currentUser.role || '').toLowerCase();
-  const email = (state.currentUser.email || '').toLowerCase();
-  return role === 'admin' || email === 'admin@igridlab.edu.in';
+  return role === 'admin';
 }
 
 function isUserStudent() {
@@ -1968,8 +1967,7 @@ function renderCompleted() {
 function isUserAdmin() {
   if (!state.currentUser) return false;
   const role = (state.currentUser.role || '').toLowerCase();
-  const email = (state.currentUser.email || '').toLowerCase();
-  return role === 'admin' || email === 'admin@igridlab.edu.in';
+  return role === 'admin';
 }
 
 // 9. RENDER STUDENTS & INNOVATOR TEAMS DIRECTORY
