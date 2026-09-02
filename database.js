@@ -744,15 +744,15 @@ function seedInitialTasksIfEmpty() {
 
 function seedDefaultAccounts() {
   const bcrypt = require('bcryptjs');
-  const hashAdmin = bcrypt.hashSync('IGrid#Admin!2026$SecureLab', 10);
-  const hashViewer = bcrypt.hashSync('PublicViewer#2026!Showcase', 10);
-  const hashStudent = bcrypt.hashSync('Student!2026#Innovate', 10);
+  const hashAdmin = bcrypt.hashSync('Admin@123', 10);
+  const hashViewer = bcrypt.hashSync('Viewer@123', 10);
+  const hashStudent = bcrypt.hashSync('password123', 10);
 
   const defaultAccounts = [
     { email: 'admin@igridlab.edu.in', name: 'Admin Coordinator', hash: hashAdmin, role: 'admin' },
     { email: 'kaviyaarumugam541@gmail.com', name: 'Kaviya Arumugam', hash: hashStudent, role: 'student' },
     { email: 'viewer@igridlab.edu.in', name: 'Public Showcase Visitor', hash: hashViewer, role: 'viewer' },
-    { email: 'showcase@igrid.lab', name: 'Public Viewer', hash: hashViewer, role: 'viewer' },
+    { email: 'showcase@igrid.lab', name: 'Public Viewer', hash: hashStudent, role: 'viewer' },
     { email: 'priya.s@igrid.lab', name: 'Priya Sundaram (Student)', hash: hashStudent, role: 'student' }
   ];
 
