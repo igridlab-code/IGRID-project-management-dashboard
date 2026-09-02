@@ -78,6 +78,14 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function blockViewer(req, res, next) {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  if (userRole === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers are restricted to view-only Management Showcase and Board data.' });
+  }
+  next();
+}
+
 // ----------------------------------------------------
 // AUDIT LOGGING HELPER
 // ----------------------------------------------------
@@ -643,8 +651,8 @@ app.get('/api/domains', (req, res) => {
   });
 });
 
-// POST CREATE NEW DOMAIN
-app.post('/api/domains', (req, res) => {
+// POST CREATE NEW DOMAIN (ADMIN ONLY)
+app.post('/api/domains', requireAuth, requireAdmin, (req, res) => {
   const { name, description } = req.body;
   const trimmedName = (name || '').trim();
 
@@ -731,6 +739,9 @@ app.get('/api/projects', optionalAuth, (req, res) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
+    const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+    const isViewer = userRole === 'viewer';
+
     const projects = rows.map(r => {
       let members = [];
       try {
@@ -738,7 +749,11 @@ app.get('/api/projects', optionalAuth, (req, res) => {
       } catch(e) {
         members = [];
       }
-      return { ...r, team_members: members };
+      const item = { ...r, team_members: members };
+      if (isViewer) {
+        item.immediate_action = '';
+      }
+      return item;
     });
     res.json(projects);
   });
@@ -751,7 +766,7 @@ app.get('/api/public/projects', (req, res) => {
     const projects = rows.map(r => {
       let members = [];
       try { members = r.team_members ? JSON.parse(r.team_members) : []; } catch(e) { members = []; }
-      return { ...r, team_members: members };
+      return { ...r, team_members: members, immediate_action: '' };
     });
     res.json(projects);
   });
@@ -760,6 +775,9 @@ app.get('/api/public/projects', (req, res) => {
 // GET SINGLE PROJECT WITH BOM & ACTIVITIES (PUBLIC & AUTHENTICATED)
 app.get('/api/projects/:id', optionalAuth, (req, res) => {
   const { id } = req.params;
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const isViewer = userRole === 'viewer';
+
   db.get('SELECT * FROM projects WHERE id = ?', [id], (err, project) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -771,6 +789,9 @@ app.get('/api/projects/:id', optionalAuth, (req, res) => {
       members = [];
     }
     project.team_members = members;
+    if (isViewer) {
+      project.immediate_action = '';
+    }
 
     // Fetch BOM items
     db.all('SELECT * FROM bom_items WHERE project_code = ?', [project.project_code], (err, boms) => {
@@ -780,7 +801,7 @@ app.get('/api/projects/:id', optionalAuth, (req, res) => {
       // Fetch Activities
       db.all('SELECT * FROM activities WHERE project_id = ? ORDER BY created_at DESC', [id], (err, activities) => {
         if (err) return res.status(500).json({ error: err.message });
-        project.activities = activities || [];
+        project.activities = isViewer ? [] : (activities || []);
         res.json(project);
       });
     });
@@ -1203,16 +1224,24 @@ app.delete('/api/projects/:id', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
-// GET STUDENTS (PUBLIC SHOWCASE & AUTHENTICATED)
+// GET STUDENTS (ADMIN & STUDENT ONLY)
 app.get('/api/students', optionalAuth, (req, res) => {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  if (userRole === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers cannot access Team Management data.' });
+  }
   db.all('SELECT * FROM students ORDER BY name ASC', [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
 });
 
-// GET SINGLE STUDENT PROFILE (PUBLIC SHOWCASE & AUTHENTICATED)
+// GET SINGLE STUDENT PROFILE (ADMIN & STUDENT ONLY)
 app.get('/api/students/:id', optionalAuth, (req, res) => {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  if (userRole === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers cannot access Team Management data.' });
+  }
   const reqStudentId = Number(req.params.id);
   db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err, student) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -1315,8 +1344,8 @@ app.put('/api/students/:id', requireAuth, (req, res) => {
 // MONTH-WISE STUDENT CALENDAR API ROUTES
 // ----------------------------------------------------
 
-// GET CALENDAR ACTIVITIES FOR A STUDENT
-app.get('/api/students/:id/calendar', requireAuth, (req, res) => {
+// GET CALENDAR ACTIVITIES FOR A STUDENT (ADMIN & STUDENT ONLY)
+app.get('/api/students/:id/calendar', requireAuth, blockViewer, (req, res) => {
   const reqStudentId = Number(req.params.id);
   db.all('SELECT * FROM student_calendar WHERE student_id = ? ORDER BY id ASC', [reqStudentId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -1394,8 +1423,8 @@ app.delete('/api/students/calendar/:activityId', requireAuth, (req, res) => {
   });
 });
 
-// GET BOM ITEMS
-app.get('/api/bom', requireAuth, (req, res) => {
+// GET BOM ITEMS (ADMIN & STUDENT ONLY)
+app.get('/api/bom', requireAuth, blockViewer, (req, res) => {
   const { status, project_code } = req.query;
   let sql = 'SELECT * FROM bom_items WHERE 1=1';
   const params = [];
@@ -1481,8 +1510,12 @@ app.put('/api/bom/:id/status', requireAuth, requireAdmin, (req, res) => {
 // PROJECT-SPECIFIC TIMELINE TASKS ENDPOINTS
 // ----------------------------------------------------
 
-// GET TASKS FOR SPECIFIC PROJECT (PUBLIC SHOWCASE & AUTHENTICATED)
+// GET TASKS FOR SPECIFIC PROJECT (ADMIN & STUDENT ONLY)
 app.get('/api/projects/:id/tasks', optionalAuth, (req, res) => {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  if (userRole === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers cannot access Task / Gantt management data.' });
+  }
   const { id } = req.params;
   db.all('SELECT * FROM project_tasks WHERE project_id = ? ORDER BY start_date ASC, id ASC', [id], (err, tasks) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -1490,7 +1523,11 @@ app.get('/api/projects/:id/tasks', optionalAuth, (req, res) => {
   });
 });
 
-app.get('/api/public/projects/:id/tasks', (req, res) => {
+app.get('/api/public/projects/:id/tasks', optionalAuth, (req, res) => {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  if (userRole === 'viewer') {
+    return res.status(403).json({ error: 'Access denied: Public Showcase Viewers cannot access Task / Gantt management data.' });
+  }
   const { id } = req.params;
   db.all('SELECT * FROM project_tasks WHERE project_id = ? ORDER BY start_date ASC, id ASC', [id], (err, tasks) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -1634,8 +1671,8 @@ app.post('/api/projects/:id/comments', requireAuth, (req, res) => {
   });
 });
 
-// ANALYTICS & STATS DASHBOARD
-app.get('/api/analytics', requireAuth, (req, res) => {
+// ANALYTICS & STATS DASHBOARD (ADMIN & STUDENT ONLY)
+app.get('/api/analytics', requireAuth, blockViewer, (req, res) => {
   const stats = {};
 
   db.all('SELECT status, COUNT(*) as count, AVG(progress) as avg_progress FROM projects GROUP BY status', [], (err, statusRows) => {
@@ -1679,8 +1716,8 @@ app.get('/api/analytics', requireAuth, (req, res) => {
   });
 });
 
-// EXPORT TO JSON
-app.get('/api/export/json', requireAuth, (req, res) => {
+// EXPORT TO JSON (ADMIN & STUDENT ONLY)
+app.get('/api/export/json', requireAuth, blockViewer, (req, res) => {
   db.all('SELECT * FROM projects', [], (err, projects) => {
     if (err) return res.status(500).json({ error: err.message });
     db.all('SELECT * FROM bom_items', [], (err, boms) => {
@@ -1704,8 +1741,8 @@ app.get('/api/export/json', requireAuth, (req, res) => {
   });
 });
 
-// EXPORT TO CSV
-app.get('/api/export/csv', requireAuth, (req, res) => {
+// EXPORT TO CSV (ADMIN & STUDENT ONLY)
+app.get('/api/export/csv', requireAuth, blockViewer, (req, res) => {
   db.all('SELECT project_code, title, domain, tags, status, priority, progress, start_date, due_date, immediate_action, github_repo, youtube_url, linkedin_url, bom_status, team_name, team_lead FROM projects', [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
 

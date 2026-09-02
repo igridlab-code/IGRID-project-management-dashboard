@@ -315,22 +315,52 @@ function updateUserNavbarUI() {
     if (loginBtn) loginBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = 'inline-block';
 
-    const tabAudit = document.getElementById('tab-audit');
-    if (tabAudit) tabAudit.style.display = isAdmin ? 'inline-flex' : 'none';
+    // 1. Navigation Menu Filtering:
+    // When isViewer: ONLY "Management Showcase" and "Board" are visible!
+    // All other tabs (timeline, list, table, bom, completed, students, analytics, audit) are hidden!
+    if (DOM.viewTabs) {
+      DOM.viewTabs.forEach(tab => {
+        const view = tab.getAttribute('data-view');
+        if (isViewer) {
+          if (view === 'executive' || view === 'board') {
+            tab.style.display = 'inline-flex';
+          } else {
+            tab.style.display = 'none';
+          }
+        } else if (view === 'audit') {
+          tab.style.display = isAdmin ? 'inline-flex' : 'none';
+        } else {
+          tab.style.display = 'inline-flex';
+        }
+      });
+    }
+
+    const labAnalyticsBtn = document.getElementById('lab-analytics-btn');
+    if (labAnalyticsBtn) labAnalyticsBtn.style.display = isViewer ? 'none' : 'inline-flex';
 
     if (!isAdmin) {
       if (openAddStudentBtn) openAddStudentBtn.style.display = 'none';
       if (openAddProjectBtn) openAddProjectBtn.style.display = 'none';
-      if (openAddTaskModal && isViewer) openAddTaskModal.style.display = 'none';
+      if (openAddTaskModal) openAddTaskModal.style.display = 'none';
     } else {
       if (openAddStudentBtn) openAddStudentBtn.style.display = 'inline-block';
       if (openAddProjectBtn) openAddProjectBtn.style.display = 'inline-block';
       if (openAddTaskModal) openAddTaskModal.style.display = 'inline-block';
     }
   } else {
-    // GUEST PUBLIC SHOWCASE (READ-ONLY)
-    const tabAudit = document.getElementById('tab-audit');
-    if (tabAudit) tabAudit.style.display = 'none';
+    // GUEST PUBLIC SHOWCASE (READ-ONLY) - default to Showcase and Board only
+    if (DOM.viewTabs) {
+      DOM.viewTabs.forEach(tab => {
+        const view = tab.getAttribute('data-view');
+        if (view === 'executive' || view === 'board') {
+          tab.style.display = 'inline-flex';
+        } else {
+          tab.style.display = 'none';
+        }
+      });
+    }
+    const labAnalyticsBtn = document.getElementById('lab-analytics-btn');
+    if (labAnalyticsBtn) labAnalyticsBtn.style.display = 'none';
 
     if (userNameText) userNameText.textContent = 'Public Visitor';
     if (avatarImg) avatarImg.src = `https://ui-avatars.com/api/?name=Public+Visitor&background=3b82f6&color=fff`;
@@ -355,6 +385,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadAllData();
   initTunnelPoller();
   initChatbotWidget();
+  resolveCurrentRoute();
 });
 
 let chatHistory = [];
@@ -742,16 +773,39 @@ async function fetchProjects() {
 }
 
 async function fetchStudents() {
-  const res = await authFetch('/api/students');
-  state.students = await res.json();
+  if (isUserViewer()) {
+    state.students = [];
+    return;
+  }
+  try {
+    const res = await authFetch('/api/students');
+    if (res.ok) state.students = await res.json();
+    else state.students = [];
+  } catch(e) {
+    state.students = [];
+  }
 }
 
 async function fetchBoms() {
-  const res = await authFetch('/api/bom');
-  state.boms = await res.json();
+  if (isUserViewer()) {
+    state.boms = [];
+    return;
+  }
+  try {
+    const res = await authFetch('/api/bom');
+    if (res.ok) state.boms = await res.json();
+    else state.boms = [];
+  } catch(e) {
+    state.boms = [];
+  }
 }
 
 async function fetchNotifications() {
+  if (isUserViewer()) {
+    if (DOM.notifBadge) DOM.notifBadge.textContent = '0';
+    if (DOM.tabBomCount) DOM.tabBomCount.textContent = '0';
+    return;
+  }
   const pendingBoms = state.boms.filter(b => b.status === 'Pending');
   const today = new Date().toISOString().split('T')[0];
   const overdueProjects = state.projects.filter(p => p.due_date && p.due_date < today && p.status !== 'completed');
@@ -1141,7 +1195,79 @@ function initEventListeners() {
   initAuditLogListeners();
 }
 
+function resolveCurrentRoute() {
+  const isViewer = isUserViewer();
+  const isAdmin = isUserAdmin();
+
+  const path = (window.location.pathname || '').toLowerCase();
+  const hash = (window.location.hash || '').toLowerCase().replace(/^#/, '');
+
+  let targetView = isViewer ? 'executive' : 'board';
+
+  // Match route by hash or path
+  if (hash === 'executive' || hash === 'showcase' || path === '/executive' || path === '/showcase' || path === '/public-view') {
+    targetView = 'executive';
+  } else if (hash === 'board' || path === '/board') {
+    targetView = 'board';
+  } else if (hash === 'timeline' || path === '/timeline') {
+    targetView = 'timeline';
+  } else if (hash === 'list' || path === '/list') {
+    targetView = 'list';
+  } else if (hash === 'table' || path === '/table') {
+    targetView = 'table';
+  } else if (hash === 'bom' || path === '/bom') {
+    targetView = 'bom';
+  } else if (hash === 'completed' || hash === 'archive' || path === '/completed') {
+    targetView = 'completed';
+  } else if (hash === 'students' || hash === 'teams' || path === '/students' || path === '/team-management') {
+    targetView = 'students';
+  } else if (hash === 'analytics' || path === '/analytics') {
+    targetView = 'analytics';
+  } else if (hash === 'audit' || hash === 'audit-log' || path === '/audit' || path === '/audit-log' || path === '/admin') {
+    targetView = 'audit';
+  }
+
+  // Enforce viewer role restriction: ONLY Management Showcase and Board allowed!
+  if (isViewer) {
+    if (targetView !== 'executive' && targetView !== 'board') {
+      showToast('Access restricted: Public Showcase Viewers can only access Management Showcase and Board.', 'warning');
+      targetView = 'executive';
+      if (window.location.pathname !== '/' && window.location.pathname !== '/showcase') {
+        window.history.replaceState(null, '', '/showcase#executive');
+      } else {
+        window.location.hash = '#executive';
+      }
+    }
+  } else if (targetView === 'audit' && !isAdmin) {
+    showToast('Access denied: Administrator privilege required for audit logs.', 'error');
+    targetView = 'board';
+    window.history.replaceState(null, '', '/#board');
+  }
+
+  switchView(targetView);
+}
+
+window.addEventListener('hashchange', resolveCurrentRoute);
+window.addEventListener('popstate', resolveCurrentRoute);
+
 function switchView(viewName) {
+  const isViewer = isUserViewer();
+  const isAdmin = isUserAdmin();
+
+  if (isViewer) {
+    if (viewName !== 'executive' && viewName !== 'board') {
+      showToast('Access restricted: Public Showcase Viewers can only access Management Showcase and Board.', 'warning');
+      viewName = 'executive';
+    }
+  } else if (viewName === 'audit' && !isAdmin) {
+    showToast('Access denied: Administrator privilege required.', 'error');
+    viewName = 'board';
+  }
+
+  if (window.location.hash !== `#${viewName}`) {
+    window.history.replaceState(null, '', `/#${viewName}`);
+  }
+
   DOM.viewTabs.forEach(t => {
     t.classList.toggle('active', t.getAttribute('data-view') === viewName);
   });
@@ -1208,17 +1334,19 @@ function renderAllViews() {
   renderHashtagCloud();
   renderKanban();
   renderExecutiveShowcase();
-  renderTimeline();
-  renderList();
-  renderTable();
-  renderBOM();
-  renderCompleted();
-  renderStudents();
-  renderAnalytics();
-  if (state.currentView === 'audit' && isUserAdmin()) {
-    fetchAndRenderAuditLogs();
+  if (!isUserViewer()) {
+    renderTimeline();
+    renderList();
+    renderTable();
+    renderBOM();
+    renderCompleted();
+    renderStudents();
+    renderAnalytics();
+    if (state.currentView === 'audit' && isUserAdmin()) {
+      fetchAndRenderAuditLogs();
+    }
+    populateBomProjectSelect();
   }
-  populateBomProjectSelect();
 }
 
 // 1. RENDER EXECUTIVE MANAGEMENT SHOWCASE (NEW COMPONENT)
@@ -1279,7 +1407,7 @@ function renderExecutiveShowcase() {
             <div class="exec-card-top-badges">
               <div style="display:flex; align-items:center; gap:6px;">
                 <span class="card-id-code">${p.project_code}</span>
-                ${renderProjectActiveToggleHTML(p.id, p.is_active)}
+                ${!isUserViewer() ? renderProjectActiveToggleHTML(p.id, p.is_active) : ''}
               </div>
               <div class="exec-progress-radial">
                 <span class="pulse-indicator"></span>
@@ -1312,14 +1440,16 @@ function renderExecutiveShowcase() {
             </div>
           </div>
 
-          <!-- Immediate Action / Procurement Alert -->
+          <!-- Immediate Action / Procurement Alert (Internal Notes - Hidden from Viewers) -->
+          ${(!isUserViewer() && p.immediate_action) ? `
           <div class="exec-action-alert">
             <div class="exec-action-alert-text">
               <strong>${hasPendingBOM ? '⚠️ BOM Requisition Pending:' : '⚡ Next Action Item:'}</strong>
               <div>${escapeHTML(p.immediate_action || 'Ongoing prototype development')}</div>
             </div>
-            ${hasPendingBOM ? `<button class="btn btn-sm btn-primary" onclick="switchView('bom')">Review BOM</button>` : ''}
+            ${(hasPendingBOM && isUserAdmin()) ? `<button class="btn btn-sm btn-primary" onclick="switchView('bom')">Review BOM</button>` : ''}
           </div>
+          ` : ''}
 
           <!-- Media & Social Links -->
           ${mediaLinks.length > 0 ? `
@@ -1400,10 +1530,12 @@ async function openSpotlightPresentation(projectId) {
           <h2>${escapeHTML(project.title)}</h2>
           <p style="font-size:13px; color:var(--text-muted); line-height:1.6;">${escapeHTML(project.description || '')}</p>
 
+          ${(!isUserViewer() && project.immediate_action) ? `
           <div class="detail-action-box">
             <strong>⚡ Critical Immediate Action Item / Blocker:</strong>
             <p style="margin-top:2px;">${escapeHTML(project.immediate_action || 'No critical blockers reported.')}</p>
           </div>
+          ` : ''}
 
           <div style="display:flex; flex-direction:column; gap:6px;">
             <div style="display:flex; justify-content:space-between; font-size:12px;">
@@ -1561,6 +1693,7 @@ function createCardHTML(p) {
   else if (p.bom_status === 'Submitted') bomIcon = '<span style="color:#f59e0b;" title="BOM Pending Review">⏳ BOM</span>';
 
   const isAdmin = isUserAdmin();
+  const isViewer = isUserViewer();
   const draggableAttrs = isAdmin ? 'draggable="true" ondragstart="handleDragStart(event)" ondragend="handleDragEnd(event)"' : 'draggable="false"';
   const stageLockIcon = !isAdmin ? '<span title="🔒 Stage changes are restricted to Administrator" style="font-size: 11px; opacity: 0.65; cursor: default;">🔒</span>' : '';
 
@@ -1570,7 +1703,7 @@ function createCardHTML(p) {
         <div style="display: flex; align-items: center; gap: 6px;">
           ${stageLockIcon}
           <span class="card-id-code">${p.project_code}</span>
-          ${renderProjectActiveToggleHTML(p.id, p.is_active)}
+          ${!isViewer ? renderProjectActiveToggleHTML(p.id, p.is_active) : ''}
         </div>
         <div class="card-badges-right">
           <span class="badge ${priorityClass}">${p.priority}</span>
@@ -1583,7 +1716,7 @@ function createCardHTML(p) {
 
       ${tagsHTML ? `<div class="card-tags">${tagsHTML}</div>` : ''}
 
-      ${p.immediate_action ? `
+      ${(!isViewer && p.immediate_action) ? `
         <div class="card-action-item">
           <strong>⚡ Next:</strong> ${escapeHTML(p.immediate_action)}
         </div>
@@ -2921,30 +3054,45 @@ async function openProjectDetail(projectId) {
     }
 
     // Fetch & render Project-Specific Timeline Gantt Chart
-    try {
-      const tasksRes = await authFetch(`/api/projects/${projectId}/tasks`);
-      if (tasksRes.ok) {
-        state.activeProjectTasks = await tasksRes.json();
-      } else {
+    if (isUserViewer()) {
+      state.activeProjectTasks = [];
+    } else {
+      try {
+        const tasksRes = await authFetch(`/api/projects/${projectId}/tasks`);
+        if (tasksRes.ok) {
+          state.activeProjectTasks = await tasksRes.json();
+        } else {
+          state.activeProjectTasks = [];
+        }
+      } catch(e) {
         state.activeProjectTasks = [];
       }
-    } catch(e) {
-      state.activeProjectTasks = [];
     }
     renderProjectGanttTimeline(project, state.activeProjectTasks);
 
     renderProjectComments(project.activities || []);
 
     // Role-based visibility for Action Buttons (Edit Project, Delete Project, Quick Add BOM, Add Task)
+    const isViewer = isUserViewer();
     const isAdmin = isUserAdmin();
     const isStudent = isUserStudent();
     const isPublic = isUserPublic();
     const addTaskBtn = document.getElementById('btn-add-project-task');
 
-    if (isPublic) {
+    // Hide internal blocker / immediate action box for viewers
+    const actionBox = document.querySelector('.detail-action-box');
+    if (actionBox) actionBox.style.display = (isViewer || isPublic) ? 'none' : 'flex';
+
+    // Hide comment submission form for viewers
+    const addCommentSection = document.querySelector('.add-comment-section') || DOM.addCommentForm;
+    if (addCommentSection) addCommentSection.style.display = (isViewer || isPublic) ? 'none' : 'block';
+
+    if (isViewer || isPublic) {
       if (DOM.btnEditCurrentProject) DOM.btnEditCurrentProject.style.display = 'none';
       if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'none';
       if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'none';
+      if (DOM.btnQuickEditStart) DOM.btnQuickEditStart.style.display = 'none';
+      if (DOM.btnQuickEditDue) DOM.btnQuickEditDue.style.display = 'none';
       if (addTaskBtn) addTaskBtn.style.display = 'none';
     } else if (isAdmin) {
       if (DOM.btnEditCurrentProject) {
@@ -3222,6 +3370,10 @@ function initEditFormLinkProtection() {
 }
 
 function openProjectModalForCreate(defaultStatus = 'in_progress') {
+  if (isUserViewer() || isUserPublic()) {
+    showToast('Access denied: Public Showcase Viewers have read-only permissions.', 'error');
+    return;
+  }
   DOM.modalProjectTitle.textContent = '🚀 Create Innovation Project / Task';
   DOM.projectForm.reset();
   document.getElementById('form-project-id').value = '';
@@ -3245,9 +3397,8 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
 }
 
 function openProjectModalForEdit(project) {
-  if (isUserPublic()) {
-    showToast('Please sign in to edit project links and deliverables.', 'error');
-    setTimeout(() => { window.location.href = '/login'; }, 1000);
+  if (isUserViewer() || isUserPublic()) {
+    showToast('Access denied: Public Showcase Viewers have read-only permissions.', 'error');
     return;
   }
 
@@ -3601,6 +3752,10 @@ async function updateProjectField(id, field, value) {
 // BOM SUBMISSION & APPROVALS
 // ----------------------------------------------------
 function openBomModal(preselectedCode = null) {
+  if (isUserViewer() || isUserPublic()) {
+    showToast('Access denied: Public Showcase Viewers have read-only permissions.', 'error');
+    return;
+  }
   DOM.bomForm.reset();
   if (preselectedCode && DOM.bomProjectCodeSelect) {
     DOM.bomProjectCodeSelect.value = preselectedCode;
