@@ -217,6 +217,46 @@ function isUserPublic() {
   return !state.currentUser || isUserViewer();
 }
 
+function canUserEditProject(project) {
+  if (!project || !state.currentUser) return false;
+  if (isUserAdmin()) return true;
+  if (isUserViewer() || isUserPublic()) return false;
+
+  if (isUserStudent()) {
+    const rawUserName = (state.currentUser.name || '').toLowerCase();
+    const userName = rawUserName.replace(/\s*\(student\)\s*/gi, '').trim();
+    const userEmail = (state.currentUser.email || '').toLowerCase();
+
+    const isLead = project.team_lead && (
+      project.team_lead.toLowerCase().includes(userName) ||
+      userName.includes(project.team_lead.toLowerCase()) ||
+      project.team_lead.toLowerCase().includes(userEmail)
+    );
+
+    const membersStr = typeof project.team_members === 'string'
+      ? project.team_members.toLowerCase()
+      : JSON.stringify(project.team_members || []).toLowerCase();
+
+    const isMember = membersStr.includes(userEmail) || (userName && membersStr.includes(userName));
+
+    const studentRecord = (state.students || []).find(s =>
+      s.user_id === state.currentUser?.id ||
+      (s.email && s.email.toLowerCase() === userEmail) ||
+      (s.name && s.name.toLowerCase().includes(userName))
+    );
+
+    const isAssigned = studentRecord && (
+      studentRecord.assigned_project === project.project_code ||
+      studentRecord.project_title === project.title ||
+      (studentRecord.assigned_project && project.title && project.title.toLowerCase().includes(studentRecord.assigned_project.toLowerCase()))
+    );
+
+    return Boolean(isLead || isMember || isAssigned);
+  }
+
+  return false;
+}
+
 async function checkSessionOrRedirect() {
   const token = getSessionToken();
   if (!token) {
@@ -3010,34 +3050,282 @@ async function openProjectDetail(projectId) {
     // BOM Status
     document.getElementById('detail-bom-status').textContent = project.bom_status || 'Not Required';
 
-    // Media Buttons (GitHub, Technical Report, Video Demo, LinkedIn)
+    // Media Buttons (GitHub, Technical Report, Video Demo, LinkedIn) & Inline Edit Controls
     const mediaBar = document.getElementById('detail-media-bar');
-    const mediaList = [];
-    const gh = (project.github_repo || project.githubLink || project.github_url || '').trim();
-    const doc = (project.doc_url || project.techReportUrl || project.technical_report || project.docUrl || '').trim();
-    const yt = (project.youtube_url || project.videoDemoUrl || project.youtubeUrl || '').trim();
-    const li = (project.linkedin_url || project.linkedinPostUrl || project.linkedin || project.linkedinUrl || '').trim();
+    const btnEditLinks = document.getElementById('btn-edit-project-links');
+    const linksEditForm = document.getElementById('detail-links-edit-form');
+    const btnCancelLinks = document.getElementById('btn-cancel-project-links');
+    const btnSaveLinks = document.getElementById('btn-save-project-links');
 
-    if (gh) {
-      mediaList.push(`<a href="${gh}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github" title="${escapeHTML(gh)}">🐙 GitHub Repo</a>`);
-    } else {
-      mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.5; cursor: default;" title="No GitHub repository link added">🐙 No GitHub Link</span>`);
+    const inputGh = document.getElementById('link-edit-github');
+    const inputDoc = document.getElementById('link-edit-doc');
+    const inputYt = document.getElementById('link-edit-youtube');
+    const inputLi = document.getElementById('link-edit-linkedin');
+
+    const errGh = document.getElementById('error-link-edit-github');
+    const errDoc = document.getElementById('error-link-edit-doc');
+    const errYt = document.getElementById('error-link-edit-youtube');
+    const errLi = document.getElementById('error-link-edit-linkedin');
+
+    function renderMediaButtons(p) {
+      const mediaList = [];
+      const gh = (p.github_repo || p.githubLink || p.github_url || '').trim();
+      const doc = (p.doc_url || p.techReportUrl || p.technical_report || p.docUrl || '').trim();
+      const yt = (p.youtube_url || p.videoDemoUrl || p.youtubeUrl || '').trim();
+      const li = (p.linkedin_url || p.linkedinPostUrl || p.linkedin || p.linkedinUrl || '').trim();
+
+      if (gh) {
+        mediaList.push(`<a href="${gh}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github" title="${escapeHTML(gh)}">🐙 GitHub Repo</a>`);
+      } else {
+        mediaList.push(`<span class="btn-media btn-media-disabled" title="No GitHub repository link added yet">🐙 Not added yet</span>`);
+      }
+
+      if (doc) {
+        mediaList.push(`<a href="${doc}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc" title="${escapeHTML(doc)}">📄 View Technical Report</a>`);
+      } else {
+        mediaList.push(`<span class="btn-media btn-media-disabled" title="No technical report link added yet">📄 Not added yet</span>`);
+      }
+
+      if (yt) {
+        mediaList.push(`<a href="${yt}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube" title="${escapeHTML(yt)}">🎥 Video Demo</a>`);
+      } else {
+        mediaList.push(`<span class="btn-media btn-media-disabled" title="No video demo link added yet">🎥 Not added yet</span>`);
+      }
+
+      if (li) {
+        mediaList.push(`<a href="${li}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin" title="${escapeHTML(li)}">💼 LinkedIn Post</a>`);
+      } else {
+        mediaList.push(`<span class="btn-media btn-media-disabled" title="No LinkedIn post link added yet">💼 Not added yet</span>`);
+      }
+
+      if (mediaBar) mediaBar.innerHTML = mediaList.join('');
     }
 
-    if (doc) {
-      mediaList.push(`<a href="${doc}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc" title="${escapeHTML(doc)}">📄 View Technical Report</a>`);
-    } else {
-      mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.5; cursor: default;" title="No technical report link added yet">📄 No report uploaded yet</span>`);
+    renderMediaButtons(project);
+
+    // Permission check for Edit Links button
+    const canEditLinks = canUserEditProject(project);
+    if (btnEditLinks) {
+      btnEditLinks.style.display = canEditLinks ? 'inline-flex' : 'none';
     }
 
-    if (yt) {
-      mediaList.push(`<a href="${yt}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube" title="${escapeHTML(yt)}">🎥 Video Demo</a>`);
-    }
+    // Always reset to read-only view on modal open
+    if (linksEditForm) linksEditForm.style.display = 'none';
+    if (mediaBar) mediaBar.style.display = 'flex';
 
-    if (li) {
-      mediaList.push(`<a href="${li}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin" title="${escapeHTML(li)}">💼 LinkedIn Post</a>`);
+    if (canEditLinks && btnEditLinks && linksEditForm) {
+      let initialGh = (project.github_repo || project.githubLink || project.github_url || '').trim();
+      let initialDoc = (project.doc_url || project.techReportUrl || project.technical_report || project.docUrl || '').trim();
+      let initialYt = (project.youtube_url || project.videoDemoUrl || project.youtubeUrl || '').trim();
+      let initialLi = (project.linkedin_url || project.linkedinPostUrl || project.linkedin || project.linkedinUrl || '').trim();
+
+      function resetFormErrors() {
+        [errGh, errDoc, errYt, errLi].forEach(errEl => {
+          if (errEl) {
+            errEl.textContent = '';
+            errEl.style.display = 'none';
+          }
+        });
+        [inputGh, inputDoc, inputYt, inputLi].forEach(inp => {
+          if (inp) inp.classList.remove('input-invalid');
+        });
+      }
+
+      function checkDirty() {
+        const curGh = inputGh ? inputGh.value.trim() : '';
+        const curDoc = inputDoc ? inputDoc.value.trim() : '';
+        const curYt = inputYt ? inputYt.value.trim() : '';
+        const curLi = inputLi ? inputLi.value.trim() : '';
+
+        const isDirty = (curGh !== initialGh) || (curDoc !== initialDoc) || (curYt !== initialYt) || (curLi !== initialLi);
+        if (btnSaveLinks) {
+          btnSaveLinks.disabled = !isDirty;
+        }
+        return isDirty;
+      }
+
+      btnEditLinks.onclick = () => {
+        initialGh = (project.github_repo || project.githubLink || project.github_url || '').trim();
+        initialDoc = (project.doc_url || project.techReportUrl || project.technical_report || project.docUrl || '').trim();
+        initialYt = (project.youtube_url || project.videoDemoUrl || project.youtubeUrl || '').trim();
+        initialLi = (project.linkedin_url || project.linkedinPostUrl || project.linkedin || project.linkedinUrl || '').trim();
+
+        if (inputGh) inputGh.value = initialGh;
+        if (inputDoc) inputDoc.value = initialDoc;
+        if (inputYt) inputYt.value = initialYt;
+        if (inputLi) inputLi.value = initialLi;
+
+        resetFormErrors();
+        checkDirty();
+
+        mediaBar.style.display = 'none';
+        btnEditLinks.style.display = 'none';
+        linksEditForm.style.display = 'block';
+        if (inputGh) inputGh.focus();
+      };
+
+      if (btnCancelLinks) {
+        btnCancelLinks.onclick = () => {
+          resetFormErrors();
+          linksEditForm.style.display = 'none';
+          mediaBar.style.display = 'flex';
+          btnEditLinks.style.display = 'inline-flex';
+        };
+      }
+
+      [inputGh, inputDoc, inputYt, inputLi].forEach(inp => {
+        if (inp) {
+          inp.oninput = () => {
+            checkDirty();
+            inp.classList.remove('input-invalid');
+            const errEl = document.getElementById(`error-${inp.id}`);
+            if (errEl) {
+              errEl.textContent = '';
+              errEl.style.display = 'none';
+            }
+          };
+          inp.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              if (checkDirty()) {
+                linksEditForm.dispatchEvent(new Event('submit'));
+              }
+            }
+          };
+        }
+      });
+
+      linksEditForm.onsubmit = async (e) => {
+        e.preventDefault();
+        resetFormErrors();
+
+        const valGh = inputGh ? inputGh.value.trim() : '';
+        const valDoc = inputDoc ? inputDoc.value.trim() : '';
+        const valYt = inputYt ? inputYt.value.trim() : '';
+        const valLi = inputLi ? inputLi.value.trim() : '';
+
+        let hasError = false;
+
+        // Validation 1: GitHub Repo -> must contain "github.com" (if filled)
+        if (valGh && !valGh.toLowerCase().includes('github.com')) {
+          if (errGh) {
+            errGh.textContent = 'Must contain "github.com"';
+            errGh.style.display = 'block';
+          }
+          if (inputGh) inputGh.classList.add('input-invalid');
+          hasError = true;
+        }
+
+        // Validation 2: Technical Report -> must contain "drive.google.com" or "docs.google.com" (if filled)
+        if (valDoc && !valDoc.toLowerCase().includes('drive.google.com') && !valDoc.toLowerCase().includes('docs.google.com')) {
+          if (errDoc) {
+            errDoc.textContent = 'Must contain "drive.google.com" or "docs.google.com"';
+            errDoc.style.display = 'block';
+          }
+          if (inputDoc) inputDoc.classList.add('input-invalid');
+          hasError = true;
+        }
+
+        // Validation 3: Video Demo -> valid URL (if filled)
+        if (valYt && !/^https?:\/\/.+/i.test(valYt)) {
+          if (errYt) {
+            errYt.textContent = 'Must be a valid URL (starting with http:// or https://)';
+            errYt.style.display = 'block';
+          }
+          if (inputYt) inputYt.classList.add('input-invalid');
+          hasError = true;
+        }
+
+        // Validation 4: LinkedIn Post -> must contain "linkedin.com" (if filled)
+        if (valLi && !valLi.toLowerCase().includes('linkedin.com')) {
+          if (errLi) {
+            errLi.textContent = 'Must contain "linkedin.com"';
+            errLi.style.display = 'block';
+          }
+          if (inputLi) inputLi.classList.add('input-invalid');
+          hasError = true;
+        }
+
+        if (hasError) {
+          showToast('Please correct the highlighted link errors.', 'warning');
+          return;
+        }
+
+        if (btnSaveLinks) {
+          btnSaveLinks.disabled = true;
+          btnSaveLinks.textContent = 'Saving...';
+        }
+
+        try {
+          const payload = {
+            github_repo: valGh,
+            githubLink: valGh,
+            doc_url: valDoc,
+            techReportUrl: valDoc,
+            youtube_url: valYt,
+            videoDemoUrl: valYt,
+            linkedin_url: valLi,
+            linkedinPostUrl: valLi
+          };
+
+          const res = await authFetch(`/api/projects/${project.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || 'Failed to save project links.');
+          }
+
+          // Update local project in state
+          project.github_repo = valGh;
+          project.githubLink = valGh;
+          project.doc_url = valDoc;
+          project.techReportUrl = valDoc;
+          project.youtube_url = valYt;
+          project.videoDemoUrl = valYt;
+          project.linkedin_url = valLi;
+          project.linkedinPostUrl = valLi;
+
+          const stateProj = (state.projects || []).find(p => p.id === project.id);
+          if (stateProj) {
+            Object.assign(stateProj, {
+              github_repo: valGh,
+              githubLink: valGh,
+              doc_url: valDoc,
+              techReportUrl: valDoc,
+              youtube_url: valYt,
+              videoDemoUrl: valYt,
+              linkedin_url: valLi,
+              linkedinPostUrl: valLi
+            });
+          }
+
+          showToast('Project links updated successfully.', 'success');
+
+          // Switch back to read-only button view immediately with updated links
+          renderMediaButtons(project);
+          linksEditForm.style.display = 'none';
+          mediaBar.style.display = 'flex';
+          btnEditLinks.style.display = 'inline-flex';
+
+          // Re-render open views so cards update
+          if (typeof renderView === 'function') {
+            renderView();
+          }
+        } catch (err) {
+          console.error('[LINKS-EDIT] Save failed:', err);
+          showToast(err.message || 'Failed to save links.', 'error');
+        } finally {
+          if (btnSaveLinks) {
+            btnSaveLinks.disabled = false;
+            btnSaveLinks.textContent = 'Save Links';
+          }
+        }
+      };
     }
-    mediaBar.innerHTML = mediaList.join('');
 
     // Deliverables
     const deliverablesWrap = document.getElementById('detail-deliverables-wrapper');

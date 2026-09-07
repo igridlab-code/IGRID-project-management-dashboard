@@ -773,6 +773,18 @@ function seedDefaultAccounts() {
       }
     });
   });
+
+  // Ensure Priya Sundaram has active student record linked to IGRID-AI-08
+  db.get('SELECT id FROM students WHERE LOWER(email) = ? OR roll_no = ?', ['priya.s@igrid.lab', '21AI015'], (err, row) => {
+    if (row) {
+      db.run('UPDATE students SET assigned_project = ?, project_title = ?, email = ? WHERE id = ?', ['IGRID-AI-08', 'Autonomous AI System v2 (2064)', 'priya.s@igrid.lab', row.id]);
+    } else {
+      db.run(`
+        INSERT INTO students (name, email, roll_no, department, year, role, assigned_project, project_title)
+        VALUES ('Priya Sundaram', 'priya.s@igrid.lab', '21AI015', 'AI & DS', '3', 'AI/Vision Specialist', 'IGRID-AI-08', 'Autonomous AI System v2 (2064)')
+      `);
+    }
+  });
 }
 
 // Call seedDefaultAccounts on DB init

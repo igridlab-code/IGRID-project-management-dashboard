@@ -931,10 +931,9 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
           (student.assigned_project && project.title && project.title.toLowerCase().includes(student.assigned_project.toLowerCase()))
         );
         
-        // If no explicit link found, but student is authenticated as a student innovator, allow them to update the links on active projects
+        // If no ownership or assignment found, reject with 403
         if (!isLead && !isMember && !isAssigned) {
-          // Check if student has no other assigned projects, grant permission
-          console.warn(`[STUDENT-SAVE] Student ${userEmail} (${userName}) updating project #${id} (${project.project_code})`);
+          return res.status(403).json({ error: 'Access denied: You can only edit links for your own assigned project.' });
         }
 
         // Student is permitted to update media links, documentation, and deliverables
