@@ -217,6 +217,63 @@ function isUserPublic() {
   return !state.currentUser || isUserViewer();
 }
 
+function canUserEditProject(user, project) {
+  if (!user || !project) return false;
+  const role = (user.role || '').toLowerCase();
+  const userEmail = (user.email || '').toLowerCase();
+  if (role === 'admin' || userEmail === 'admin@igridlab.edu.in') return true;
+  if (role === 'viewer' || role === 'public') return false;
+
+  const rawName = (user.name || '').toLowerCase();
+  const cleanName = rawName.replace(/\s*\([^)]*\)/g, '').trim();
+  const userFirstName = cleanName.split(' ')[0].replace(/[^a-z0-9]/g, '');
+  const userEmailPrefix = userEmail.split('@')[0].replace(/[^a-z0-9]/g, '');
+
+  const teamLead = (project.team_lead || '').toLowerCase();
+  const isLead = teamLead && (
+    teamLead.includes(cleanName) ||
+    cleanName.includes(teamLead) ||
+    teamLead.includes(userEmail) ||
+    (userFirstName && userFirstName.length >= 3 && teamLead.includes(userFirstName)) ||
+    (userEmailPrefix && userEmailPrefix.length >= 3 && teamLead.includes(userEmailPrefix))
+  );
+
+  let isMember = false;
+  if (project.team_members) {
+    if (Array.isArray(project.team_members)) {
+      isMember = project.team_members.some(m => {
+        const str = (typeof m === 'object' && m ? JSON.stringify(m) : String(m)).toLowerCase();
+        return str.includes(cleanName) ||
+               str.includes(userEmail) ||
+               (userFirstName && userFirstName.length >= 3 && str.includes(userFirstName)) ||
+               (userEmailPrefix && userEmailPrefix.length >= 3 && str.includes(userEmailPrefix));
+      });
+    } else if (typeof project.team_members === 'string') {
+      const memStr = project.team_members.toLowerCase();
+      isMember = memStr.includes(cleanName) ||
+                 memStr.includes(userEmail) ||
+                 (userFirstName && userFirstName.length >= 3 && memStr.includes(userFirstName)) ||
+                 (userEmailPrefix && userEmailPrefix.length >= 3 && memStr.includes(userEmailPrefix));
+    }
+  }
+
+  const studentRecord = state.students && state.students.find(s =>
+    s.user_id === user.id ||
+    (s.email && s.email.toLowerCase() === userEmail) ||
+    (userFirstName && userFirstName.length >= 3 && s.name && s.name.toLowerCase().includes(userFirstName))
+  );
+  const isAssigned = studentRecord && (
+    studentRecord.assigned_project === project.project_code ||
+    studentRecord.project_title === project.title ||
+    (studentRecord.assigned_project && project.project_code && studentRecord.assigned_project.toLowerCase() === project.project_code.toLowerCase())
+  );
+
+  const teamNameMatches = user.team_name && project.team_name && user.team_name.toLowerCase() === project.team_name.toLowerCase();
+  const projectCodeMatches = user.project_code && project.project_code && user.project_code.toLowerCase() === project.project_code.toLowerCase();
+
+  return !!(isLead || isMember || isAssigned || teamNameMatches || projectCodeMatches);
+}
+
 async function checkSessionOrRedirect() {
   const token = getSessionToken();
   if (!token) {
@@ -1052,7 +1109,7 @@ function initEventListeners() {
   DOM.closeDetailModal.addEventListener('click', () => closeModal(DOM.detailModal));
   DOM.btnCloseDetail.addEventListener('click', () => closeModal(DOM.detailModal));
   DOM.btnEditCurrentProject.addEventListener('click', () => {
-    const project = state.projects.find(p => p.id === state.activeProjectId);
+    const project = state.activeProject || state.projects.find(p => String(p.id) === String(state.activeProjectId));
     if (project) {
       closeModal(DOM.detailModal);
       openProjectModalForEdit(project);
@@ -2933,6 +2990,7 @@ async function openProjectDetail(projectId) {
       return;
     }
     const project = await res.json();
+    state.activeProject = project;
 
     document.getElementById('detail-code').textContent = project.project_code || 'IGRID-PROJ';
     document.getElementById('detail-domain').textContent = project.domain || 'General';
@@ -3131,16 +3189,8 @@ async function openProjectDetail(projectId) {
       if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'inline-flex';
       if (addTaskBtn) addTaskBtn.style.display = 'inline-flex';
     } else if (isStudent) {
-      const userName = (state.currentUser && state.currentUser.name || '').toLowerCase();
-      const userEmail = (state.currentUser && state.currentUser.email || '').toLowerCase();
-      const isLead = project.team_lead && userName && project.team_lead.toLowerCase().includes(userName);
-      const isMember = project.team_members && (
-        (Array.isArray(project.team_members) && project.team_members.some(m => JSON.stringify(m).toLowerCase().includes(userEmail) || JSON.stringify(m).toLowerCase().includes(userName))) ||
-        (typeof project.team_members === 'string' && (project.team_members.toLowerCase().includes(userEmail) || project.team_members.toLowerCase().includes(userName)))
-      );
-      const isOwner = isLead || isMember;
-
-      if (isOwner) {
+      const canEdit = canUserEditProject(state.currentUser, project);
+      if (canEdit) {
         if (DOM.btnEditCurrentProject) {
           DOM.btnEditCurrentProject.style.display = 'inline-flex';
           DOM.btnEditCurrentProject.innerHTML = '✏️ Edit Links & Deliverables';
@@ -3477,49 +3527,9 @@ function openProjectModalForEdit(project) {
   const isAdmin = isUserAdmin();
   const isStudent = isUserStudent();
 
-  if (isStudent) {
-    const userName = (state.currentUser && state.currentUser.name || '').toLowerCase();
-    const userEmail = (state.currentUser && state.currentUser.email || '').toLowerCase();
-    const userFirstName = userName.split(' ')[0].replace(/[^a-z0-9]/g, '');
-    const userEmailPrefix = userEmail.split('@')[0].split('.')[0].replace(/[^a-z0-9]/g, '');
-
-    const isLead = project.team_lead && (
-      project.team_lead.toLowerCase().includes(userEmail) ||
-      project.team_lead.toLowerCase().includes(userName) ||
-      (userFirstName && userFirstName.length >= 3 && project.team_lead.toLowerCase().includes(userFirstName)) ||
-      (userEmailPrefix && userEmailPrefix.length >= 3 && project.team_lead.toLowerCase().includes(userEmailPrefix))
-    );
-
-    const isMember = project.team_members && (
-      (Array.isArray(project.team_members) && project.team_members.some(m => {
-        const str = JSON.stringify(m).toLowerCase();
-        return str.includes(userEmail) || str.includes(userName) ||
-               (userFirstName && userFirstName.length >= 3 && str.includes(userFirstName)) ||
-               (userEmailPrefix && userEmailPrefix.length >= 3 && str.includes(userEmailPrefix));
-      })) ||
-      (typeof project.team_members === 'string' && (
-        project.team_members.toLowerCase().includes(userEmail) ||
-        project.team_members.toLowerCase().includes(userName) ||
-        (userFirstName && userFirstName.length >= 3 && project.team_members.toLowerCase().includes(userFirstName)) ||
-        (userEmailPrefix && userEmailPrefix.length >= 3 && project.team_members.toLowerCase().includes(userEmailPrefix))
-      ))
-    );
-
-    const studentRecord = state.students && state.students.find(s =>
-      s.user_id === state.currentUser?.id ||
-      (s.email && s.email.toLowerCase() === userEmail) ||
-      (userFirstName && userFirstName.length >= 3 && s.name && s.name.toLowerCase().includes(userFirstName))
-    );
-    const isAssigned = studentRecord && (
-      studentRecord.assigned_project === project.project_code ||
-      studentRecord.project_title === project.title ||
-      (studentRecord.assigned_project && project.project_code && studentRecord.assigned_project.toLowerCase() === project.project_code.toLowerCase())
-    );
-
-    if (!isLead && !isMember && !isAssigned) {
-      showToast('Access denied: You can only edit your own assigned project links and deliverables.', 'error');
-      return;
-    }
+  if (isStudent && !canUserEditProject(state.currentUser, project)) {
+    showToast('Access denied: You can only edit your own assigned project links and deliverables.', 'error');
+    return;
   }
 
   if (DOM.modalProjectTitle) {
@@ -3620,11 +3630,17 @@ function openProjectModalForEdit(project) {
   }
 
   // Student editable fields (Media, links, deliverables)
-  document.getElementById('form-github').value = project.github_repo || '';
-  document.getElementById('form-youtube').value = project.youtube_url || '';
-  document.getElementById('form-doc-url').value = project.doc_url || '';
-  document.getElementById('form-linkedin').value = project.linkedin_url || '';
-  document.getElementById('form-image-url').value = project.image_url || '';
+  const gLink = project.githubLink || project.github_repo || '';
+  const yLink = project.videoDemoUrl || project.youtube_url || '';
+  const dLink = project.techReportUrl || project.doc_url || '';
+  const lLink = project.linkedinPostUrl || project.linkedin_url || '';
+  const iLink = project.imageUrl || project.image_url || '';
+
+  document.getElementById('form-github').value = gLink;
+  document.getElementById('form-youtube').value = yLink;
+  document.getElementById('form-doc-url').value = dLink;
+  document.getElementById('form-linkedin').value = lLink;
+  document.getElementById('form-image-url').value = iLink;
   
   const teamNameEl = document.getElementById('form-team-name');
   if (teamNameEl) {
@@ -3641,11 +3657,11 @@ function openProjectModalForEdit(project) {
   document.getElementById('form-team-lead-photo').value = project.team_lead_photo || '';
   document.getElementById('form-deliverables').value = project.deliverables || '';
 
-  updateLinkPreviewIcon('preview-image-url', project.image_url);
-  updateLinkPreviewIcon('preview-github', project.github_repo);
-  updateLinkPreviewIcon('preview-youtube', project.youtube_url);
-  updateLinkPreviewIcon('preview-doc-url', project.doc_url);
-  updateLinkPreviewIcon('preview-linkedin', project.linkedin_url);
+  updateLinkPreviewIcon('preview-image-url', iLink);
+  updateLinkPreviewIcon('preview-github', gLink);
+  updateLinkPreviewIcon('preview-youtube', yLink);
+  updateLinkPreviewIcon('preview-doc-url', dLink);
+  updateLinkPreviewIcon('preview-linkedin', lLink);
 
   openModal(DOM.projectModal);
 }

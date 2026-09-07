@@ -903,11 +903,70 @@ app.post('/api/projects', requireAuth, (req, res) => {
   );
 });
 
+function canUserEditProject(user, project, db, callback) {
+  if (!user || !project) return callback(null, false);
+  const role = (user.role || '').toLowerCase();
+  const userEmail = (user.email || '').toLowerCase();
+  if (role === 'admin' || userEmail === ADMIN_EMAIL) return callback(null, true);
+  if (role === 'viewer' || role === 'public') return callback(null, false);
+
+  const rawName = (user.name || '').toLowerCase();
+  const cleanName = rawName.replace(/\s*\([^)]*\)/g, '').trim();
+  const userFirstName = cleanName.split(' ')[0].replace(/[^a-z0-9]/g, '');
+  const userEmailPrefix = userEmail.split('@')[0].replace(/[^a-z0-9]/g, '');
+
+  const teamLead = (project.team_lead || '').toLowerCase();
+  const isLead = teamLead && (
+    teamLead.includes(cleanName) ||
+    cleanName.includes(teamLead) ||
+    teamLead.includes(userEmail) ||
+    (userFirstName && userFirstName.length >= 3 && teamLead.includes(userFirstName)) ||
+    (userEmailPrefix && userEmailPrefix.length >= 3 && teamLead.includes(userEmailPrefix))
+  );
+
+  let isMember = false;
+  if (project.team_members) {
+    if (Array.isArray(project.team_members)) {
+      isMember = project.team_members.some(m => {
+        const str = (typeof m === 'object' && m ? JSON.stringify(m) : String(m)).toLowerCase();
+        return str.includes(cleanName) ||
+               str.includes(userEmail) ||
+               (userFirstName && userFirstName.length >= 3 && str.includes(userFirstName)) ||
+               (userEmailPrefix && userEmailPrefix.length >= 3 && str.includes(userEmailPrefix));
+      });
+    } else if (typeof project.team_members === 'string') {
+      const memStr = project.team_members.toLowerCase();
+      isMember = memStr.includes(cleanName) ||
+                 memStr.includes(userEmail) ||
+                 (userFirstName && userFirstName.length >= 3 && memStr.includes(userFirstName)) ||
+                 (userEmailPrefix && userEmailPrefix.length >= 3 && memStr.includes(userEmailPrefix));
+    }
+  }
+
+  const teamNameMatches = user.team_name && project.team_name && user.team_name.toLowerCase() === project.team_name.toLowerCase();
+  const projectCodeMatches = user.project_code && project.project_code && user.project_code.toLowerCase() === project.project_code.toLowerCase();
+
+  if (isLead || isMember || teamNameMatches || projectCodeMatches) {
+    return callback(null, true);
+  }
+
+  // Check students table in SQLite
+  db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR (name IS NOT NULL AND LOWER(name) LIKE ?)', [user.id, userEmail, `%${userFirstName}%`], (err, student) => {
+    if (err) return callback(err, false);
+    const isAssigned = student && (
+      student.assigned_project === project.project_code ||
+      student.project_title === project.title ||
+      (student.assigned_project && project.project_code && student.assigned_project.toLowerCase() === project.project_code.toLowerCase())
+    );
+    return callback(null, !!isAssigned);
+  });
+}
+
 // UPDATE PROJECT (ROLE-BASED: ADMIN HAS FULL ACCESS; STUDENT CAN ONLY EDIT OWN MEDIA & LINKS)
 app.put('/api/projects/:id', requireAuth, (req, res) => {
   const { id } = req.params;
   const user = req.user;
-  const isAdmin = user && user.role === 'admin';
+  const isAdmin = user && (user.role === 'admin' || (user.email && user.email.toLowerCase() === ADMIN_EMAIL));
 
   if (user && (user.role === 'viewer' || user.role === 'public')) {
     return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
@@ -917,38 +976,14 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    // If Student: Verify row-level ownership
-    if (!isAdmin) {
-      const userEmail = (user.email || '').toLowerCase();
-      const userName = (user.name || '').toLowerCase();
-      const userFirstName = userName.split(' ')[0].replace(/[^a-z0-9]/g, '');
-      const userEmailPrefix = userEmail.split('@')[0].split('.')[0].replace(/[^a-z0-9]/g, '');
+    // Verify ownership permissions
+    canUserEditProject(user, project, db, (errAuth, canEdit) => {
+      if (errAuth) return res.status(500).json({ error: errAuth.message });
+      if (!canEdit) {
+        return res.status(403).json({ error: 'Access denied: Students can only edit their own project links and deliverables.' });
+      }
 
-      const isLead = project.team_lead && (
-        project.team_lead.toLowerCase().includes(userEmail) ||
-        project.team_lead.toLowerCase().includes(userName) ||
-        (userFirstName && userFirstName.length >= 3 && project.team_lead.toLowerCase().includes(userFirstName)) ||
-        (userEmailPrefix && userEmailPrefix.length >= 3 && project.team_lead.toLowerCase().includes(userEmailPrefix))
-      );
-
-      const isMember = project.team_members && (
-        project.team_members.toLowerCase().includes(userEmail) ||
-        project.team_members.toLowerCase().includes(userName) ||
-        (userFirstName && userFirstName.length >= 3 && project.team_members.toLowerCase().includes(userFirstName)) ||
-        (userEmailPrefix && userEmailPrefix.length >= 3 && project.team_members.toLowerCase().includes(userEmailPrefix))
-      );
-      
-      // Also check student table
-      db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR (name IS NOT NULL AND LOWER(name) LIKE ?)', [user.id, userEmail, `%${userFirstName}%`], (err2, student) => {
-        const isAssigned = student && (
-          student.assigned_project === project.project_code ||
-          student.project_title === project.title ||
-          (student.assigned_project && project.project_code && student.assigned_project.toLowerCase() === project.project_code.toLowerCase())
-        );
-        
-        if (!isLead && !isMember && !isAssigned) {
-          return res.status(403).json({ error: 'Access denied: Students can only edit their own project links and deliverables.' });
-        }
+      if (!isAdmin) {
 
         // Student is permitted to update ONLY media and deliverable links
         const github_repo = req.body.githubLink !== undefined ? req.body.githubLink : req.body.github_repo;
@@ -1022,9 +1057,8 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
             });
           }
         );
-      });
-      return;
-    }
+        return;
+      }
 
     // Admin has full CRUD access to all fields
     const {
@@ -1104,6 +1138,13 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
           return res.status(500).json({ error: err4.message });
         }
         db.get('SELECT * FROM projects WHERE id = ?', [id], (errFetch, updatedProj) => {
+          const formattedProj = {
+            ...updatedProj,
+            githubLink: updatedProj ? updatedProj.github_repo : null,
+            techReportUrl: updatedProj ? updatedProj.doc_url : null,
+            videoDemoUrl: updatedProj ? updatedProj.youtube_url : null,
+            linkedinPostUrl: updatedProj ? updatedProj.linkedin_url : null
+          };
           console.log(`[BACKEND-SAVE] ✅ Project #${id} ("${updatedProj ? updatedProj.title : id}") details successfully saved to SQLite database:`, {
             id: updatedProj ? updatedProj.id : id,
             title: updatedProj ? updatedProj.title : null,
@@ -1113,12 +1154,13 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
           });
           res.json({
             message: 'Project details saved successfully.',
-            project: updatedProj,
+            project: formattedProj,
             changes: this.changes
           });
         });
       }
     );
+    });
   });
 });
 
