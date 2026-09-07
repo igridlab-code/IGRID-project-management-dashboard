@@ -46,6 +46,7 @@ function initDb() {
         team_members TEXT,
         deliverables TEXT,
         is_active INTEGER DEFAULT 1,
+        is_visible INTEGER DEFAULT 1,
         comments_count INTEGER DEFAULT 0,
         attachments_count INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -60,7 +61,8 @@ function initDb() {
       { name: 'linkedin_url', type: 'TEXT' },
       { name: 'doc_url', type: 'TEXT' },
       { name: 'team_lead_photo', type: 'TEXT' },
-      { name: 'is_active', type: 'INTEGER DEFAULT 1' }
+      { name: 'is_active', type: 'INTEGER DEFAULT 1' },
+      { name: 'is_visible', type: 'INTEGER DEFAULT 1' }
     ];
 
     newColumns.forEach(col => {
@@ -69,8 +71,9 @@ function initDb() {
       });
     });
 
-    // Backfill any null is_active to 1 (Active)
+    // Backfill any null is_active or is_visible to 1 (Visible)
     db.run(`UPDATE projects SET is_active = 1 WHERE is_active IS NULL`);
+    db.run(`UPDATE projects SET is_visible = COALESCE(is_active, 1) WHERE is_visible IS NULL`);
 
     // Students Directory
     db.run(`

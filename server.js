@@ -735,12 +735,20 @@ app.get('/api/projects', optionalAuth, (req, res) => {
     sql += ' ORDER BY updated_at DESC';
   }
 
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === ADMIN_EMAIL;
+  const isViewer = userRole === 'viewer';
+
+  // BACKEND VISIBILITY FILTER: Exclude hidden projects for students, public viewers, and guests
+  if (!isAdmin) {
+    sql = sql.replace('WHERE 1=1', 'WHERE 1=1 AND (is_visible = 1 OR is_visible IS NULL) AND (is_active = 1 OR is_active IS NULL)');
+  }
+
   db.all(sql, params, (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
-    const isViewer = userRole === 'viewer';
 
     const projects = rows.map(r => {
       let members = [];
@@ -749,7 +757,15 @@ app.get('/api/projects', optionalAuth, (req, res) => {
       } catch(e) {
         members = [];
       }
-      const item = { ...r, team_members: members };
+      const visState = (r.is_visible === undefined || r.is_visible === null) ? (r.is_active === undefined ? 1 : Number(r.is_active)) : Number(r.is_visible);
+      const item = {
+        ...r,
+        team_members: members,
+        is_visible: visState,
+        isVisible: visState === 1,
+        is_active: visState,
+        isActive: visState === 1
+      };
       if (isViewer) {
         item.immediate_action = '';
       }
@@ -759,14 +775,22 @@ app.get('/api/projects', optionalAuth, (req, res) => {
   });
 });
 
-// PUBLIC SHOWCASE DIRECT ALIAS
+// PUBLIC SHOWCASE DIRECT ALIAS (ONLY VISIBLE PROJECTS)
 app.get('/api/public/projects', (req, res) => {
-  db.all('SELECT * FROM projects ORDER BY updated_at DESC', [], (err, rows) => {
+  db.all('SELECT * FROM projects WHERE (is_visible = 1 OR is_visible IS NULL) AND (is_active = 1 OR is_active IS NULL) ORDER BY updated_at DESC', [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     const projects = rows.map(r => {
       let members = [];
       try { members = r.team_members ? JSON.parse(r.team_members) : []; } catch(e) { members = []; }
-      return { ...r, team_members: members, immediate_action: '' };
+      return {
+        ...r,
+        team_members: members,
+        immediate_action: '',
+        is_visible: 1,
+        isVisible: true,
+        is_active: 1,
+        isActive: true
+      };
     });
     res.json(projects);
   });
@@ -776,11 +800,19 @@ app.get('/api/public/projects', (req, res) => {
 app.get('/api/projects/:id', optionalAuth, (req, res) => {
   const { id } = req.params;
   const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === ADMIN_EMAIL;
   const isViewer = userRole === 'viewer';
 
   db.get('SELECT * FROM projects WHERE id = ?', [id], (err, project) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    // BACKEND VISIBILITY CHECK FOR DIRECT LINK ACCESS
+    const isHidden = (project.is_visible === 0 || project.is_visible === false || project.is_active === 0 || project.is_active === false);
+    if (!isAdmin && isHidden) {
+      return res.status(404).json({ error: 'This project is not currently available.' });
+    }
 
     let members = [];
     try {
@@ -789,6 +821,12 @@ app.get('/api/projects/:id', optionalAuth, (req, res) => {
       members = [];
     }
     project.team_members = members;
+    const visState = (project.is_visible === undefined || project.is_visible === null) ? (project.is_active === undefined ? 1 : Number(project.is_active)) : Number(project.is_visible);
+    project.is_visible = visState;
+    project.isVisible = visState === 1;
+    project.is_active = visState;
+    project.isActive = visState === 1;
+
     if (isViewer) {
       project.immediate_action = '';
     }
@@ -935,7 +973,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
       progress, start_date, due_date, immediate_action, github_repo,
       youtube_url, linkedin_url, doc_url, image_url,
       bom_status, team_name, team_lead, team_lead_photo, team_members, deliverables,
-      is_active, isActive
+      is_active, isActive, is_visible, isVisible
     } = req.body;
 
     const membersJson = team_members !== undefined
@@ -947,9 +985,9 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
       : null;
 
     let activeStateNum = null;
-    if (is_active !== undefined || isActive !== undefined) {
-      const activeRaw = is_active !== undefined ? is_active : isActive;
-      activeStateNum = (activeRaw === true || activeRaw === 1 || activeRaw === '1' || activeRaw === 'true') ? 1 : 0;
+    const rawVis = is_visible !== undefined ? is_visible : (isVisible !== undefined ? isVisible : (is_active !== undefined ? is_active : isActive));
+    if (rawVis !== undefined) {
+      activeStateNum = (rawVis === true || rawVis === 1 || rawVis === '1' || rawVis === 'true') ? 1 : 0;
     }
 
     const sql = `
@@ -977,6 +1015,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         team_members = COALESCE(?, team_members),
         deliverables = COALESCE(?, deliverables),
         is_active = COALESCE(?, is_active, 1),
+        is_visible = COALESCE(?, is_visible, 1),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
@@ -990,6 +1029,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         start_date, due_date, immediate_action, github_repo,
         youtube_url, linkedin_url, doc_url, image_url,
         bom_status, team_name, team_lead, team_lead_photo, membersJson, deliverables,
+        activeStateNum,
         activeStateNum,
         id
       ],
@@ -1063,7 +1103,7 @@ app.put('/api/projects/:id/status', requireAuth, requireAdmin, handleProjectStag
 app.patch('/api/projects/:id/status', requireAuth, requireAdmin, handleProjectStageUpdate);
 app.patch('/api/projects/:id/stage', requireAuth, requireAdmin, handleProjectStageUpdate);
 
-// ADMIN ONLY: TOGGLE PROJECT ACTIVE / INACTIVE (ON/OFF) STATUS
+// ADMIN ONLY: TOGGLE PROJECT VISIBILITY (ON/OFF) STATUS
 function handleProjectActiveToggle(req, res) {
   const { id } = req.params;
   const user = req.user;
@@ -1080,7 +1120,7 @@ function handleProjectActiveToggle(req, res) {
 
       let newActiveState;
       const bodyVal = req.body
-        ? (req.body.is_active !== undefined ? req.body.is_active : (req.body.isActive !== undefined ? req.body.isActive : req.body.active))
+        ? (req.body.is_visible !== undefined ? req.body.is_visible : (req.body.isVisible !== undefined ? req.body.isVisible : (req.body.is_active !== undefined ? req.body.is_active : (req.body.isActive !== undefined ? req.body.isActive : req.body.active))))
         : undefined;
 
       if (bodyVal !== undefined) {
@@ -1088,21 +1128,21 @@ function handleProjectActiveToggle(req, res) {
           newActiveState = bodyVal ? 1 : 0;
         } else if (typeof bodyVal === 'string') {
           const str = bodyVal.trim().toLowerCase();
-          newActiveState = (str === 'true' || str === '1' || str === 'active' || str === 'on') ? 1 : 0;
+          newActiveState = (str === 'true' || str === '1' || str === 'active' || str === 'on' || str === 'visible') ? 1 : 0;
         } else if (typeof bodyVal === 'number') {
           newActiveState = bodyVal === 1 ? 1 : 0;
         } else {
           newActiveState = bodyVal ? 1 : 0;
         }
       } else {
-        const current = (project.is_active === undefined || project.is_active === null) ? 1 : Number(project.is_active);
+        const current = (project.is_visible === undefined || project.is_visible === null) ? (project.is_active === undefined ? 1 : Number(project.is_active)) : Number(project.is_visible);
         newActiveState = current === 1 ? 0 : 1;
       }
 
-      const updateSql = `UPDATE projects SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
-      db.run(updateSql, [newActiveState, id], function(updateErr) {
+      const updateSql = `UPDATE projects SET is_visible = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+      db.run(updateSql, [newActiveState, newActiveState, id], function(updateErr) {
         if (updateErr) {
-          console.error('[Error] Failed to update project is_active:', updateErr);
+          console.error('[Error] Failed to update project visibility/is_active:', updateErr);
           return res.status(500).json({ error: `Failed to update project status: ${updateErr.message}` });
         }
 
@@ -1111,21 +1151,25 @@ function handleProjectActiveToggle(req, res) {
           email: user.email,
           role: 'admin',
           team_name: user.team_name || project.team_name || 'Admin',
-          event_type: 'PROJECT_STATUS_TOGGLE',
-          method: 'Project Status Toggle',
+          event_type: 'PROJECT_VISIBILITY_TOGGLE',
+          method: 'Project Visibility Toggle',
           status: 'SUCCESS',
           ip_address: getClientIp(req),
-          details: `Project "${project.project_code} - ${project.title}" toggled to ${newActiveState === 1 ? 'ACTIVE (ON)' : 'INACTIVE (OFF)'}`
+          details: `Project "${project.project_code} - ${project.title}" visibility toggled to ${newActiveState === 1 ? 'VISIBLE (ON)' : 'HIDDEN (OFF)'}`
         });
 
         db.get('SELECT * FROM projects WHERE id = ?', [id], (fetchErr, updatedProject) => {
-          const finalProj = updatedProject || { ...project, is_active: newActiveState };
+          const finalProj = updatedProject || { ...project, is_visible: newActiveState, is_active: newActiveState };
           res.json({
-            message: `Project ${finalProj.project_code} is now ${newActiveState === 1 ? 'Active (ON)' : 'Inactive (OFF)'}`,
+            message: `Project ${finalProj.project_code} is now ${newActiveState === 1 ? 'Visible to Everyone (ON)' : 'Hidden from Students & Public (OFF)'}`,
+            is_visible: newActiveState,
+            isVisible: newActiveState === 1,
             is_active: newActiveState,
             isActive: newActiveState === 1,
             project: {
               ...finalProj,
+              is_visible: newActiveState,
+              isVisible: newActiveState === 1,
               is_active: newActiveState,
               isActive: newActiveState === 1
             }
@@ -1141,6 +1185,9 @@ function handleProjectActiveToggle(req, res) {
 
 app.patch('/api/projects/:id/toggle-active', requireAuth, requireAdmin, handleProjectActiveToggle);
 app.post('/api/projects/:id/toggle-active', requireAuth, requireAdmin, handleProjectActiveToggle);
+app.patch('/api/projects/:id/visibility', requireAuth, requireAdmin, handleProjectActiveToggle);
+app.put('/api/projects/:id/visibility', requireAuth, requireAdmin, handleProjectActiveToggle);
+app.post('/api/projects/:id/visibility', requireAuth, requireAdmin, handleProjectActiveToggle);
 app.patch('/api/projects/:id/active', requireAuth, requireAdmin, handleProjectActiveToggle);
 app.put('/api/projects/:id/active', requireAuth, requireAdmin, handleProjectActiveToggle);
 
@@ -2132,20 +2179,27 @@ app.listen(PORT, '0.0.0.0', async () => {
   console.log(`====================================================`);
 
   // Auto-connect to permanent Ngrok domain
-  try {
-    const ngrok = require('@ngrok/ngrok');
-    const NGROK_DOMAIN = process.env.NGROK_DOMAIN || 'kabob-suspect-mandate.ngrok-free.dev';
-    const NGROK_AUTHTOKEN = process.env.NGROK_AUTHTOKEN || '3Hr56NkQmK7fScedP090Ry6c8ll_78W6QjADbCB92cWhD8ZpT';
-    
-    console.log(`Connecting to permanent Ngrok public domain: ${NGROK_DOMAIN}...`);
-    const listener = await ngrok.forward({
-      addr: PORT,
-      authtoken: NGROK_AUTHTOKEN,
-      domain: NGROK_DOMAIN
-    });
-    console.log(`🎉 LIVE PUBLIC URL (PERMANENT FIXED DOMAIN): ${listener.url()}`);
-    console.log(`====================================================`);
-  } catch (ngrokErr) {
-    console.warn(`[Ngrok Notice] ${ngrokErr.message || ngrokErr}`);
+  async function connectNgrok(retries = 5) {
+    try {
+      const ngrok = require('@ngrok/ngrok');
+      const NGROK_DOMAIN = process.env.NGROK_DOMAIN || 'kabob-suspect-mandate.ngrok-free.dev';
+      const NGROK_AUTHTOKEN = process.env.NGROK_AUTHTOKEN || '3Hr56NkQmK7fScedP090Ry6c8ll_78W6QjADbCB92cWhD8ZpT';
+      
+      console.log(`Connecting to permanent Ngrok public domain: ${NGROK_DOMAIN}...`);
+      global.ngrokListener = await ngrok.forward({
+        addr: PORT,
+        authtoken: NGROK_AUTHTOKEN,
+        domain: NGROK_DOMAIN
+      });
+      console.log(`🎉 LIVE PUBLIC URL (PERMANENT FIXED DOMAIN): ${global.ngrokListener.url()}`);
+      console.log(`====================================================`);
+    } catch (ngrokErr) {
+      console.warn(`[Ngrok Notice] ${ngrokErr.message || ngrokErr}`);
+      if (retries > 0) {
+        console.log(`Retrying Ngrok connection in 3 seconds (${retries} retries left)...`);
+        setTimeout(() => connectNgrok(retries - 1), 3000);
+      }
+    }
   }
+  connectNgrok();
 });

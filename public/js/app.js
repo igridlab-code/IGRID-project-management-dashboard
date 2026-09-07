@@ -1398,8 +1398,13 @@ function renderExecutiveShowcase() {
     if (p.linkedin_url) mediaLinks.push(`<a href="${p.linkedin_url}" target="_blank" class="btn-media btn-media-linkedin" title="LinkedIn Showcase">💼 LinkedIn</a>`);
     if (p.doc_url) mediaLinks.push(`<a href="${p.doc_url}" target="_blank" class="btn-media btn-media-doc" title="Datasheet & Docs">📄 Docs</a>`);
 
+    const isHidden = (p.is_visible === 0 || p.is_visible === false || p.is_active === 0 || p.is_active === false);
+    const hiddenBadge = (isUserAdmin() && isHidden)
+      ? '<span class="badge badge-hidden" title="Hidden from students and public viewers">👁️‍🗨️ Hidden</span>'
+      : '';
+
     html += `
-      <div class="exec-card">
+      <div class="exec-card ${isHidden ? 'project-card-hidden' : ''}">
         <!-- Hero Photo with Badges -->
         <div class="exec-card-hero">
           <img src="${heroImg}" alt="${escapeHTML(p.title)}" loading="lazy">
@@ -1407,7 +1412,8 @@ function renderExecutiveShowcase() {
             <div class="exec-card-top-badges">
               <div style="display:flex; align-items:center; gap:6px;">
                 <span class="card-id-code">${p.project_code}</span>
-                ${!isUserViewer() ? renderProjectActiveToggleHTML(p.id, p.is_active) : ''}
+                ${hiddenBadge}
+                ${isUserAdmin() ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active) : ''}
               </div>
               <div class="exec-progress-radial">
                 <span class="pulse-indicator"></span>
@@ -1694,18 +1700,24 @@ function createCardHTML(p) {
 
   const isAdmin = isUserAdmin();
   const isViewer = isUserViewer();
+  const isHidden = (p.is_visible === 0 || p.is_visible === false || p.is_active === 0 || p.is_active === false);
+  const hiddenClass = isHidden ? 'project-card-hidden' : '';
+  const hiddenBadge = (isAdmin && isHidden)
+    ? '<span class="badge badge-hidden" title="Hidden from students and public viewers">👁️‍🗨️ Hidden</span>'
+    : '';
   const draggableAttrs = isAdmin ? 'draggable="true" ondragstart="handleDragStart(event)" ondragend="handleDragEnd(event)"' : 'draggable="false"';
   const stageLockIcon = !isAdmin ? '<span title="🔒 Stage changes are restricted to Administrator" style="font-size: 11px; opacity: 0.65; cursor: default;">🔒</span>' : '';
 
   return `
-    <div class="kanban-card ${p.is_active === 0 || p.is_active === false ? 'project-card-inactive' : ''}" ${draggableAttrs} data-id="${p.id}" ${!isAdmin ? 'title="Click to view details (Stage moves restricted to Admin)"' : 'title="Drag to change stage or click for details"'}>
+    <div class="kanban-card ${hiddenClass}" ${draggableAttrs} data-id="${p.id}" ${!isAdmin ? 'title="Click to view details (Stage moves restricted to Admin)"' : 'title="Drag to change stage or click for details"'}>
       <div class="card-top-bar">
         <div style="display: flex; align-items: center; gap: 6px;">
           ${stageLockIcon}
           <span class="card-id-code">${p.project_code}</span>
-          ${!isViewer ? renderProjectActiveToggleHTML(p.id, p.is_active) : ''}
+          ${isAdmin ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active) : ''}
         </div>
-        <div class="card-badges-right">
+        <div class="card-badges-right" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+          ${hiddenBadge}
           <span class="badge ${priorityClass}">${p.priority}</span>
           ${formattedDate ? `<span class="badge badge-due-date ${isOverdue ? 'overdue' : ''}">📅 ${formattedDate}</span>` : ''}
         </div>
@@ -1861,7 +1873,7 @@ function renderList() {
       <div class="list-item-row" onclick="openProjectDetail(${p.id})">
         <div style="display:flex; align-items:center; gap:8px;">
           <span class="list-code-badge">${p.project_code}</span>
-          ${renderProjectActiveToggleHTML(p.id, p.is_active)}
+          ${renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active)}
         </div>
         <div class="list-main-col">
           <span class="list-title">${escapeHTML(p.title)}</span>
@@ -1911,7 +1923,7 @@ function renderTable() {
         <td class="table-code">
           <div style="display:flex; align-items:center; gap:6px;">
             <span>${p.project_code}</span>
-            ${renderProjectActiveToggleHTML(p.id, p.is_active, { showLabel: false })}
+            ${renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active, { showLabel: false })}
           </div>
         </td>
         <td><span class="table-title" onclick="openProjectDetail(${p.id})">${escapeHTML(p.title)}</span></td>
@@ -2913,6 +2925,13 @@ async function openProjectDetail(projectId) {
   state.activeProjectId = projectId;
   try {
     const res = await authFetch(`/api/projects/${projectId}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.error || (res.status === 404 ? 'This project is not currently available.' : 'Failed to load project details.');
+      showToast(msg, 'warning');
+      if (DOM.detailModal) closeModal(DOM.detailModal);
+      return;
+    }
     const project = await res.json();
 
     document.getElementById('detail-code').textContent = project.project_code || 'IGRID-PROJ';
@@ -2924,10 +2943,10 @@ async function openProjectDetail(projectId) {
     priorityBadge.textContent = `${priorityVal} Priority`;
     priorityBadge.className = `badge ${priorityVal === 'High' ? 'badge-high' : (priorityVal === 'Normal' ? 'badge-normal' : 'badge-low')}`;
     
-    // Active / Inactive Status Toggle
+    // Visibility / Active Status Toggle (Admin Only)
     const activeToggleContainer = document.getElementById('detail-active-toggle-container');
     if (activeToggleContainer) {
-      activeToggleContainer.innerHTML = renderProjectActiveToggleHTML(project.id, project.is_active);
+      activeToggleContainer.innerHTML = isUserAdmin() ? renderProjectActiveToggleHTML(project.id, project.is_visible !== undefined ? project.is_visible : project.is_active) : '';
     }
     
     // Hero image
@@ -4060,20 +4079,23 @@ function showToast(msg, type = 'success') {
 }
 
 // ----------------------------------------------------
-// PROJECT ACTIVE / INACTIVE (ON/OFF) TOGGLE LOGIC
+// PROJECT VISIBILITY (ON/OFF) TOGGLE LOGIC (ADMIN ONLY)
 // ----------------------------------------------------
 function renderProjectActiveToggleHTML(projectId, isActive, options = {}) {
   const isAdmin = isUserAdmin();
+  if (!isAdmin) return ''; // Only admin can see and use this toggle
+
   const activeBool = isActive !== false && isActive !== 0 && isActive !== '0';
   const toggleClass = activeBool ? 'is-active' : 'is-inactive';
   const labelText = activeBool ? 'ON' : 'OFF';
   const labelClass = activeBool ? 'on' : 'off';
-  const disabledClass = !isAdmin ? 'is-disabled' : '';
-  const titleAttr = isAdmin ? `Admin: Click to turn project ${activeBool ? 'OFF (Inactive)' : 'ON (Active)'}` : `Project is currently ${activeBool ? 'ACTIVE (ON)' : 'INACTIVE (OFF)'} (Admin privileges required to toggle)`;
+  const titleAttr = activeBool
+    ? 'Project Visibility: ON (Visible to Everyone) - Click to hide from students and public viewers'
+    : 'Project Visibility: OFF (Hidden from Students & Public) - Click to make visible to everyone';
 
   return `
-    <div class="project-active-toggle-wrap" onclick="event.stopPropagation();">
-      <div class="project-toggle-switch ${toggleClass} ${disabledClass}" id="project-toggle-switch-${projectId}" data-id="${projectId}" data-active="${activeBool ? 'true' : 'false'}" onclick="handleToggleProjectActive(${projectId}, event)" title="${titleAttr}">
+    <div class="project-active-toggle-wrap" onclick="event.stopPropagation();" title="${titleAttr}">
+      <div class="project-toggle-switch ${toggleClass}" id="project-toggle-switch-${projectId}" data-id="${projectId}" data-active="${activeBool ? 'true' : 'false'}" onclick="handleToggleProjectActive(${projectId}, event)">
         <div class="project-toggle-thumb"></div>
       </div>
       ${options.showLabel !== false ? `<span class="project-toggle-label ${labelClass}" id="project-toggle-label-${projectId}">${labelText}</span>` : ''}
@@ -4093,15 +4115,24 @@ async function handleToggleProjectActive(projectId, event) {
   }
 
   if (!isUserAdmin()) {
-    showToast('Access denied: Only administrator can toggle project active/inactive status.', 'warning');
+    showToast('Access denied: Only administrator can toggle project visibility.', 'warning');
     return;
   }
 
   const project = state.projects.find(p => p.id === Number(projectId));
   if (!project) return;
 
-  const currentIsActive = project.is_active !== 0 && project.is_active !== false && project.is_active !== '0';
+  const currentIsActive = (project.is_visible !== 0 && project.is_visible !== false && project.is_visible !== '0' && project.is_active !== 0 && project.is_active !== false && project.is_active !== '0');
   const newActiveState = !currentIsActive;
+
+  // Requirement 4: Confirmation dialog when turning OFF (hiding from whole team + public)
+  if (!newActiveState) {
+    const projName = project.title || project.project_code || 'this project';
+    const confirmed = window.confirm(`Hide ${projName} from students and public viewers?`);
+    if (!confirmed) {
+      return;
+    }
+  }
 
   if (!state.togglingProjects) state.togglingProjects = new Set();
   state.togglingProjects.add(Number(projectId));
@@ -4116,19 +4147,21 @@ async function handleToggleProjectActive(projectId, event) {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ is_active: newActiveState })
+      body: JSON.stringify({ is_visible: newActiveState, is_active: newActiveState, isVisible: newActiveState })
     });
 
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.error || `HTTP ${res.status}: Failed to update project status`);
+      throw new Error(errJson.error || `HTTP ${res.status}: Failed to update project visibility`);
     }
 
     const data = await res.json();
+    project.is_visible = newActiveState ? 1 : 0;
+    project.isVisible = newActiveState;
     project.is_active = newActiveState ? 1 : 0;
-    if (project.isActive !== undefined) project.isActive = newActiveState;
+    project.isActive = newActiveState;
 
-    showToast(`Project ${project.project_code} is now ${newActiveState ? 'Active (ON)' : 'Inactive (OFF)'}`, 'success');
+    showToast(`Project ${project.project_code} is now ${newActiveState ? 'Visible to Everyone (ON)' : 'Hidden from Students & Public (OFF)'}`, 'success');
 
     // Update in DOM
     switches.forEach(sw => {
@@ -4151,8 +4184,8 @@ async function handleToggleProjectActive(projectId, event) {
       openProjectDetail(projectId);
     }
   } catch (err) {
-    console.error('[Project Toggle Error]: Full stack trace:', err);
-    showToast(`Couldn't update status, please try again: ${err.message}`, 'error');
+    console.error('[Project Toggle Error]:', err);
+    showToast(`Couldn't update project visibility, please try again: ${err.message}`, 'error');
     switches.forEach(sw => sw.classList.remove('toggle-loading'));
   } finally {
     state.togglingProjects.delete(Number(projectId));
