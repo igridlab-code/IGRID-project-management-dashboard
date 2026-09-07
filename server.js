@@ -761,6 +761,10 @@ app.get('/api/projects', optionalAuth, (req, res) => {
       const item = {
         ...r,
         team_members: members,
+        githubLink: r.github_repo || null,
+        techReportUrl: r.doc_url || null,
+        videoDemoUrl: r.youtube_url || null,
+        linkedinPostUrl: r.linkedin_url || null,
         is_visible: visState,
         isVisible: visState === 1,
         is_active: visState,
@@ -785,6 +789,10 @@ app.get('/api/public/projects', (req, res) => {
       return {
         ...r,
         team_members: members,
+        githubLink: r.github_repo || null,
+        techReportUrl: r.doc_url || null,
+        videoDemoUrl: r.youtube_url || null,
+        linkedinPostUrl: r.linkedin_url || null,
         immediate_action: '',
         is_visible: 1,
         isVisible: true,
@@ -821,6 +829,10 @@ app.get('/api/projects/:id', optionalAuth, (req, res) => {
       members = [];
     }
     project.team_members = members;
+    project.githubLink = project.github_repo || null;
+    project.techReportUrl = project.doc_url || null;
+    project.videoDemoUrl = project.youtube_url || null;
+    project.linkedinPostUrl = project.linkedin_url || null;
     const visState = (project.is_visible === undefined || project.is_visible === null) ? (project.is_active === undefined ? 1 : Number(project.is_active)) : Number(project.is_visible);
     project.is_visible = visState;
     project.isVisible = visState === 1;
@@ -909,22 +921,63 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
     if (!isAdmin) {
       const userEmail = (user.email || '').toLowerCase();
       const userName = (user.name || '').toLowerCase();
-      const isLead = project.team_lead && project.team_lead.toLowerCase().includes(userName);
-      const isMember = project.team_members && (project.team_members.toLowerCase().includes(userEmail) || project.team_members.toLowerCase().includes(userName));
+      const userFirstName = userName.split(' ')[0].replace(/[^a-z0-9]/g, '');
+      const userEmailPrefix = userEmail.split('@')[0].split('.')[0].replace(/[^a-z0-9]/g, '');
+
+      const isLead = project.team_lead && (
+        project.team_lead.toLowerCase().includes(userEmail) ||
+        project.team_lead.toLowerCase().includes(userName) ||
+        (userFirstName && userFirstName.length >= 3 && project.team_lead.toLowerCase().includes(userFirstName)) ||
+        (userEmailPrefix && userEmailPrefix.length >= 3 && project.team_lead.toLowerCase().includes(userEmailPrefix))
+      );
+
+      const isMember = project.team_members && (
+        project.team_members.toLowerCase().includes(userEmail) ||
+        project.team_members.toLowerCase().includes(userName) ||
+        (userFirstName && userFirstName.length >= 3 && project.team_members.toLowerCase().includes(userFirstName)) ||
+        (userEmailPrefix && userEmailPrefix.length >= 3 && project.team_members.toLowerCase().includes(userEmailPrefix))
+      );
       
       // Also check student table
-      db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ?', [user.id, userEmail], (err2, student) => {
-        const isAssigned = student && (student.assigned_project === project.project_code || student.project_title === project.title);
+      db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR (name IS NOT NULL AND LOWER(name) LIKE ?)', [user.id, userEmail, `%${userFirstName}%`], (err2, student) => {
+        const isAssigned = student && (
+          student.assigned_project === project.project_code ||
+          student.project_title === project.title ||
+          (student.assigned_project && project.project_code && student.assigned_project.toLowerCase() === project.project_code.toLowerCase())
+        );
         
         if (!isLead && !isMember && !isAssigned) {
           return res.status(403).json({ error: 'Access denied: Students can only edit their own project links and deliverables.' });
         }
 
         // Student is permitted to update ONLY media and deliverable links
-        const {
-          github_repo, youtube_url, linkedin_url, doc_url, image_url,
-          team_lead_photo, deliverables
-        } = req.body;
+        const github_repo = req.body.githubLink !== undefined ? req.body.githubLink : req.body.github_repo;
+        const doc_url = req.body.techReportUrl !== undefined ? req.body.techReportUrl : req.body.doc_url;
+        const youtube_url = req.body.videoDemoUrl !== undefined ? req.body.videoDemoUrl : req.body.youtube_url;
+        const linkedin_url = req.body.linkedinPostUrl !== undefined ? req.body.linkedinPostUrl : req.body.linkedin_url;
+        const image_url = req.body.imageUrl !== undefined ? req.body.imageUrl : req.body.image_url;
+        const team_lead_photo = req.body.teamLeadPhoto !== undefined ? req.body.teamLeadPhoto : req.body.team_lead_photo;
+        const deliverables = req.body.deliverables !== undefined ? req.body.deliverables : req.body.deliverablesText;
+
+        // Validation per field
+        if (github_repo && typeof github_repo === 'string' && github_repo.trim()) {
+          const val = github_repo.trim().toLowerCase();
+          if (!val.includes('github.com')) {
+            return res.status(400).json({ error: 'GitHub link must be a valid URL containing "github.com"' });
+          }
+        }
+        if (doc_url && typeof doc_url === 'string' && doc_url.trim()) {
+          const val = doc_url.trim().toLowerCase();
+          if (!val.includes('drive.google.com') && !val.includes('docs.google.com') && !val.includes('google.com/drive')) {
+            return res.status(400).json({ error: 'Technical Report must contain "drive.google.com" or "docs.google.com"' });
+          }
+        }
+        if (linkedin_url && typeof linkedin_url === 'string' && linkedin_url.trim()) {
+          const val = linkedin_url.trim().toLowerCase();
+          if (!val.includes('linkedin.com')) {
+            return res.status(400).json({ error: 'LinkedIn Post link must contain "linkedin.com"' });
+          }
+        }
 
         const updateSql = `
           UPDATE projects SET
@@ -948,6 +1001,13 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
               return res.status(500).json({ error: err3.message });
             }
             db.get('SELECT * FROM projects WHERE id = ?', [id], (errFetch, updatedProj) => {
+              const formattedProj = {
+                ...updatedProj,
+                githubLink: updatedProj ? updatedProj.github_repo : null,
+                techReportUrl: updatedProj ? updatedProj.doc_url : null,
+                videoDemoUrl: updatedProj ? updatedProj.youtube_url : null,
+                linkedinPostUrl: updatedProj ? updatedProj.linkedin_url : null
+              };
               console.log(`[BACKEND-SAVE] ✅ Project #${id} ("${updatedProj ? updatedProj.title : id}") links & deliverables successfully saved to SQLite:`, {
                 id: updatedProj ? updatedProj.id : id,
                 github_repo: updatedProj ? updatedProj.github_repo : null,
@@ -956,7 +1016,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
               });
               res.json({
                 message: 'Project links and deliverables saved successfully.',
-                project: updatedProj,
+                project: formattedProj,
                 changes: this.changes
               });
             });
@@ -970,11 +1030,16 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
     const {
       project_code,
       title, description, domain, tags, status, priority,
-      progress, start_date, due_date, immediate_action, github_repo,
-      youtube_url, linkedin_url, doc_url, image_url,
+      progress, start_date, due_date, immediate_action,
       bom_status, team_name, team_lead, team_lead_photo, team_members, deliverables,
       is_active, isActive, is_visible, isVisible
     } = req.body;
+
+    const github_repo = req.body.githubLink !== undefined ? req.body.githubLink : req.body.github_repo;
+    const doc_url = req.body.techReportUrl !== undefined ? req.body.techReportUrl : req.body.doc_url;
+    const youtube_url = req.body.videoDemoUrl !== undefined ? req.body.videoDemoUrl : req.body.youtube_url;
+    const linkedin_url = req.body.linkedinPostUrl !== undefined ? req.body.linkedinPostUrl : req.body.linkedin_url;
+    const image_url = req.body.imageUrl !== undefined ? req.body.imageUrl : req.body.image_url;
 
     const membersJson = team_members !== undefined
       ? (typeof team_members === 'string' ? team_members : JSON.stringify(team_members || []))
