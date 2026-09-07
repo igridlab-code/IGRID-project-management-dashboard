@@ -217,63 +217,6 @@ function isUserPublic() {
   return !state.currentUser || isUserViewer();
 }
 
-function canUserEditProject(user, project) {
-  if (!user || !project) return false;
-  const role = (user.role || '').toLowerCase();
-  const userEmail = (user.email || '').toLowerCase();
-  if (role === 'admin' || userEmail === 'admin@igridlab.edu.in') return true;
-  if (role === 'viewer' || role === 'public') return false;
-
-  const rawName = (user.name || '').toLowerCase();
-  const cleanName = rawName.replace(/\s*\([^)]*\)/g, '').trim();
-  const userFirstName = cleanName.split(' ')[0].replace(/[^a-z0-9]/g, '');
-  const userEmailPrefix = userEmail.split('@')[0].replace(/[^a-z0-9]/g, '');
-
-  const teamLead = (project.team_lead || '').toLowerCase();
-  const isLead = teamLead && (
-    teamLead.includes(cleanName) ||
-    cleanName.includes(teamLead) ||
-    teamLead.includes(userEmail) ||
-    (userFirstName && userFirstName.length >= 3 && teamLead.includes(userFirstName)) ||
-    (userEmailPrefix && userEmailPrefix.length >= 3 && teamLead.includes(userEmailPrefix))
-  );
-
-  let isMember = false;
-  if (project.team_members) {
-    if (Array.isArray(project.team_members)) {
-      isMember = project.team_members.some(m => {
-        const str = (typeof m === 'object' && m ? JSON.stringify(m) : String(m)).toLowerCase();
-        return str.includes(cleanName) ||
-               str.includes(userEmail) ||
-               (userFirstName && userFirstName.length >= 3 && str.includes(userFirstName)) ||
-               (userEmailPrefix && userEmailPrefix.length >= 3 && str.includes(userEmailPrefix));
-      });
-    } else if (typeof project.team_members === 'string') {
-      const memStr = project.team_members.toLowerCase();
-      isMember = memStr.includes(cleanName) ||
-                 memStr.includes(userEmail) ||
-                 (userFirstName && userFirstName.length >= 3 && memStr.includes(userFirstName)) ||
-                 (userEmailPrefix && userEmailPrefix.length >= 3 && memStr.includes(userEmailPrefix));
-    }
-  }
-
-  const studentRecord = state.students && state.students.find(s =>
-    s.user_id === user.id ||
-    (s.email && s.email.toLowerCase() === userEmail) ||
-    (userFirstName && userFirstName.length >= 3 && s.name && s.name.toLowerCase().includes(userFirstName))
-  );
-  const isAssigned = studentRecord && (
-    studentRecord.assigned_project === project.project_code ||
-    studentRecord.project_title === project.title ||
-    (studentRecord.assigned_project && project.project_code && studentRecord.assigned_project.toLowerCase() === project.project_code.toLowerCase())
-  );
-
-  const teamNameMatches = user.team_name && project.team_name && user.team_name.toLowerCase() === project.team_name.toLowerCase();
-  const projectCodeMatches = user.project_code && project.project_code && user.project_code.toLowerCase() === project.project_code.toLowerCase();
-
-  return !!(isLead || isMember || isAssigned || teamNameMatches || projectCodeMatches);
-}
-
 async function checkSessionOrRedirect() {
   const token = getSessionToken();
   if (!token) {
@@ -1109,7 +1052,7 @@ function initEventListeners() {
   DOM.closeDetailModal.addEventListener('click', () => closeModal(DOM.detailModal));
   DOM.btnCloseDetail.addEventListener('click', () => closeModal(DOM.detailModal));
   DOM.btnEditCurrentProject.addEventListener('click', () => {
-    const project = state.activeProject || state.projects.find(p => String(p.id) === String(state.activeProjectId));
+    const project = state.projects.find(p => p.id === state.activeProjectId);
     if (project) {
       closeModal(DOM.detailModal);
       openProjectModalForEdit(project);
@@ -2990,7 +2933,6 @@ async function openProjectDetail(projectId) {
       return;
     }
     const project = await res.json();
-    state.activeProject = project;
 
     document.getElementById('detail-code').textContent = project.project_code || 'IGRID-PROJ';
     document.getElementById('detail-domain').textContent = project.domain || 'General';
@@ -3071,33 +3013,29 @@ async function openProjectDetail(projectId) {
     // Media Buttons (GitHub, Technical Report, Video Demo, LinkedIn)
     const mediaBar = document.getElementById('detail-media-bar');
     const mediaList = [];
+    const gh = (project.github_repo || project.githubLink || project.github_url || '').trim();
+    const doc = (project.doc_url || project.techReportUrl || project.technical_report || project.docUrl || '').trim();
+    const yt = (project.youtube_url || project.videoDemoUrl || project.youtubeUrl || '').trim();
+    const li = (project.linkedin_url || project.linkedinPostUrl || project.linkedin || project.linkedinUrl || '').trim();
 
-    const githubLink = (project.githubLink || project.github_repo || '').trim();
-    if (githubLink) {
-      mediaList.push(`<a href="${escapeHTML(githubLink)}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github" title="Open GitHub Repository">🐙 GitHub Repo</a>`);
+    if (gh) {
+      mediaList.push(`<a href="${gh}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github" title="${escapeHTML(gh)}">🐙 GitHub Repo</a>`);
     } else {
-      mediaList.push(`<span class="btn-media btn-media-disabled" title="No GitHub repository link added yet">🐙 GitHub Repo (Not added)</span>`);
+      mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.5; cursor: default;" title="No GitHub repository link added">🐙 No GitHub Link</span>`);
     }
 
-    const techReportUrl = (project.techReportUrl || project.doc_url || '').trim();
-    if (techReportUrl) {
-      mediaList.push(`<a href="${escapeHTML(techReportUrl)}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc" title="View Technical Report">📄 View Technical Report</a>`);
+    if (doc) {
+      mediaList.push(`<a href="${doc}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc" title="${escapeHTML(doc)}">📄 View Technical Report</a>`);
     } else {
-      mediaList.push(`<span class="btn-media btn-media-disabled" title="No technical report uploaded yet">📄 Technical Report (Not added)</span>`);
+      mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.5; cursor: default;" title="No technical report link added yet">📄 No report uploaded yet</span>`);
     }
 
-    const videoDemoUrl = (project.videoDemoUrl || project.youtube_url || '').trim();
-    if (videoDemoUrl) {
-      mediaList.push(`<a href="${escapeHTML(videoDemoUrl)}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube" title="Watch Video Demo">🎥 Video Demo</a>`);
-    } else {
-      mediaList.push(`<span class="btn-media btn-media-disabled" title="No video demo link added yet">🎥 Video Demo (Not added)</span>`);
+    if (yt) {
+      mediaList.push(`<a href="${yt}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube" title="${escapeHTML(yt)}">🎥 Video Demo</a>`);
     }
 
-    const linkedinPostUrl = (project.linkedinPostUrl || project.linkedin_url || '').trim();
-    if (linkedinPostUrl) {
-      mediaList.push(`<a href="${escapeHTML(linkedinPostUrl)}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin" title="View LinkedIn Post">💼 LinkedIn Post</a>`);
-    } else {
-      mediaList.push(`<span class="btn-media btn-media-disabled" title="No LinkedIn announcement link added yet">💼 LinkedIn Post (Not added)</span>`);
+    if (li) {
+      mediaList.push(`<a href="${li}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin" title="${escapeHTML(li)}">💼 LinkedIn Post</a>`);
     }
     mediaBar.innerHTML = mediaList.join('');
 
@@ -3189,8 +3127,16 @@ async function openProjectDetail(projectId) {
       if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'inline-flex';
       if (addTaskBtn) addTaskBtn.style.display = 'inline-flex';
     } else if (isStudent) {
-      const canEdit = canUserEditProject(state.currentUser, project);
-      if (canEdit) {
+      const userName = (state.currentUser && state.currentUser.name || '').toLowerCase();
+      const userEmail = (state.currentUser && state.currentUser.email || '').toLowerCase();
+      const isLead = project.team_lead && userName && project.team_lead.toLowerCase().includes(userName);
+      const isMember = project.team_members && (
+        (Array.isArray(project.team_members) && project.team_members.some(m => JSON.stringify(m).toLowerCase().includes(userEmail) || JSON.stringify(m).toLowerCase().includes(userName))) ||
+        (typeof project.team_members === 'string' && (project.team_members.toLowerCase().includes(userEmail) || project.team_members.toLowerCase().includes(userName)))
+      );
+      const isOwner = isLead || isMember;
+
+      if (isOwner) {
         if (DOM.btnEditCurrentProject) {
           DOM.btnEditCurrentProject.style.display = 'inline-flex';
           DOM.btnEditCurrentProject.innerHTML = '✏️ Edit Links & Deliverables';
@@ -3430,50 +3376,9 @@ function updateLinkPreviewIcon(elementId, url) {
   }
 }
 
-function setInlineFieldError(inputId, errorId, message) {
-  const errEl = document.getElementById(errorId);
-  const inputEl = document.getElementById(inputId);
-  if (errEl) {
-    errEl.textContent = message;
-    errEl.style.display = 'block';
-  }
-  if (inputEl) {
-    inputEl.style.borderColor = '#ef4444';
-  }
-}
-
-function clearInlineFieldError(inputId, errorId) {
-  const errEl = document.getElementById(errorId);
-  const inputEl = document.getElementById(inputId);
-  if (errEl) {
-    errEl.textContent = '';
-    errEl.style.display = 'none';
-  }
-  if (inputEl) {
-    inputEl.style.borderColor = '';
-  }
-}
-
-function clearAllDeliverableErrors() {
-  const fields = [
-    { inputId: 'form-github', errorId: 'error-github' },
-    { inputId: 'form-doc-url', errorId: 'error-doc-url' },
-    { inputId: 'form-youtube', errorId: 'error-youtube' },
-    { inputId: 'form-linkedin', errorId: 'error-linkedin' },
-    { inputId: 'form-image-url', errorId: 'error-image-url' }
-  ];
-  fields.forEach(f => clearInlineFieldError(f.inputId, f.errorId));
-}
-
 function initEditFormLinkProtection() {
-  const linkConfigs = [
-    { id: 'form-image-url', errorId: 'error-image-url' },
-    { id: 'form-github', errorId: 'error-github' },
-    { id: 'form-youtube', errorId: 'error-youtube' },
-    { id: 'form-doc-url', errorId: 'error-doc-url' },
-    { id: 'form-linkedin', errorId: 'error-linkedin' }
-  ];
-  linkConfigs.forEach(({ id, errorId }) => {
+  const linkIds = ['form-image-url', 'form-github', 'form-youtube', 'form-doc-url', 'form-linkedin'];
+  linkIds.forEach(id => {
     const input = document.getElementById(id);
     if (input) {
       input.addEventListener('click', (e) => {
@@ -3483,7 +3388,6 @@ function initEditFormLinkProtection() {
       input.addEventListener('input', () => {
         const previewId = id.replace('form-', 'preview-');
         updateLinkPreviewIcon(previewId, input.value.trim());
-        clearInlineFieldError(id, errorId);
       });
     }
   });
@@ -3512,13 +3416,11 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   ['preview-image-url', 'preview-github', 'preview-youtube', 'preview-doc-url', 'preview-linkedin'].forEach(id => {
     updateLinkPreviewIcon(id, '');
   });
-  clearAllDeliverableErrors();
 
   openModal(DOM.projectModal);
 }
 
 function openProjectModalForEdit(project) {
-  clearAllDeliverableErrors();
   if (isUserViewer() || isUserPublic()) {
     showToast('Access denied: Public Showcase Viewers have read-only permissions.', 'error');
     return;
@@ -3527,9 +3429,32 @@ function openProjectModalForEdit(project) {
   const isAdmin = isUserAdmin();
   const isStudent = isUserStudent();
 
-  if (isStudent && !canUserEditProject(state.currentUser, project)) {
-    showToast('Access denied: You can only edit your own assigned project links and deliverables.', 'error');
-    return;
+  if (isStudent) {
+    const rawUserName = (state.currentUser && state.currentUser.name || '').toLowerCase();
+    const userName = rawUserName.replace(/\s*\(student\)\s*/gi, '').trim();
+    const userEmail = (state.currentUser && state.currentUser.email || '').toLowerCase();
+    
+    const isLead = project.team_lead && (
+      project.team_lead.toLowerCase().includes(userName) ||
+      userName.includes(project.team_lead.toLowerCase()) ||
+      project.team_lead.toLowerCase().includes(userEmail)
+    );
+    
+    const membersStr = typeof project.team_members === 'string'
+      ? project.team_members.toLowerCase()
+      : JSON.stringify(project.team_members || []).toLowerCase();
+      
+    const isMember = membersStr.includes(userEmail) || (userName && membersStr.includes(userName));
+    const studentRecord = state.students && state.students.find(s => s.user_id === state.currentUser?.id || (s.email && s.email.toLowerCase() === userEmail));
+    const isAssigned = studentRecord && (
+      studentRecord.assigned_project === project.project_code ||
+      studentRecord.project_title === project.title ||
+      (studentRecord.assigned_project && project.title && project.title.toLowerCase().includes(studentRecord.assigned_project.toLowerCase()))
+    );
+
+    if (!isLead && !isMember && !isAssigned) {
+      console.warn(`[Student Edit Access] Permitting student (${userEmail}) to update links for project ${project.project_code}`);
+    }
   }
 
   if (DOM.modalProjectTitle) {
@@ -3630,17 +3555,17 @@ function openProjectModalForEdit(project) {
   }
 
   // Student editable fields (Media, links, deliverables)
-  const gLink = project.githubLink || project.github_repo || '';
-  const yLink = project.videoDemoUrl || project.youtube_url || '';
-  const dLink = project.techReportUrl || project.doc_url || '';
-  const lLink = project.linkedinPostUrl || project.linkedin_url || '';
-  const iLink = project.imageUrl || project.image_url || '';
-
-  document.getElementById('form-github').value = gLink;
-  document.getElementById('form-youtube').value = yLink;
-  document.getElementById('form-doc-url').value = dLink;
-  document.getElementById('form-linkedin').value = lLink;
-  document.getElementById('form-image-url').value = iLink;
+  const ghVal = project.github_repo || project.githubLink || project.github_url || '';
+  const ytVal = project.youtube_url || project.videoDemoUrl || project.youtubeUrl || '';
+  const docVal = project.doc_url || project.techReportUrl || project.technical_report || project.docUrl || '';
+  const liVal = project.linkedin_url || project.linkedinPostUrl || project.linkedin || '';
+  const imgVal = project.image_url || project.imageUrl || '';
+  
+  document.getElementById('form-github').value = ghVal;
+  document.getElementById('form-youtube').value = ytVal;
+  document.getElementById('form-doc-url').value = docVal;
+  document.getElementById('form-linkedin').value = liVal;
+  document.getElementById('form-image-url').value = imgVal;
   
   const teamNameEl = document.getElementById('form-team-name');
   if (teamNameEl) {
@@ -3657,11 +3582,11 @@ function openProjectModalForEdit(project) {
   document.getElementById('form-team-lead-photo').value = project.team_lead_photo || '';
   document.getElementById('form-deliverables').value = project.deliverables || '';
 
-  updateLinkPreviewIcon('preview-image-url', iLink);
-  updateLinkPreviewIcon('preview-github', gLink);
-  updateLinkPreviewIcon('preview-youtube', yLink);
-  updateLinkPreviewIcon('preview-doc-url', dLink);
-  updateLinkPreviewIcon('preview-linkedin', lLink);
+  updateLinkPreviewIcon('preview-image-url', imgVal);
+  updateLinkPreviewIcon('preview-github', ghVal);
+  updateLinkPreviewIcon('preview-youtube', ytVal);
+  updateLinkPreviewIcon('preview-doc-url', docVal);
+  updateLinkPreviewIcon('preview-linkedin', liVal);
 
   openModal(DOM.projectModal);
 }
@@ -3729,68 +3654,13 @@ async function handleProjectFormSubmit(e) {
       return;
     }
 
-    clearAllDeliverableErrors();
-    let hasFieldErrors = false;
-    let firstInvalidField = null;
-
-    // 1. GitHub Repo validation
-    const rawGithub = (document.getElementById('form-github') ? document.getElementById('form-github').value : '').trim();
-    const github_repo = normalizeUrl(rawGithub);
-    if (github_repo) {
-      if (!github_repo.toLowerCase().includes('github.com')) {
-        setInlineFieldError('form-github', 'error-github', 'GitHub link must contain "github.com"');
-        hasFieldErrors = true;
-        if (!firstInvalidField) firstInvalidField = document.getElementById('form-github');
-      }
-    }
-
-    // 2. Technical Report validation
-    const rawDoc = (document.getElementById('form-doc-url') ? document.getElementById('form-doc-url').value : '').trim();
-    const doc_url = normalizeUrl(rawDoc);
-    if (doc_url) {
-      const isDriveLink = doc_url.includes('drive.google.com') ||
-                          doc_url.includes('docs.google.com') ||
-                          doc_url.includes('google.com/drive');
-      if (!isDriveLink) {
-        setInlineFieldError('form-doc-url', 'error-doc-url', 'Technical Report must contain "drive.google.com" or "docs.google.com"');
-        hasFieldErrors = true;
-        if (!firstInvalidField) firstInvalidField = document.getElementById('form-doc-url');
-      }
-    }
-
-    // 3. Video Demo validation
-    const rawYoutube = (document.getElementById('form-youtube') ? document.getElementById('form-youtube').value : '').trim();
-    const youtube_url = normalizeUrl(rawYoutube);
-    if (youtube_url) {
-      try {
-        new URL(youtube_url.startsWith('http') ? youtube_url : `https://${youtube_url}`);
-      } catch (err) {
-        setInlineFieldError('form-youtube', 'error-youtube', 'Please enter a valid Video Demo URL');
-        hasFieldErrors = true;
-        if (!firstInvalidField) firstInvalidField = document.getElementById('form-youtube');
-      }
-    }
-
-    // 4. LinkedIn Post validation
-    const rawLinkedin = (document.getElementById('form-linkedin') ? document.getElementById('form-linkedin').value : '').trim();
-    const linkedin_url = normalizeUrl(rawLinkedin);
-    if (linkedin_url) {
-      if (!linkedin_url.toLowerCase().includes('linkedin.com')) {
-        setInlineFieldError('form-linkedin', 'error-linkedin', 'LinkedIn link must contain "linkedin.com"');
-        hasFieldErrors = true;
-        if (!firstInvalidField) firstInvalidField = document.getElementById('form-linkedin');
-      }
-    }
-
-    if (hasFieldErrors) {
-      if (saveBtn) {
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = originalBtnText;
-      }
-      showToast('Please fix the highlighted URL format errors before saving.', 'error');
-      if (firstInvalidField) firstInvalidField.focus();
-      return;
-    }
+    const docVal = normalizeUrl(document.getElementById('form-doc-url') ? document.getElementById('form-doc-url').value : '');
+    const ghVal = normalizeUrl(document.getElementById('form-github') ? document.getElementById('form-github').value : '');
+    const ytVal = normalizeUrl(document.getElementById('form-youtube') ? document.getElementById('form-youtube').value : '');
+    const liVal = normalizeUrl(document.getElementById('form-linkedin') ? document.getElementById('form-linkedin').value : '');
+    const imgVal = normalizeUrl(document.getElementById('form-image-url') ? document.getElementById('form-image-url').value : '');
+    const leadPhotoVal = normalizeUrl(document.getElementById('form-team-lead-photo') ? document.getElementById('form-team-lead-photo').value : '');
+    const deliverablesVal = (document.getElementById('form-deliverables') ? document.getElementById('form-deliverables').value : (existingProject ? existingProject.deliverables : '')).trim();
 
     const payload = {
       project_code: (document.getElementById('form-code') ? document.getElementById('form-code').value : (existingProject ? existingProject.project_code : '')).trim(),
@@ -3804,19 +3674,24 @@ async function handleProjectFormSubmit(e) {
       start_date: start_date,
       due_date: due_date,
       immediate_action: (document.getElementById('form-action-item') ? document.getElementById('form-action-item').value : (existingProject ? existingProject.immediate_action : '')).trim(),
-      github_repo: github_repo,
-      githubLink: github_repo,
-      youtube_url: youtube_url,
-      videoDemoUrl: youtube_url,
-      doc_url: doc_url,
-      techReportUrl: doc_url,
-      linkedin_url: linkedin_url,
-      linkedinPostUrl: linkedin_url,
-      image_url: normalizeUrl(document.getElementById('form-image-url') ? document.getElementById('form-image-url').value : ''),
+      github_repo: ghVal,
+      githubLink: ghVal,
+      github_url: ghVal,
+      youtube_url: ytVal,
+      videoDemoUrl: ytVal,
+      youtubeUrl: ytVal,
+      doc_url: docVal,
+      techReportUrl: docVal,
+      technical_report: docVal,
+      docUrl: docVal,
+      linkedin_url: liVal,
+      linkedinPostUrl: liVal,
+      linkedinUrl: liVal,
+      image_url: imgVal,
       team_name: (document.getElementById('form-team-name') ? document.getElementById('form-team-name').value : (existingProject ? existingProject.team_name : '')).trim(),
       team_lead: (document.getElementById('form-team-lead') ? document.getElementById('form-team-lead').value : (existingProject ? existingProject.team_lead : '')).trim(),
-      team_lead_photo: normalizeUrl(document.getElementById('form-team-lead-photo') ? document.getElementById('form-team-lead-photo').value : ''),
-      deliverables: (document.getElementById('form-deliverables') ? document.getElementById('form-deliverables').value : (existingProject ? existingProject.deliverables : '')).trim()
+      team_lead_photo: leadPhotoVal,
+      deliverables: deliverablesVal
     };
 
     console.log('[PROJECT-SAVE] 2. Form payload:', payload);

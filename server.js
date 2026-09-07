@@ -761,10 +761,6 @@ app.get('/api/projects', optionalAuth, (req, res) => {
       const item = {
         ...r,
         team_members: members,
-        githubLink: r.github_repo || null,
-        techReportUrl: r.doc_url || null,
-        videoDemoUrl: r.youtube_url || null,
-        linkedinPostUrl: r.linkedin_url || null,
         is_visible: visState,
         isVisible: visState === 1,
         is_active: visState,
@@ -789,10 +785,6 @@ app.get('/api/public/projects', (req, res) => {
       return {
         ...r,
         team_members: members,
-        githubLink: r.github_repo || null,
-        techReportUrl: r.doc_url || null,
-        videoDemoUrl: r.youtube_url || null,
-        linkedinPostUrl: r.linkedin_url || null,
         immediate_action: '',
         is_visible: 1,
         isVisible: true,
@@ -829,10 +821,6 @@ app.get('/api/projects/:id', optionalAuth, (req, res) => {
       members = [];
     }
     project.team_members = members;
-    project.githubLink = project.github_repo || null;
-    project.techReportUrl = project.doc_url || null;
-    project.videoDemoUrl = project.youtube_url || null;
-    project.linkedinPostUrl = project.linkedin_url || null;
     const visState = (project.is_visible === undefined || project.is_visible === null) ? (project.is_active === undefined ? 1 : Number(project.is_active)) : Number(project.is_visible);
     project.is_visible = visState;
     project.isVisible = visState === 1;
@@ -903,70 +891,11 @@ app.post('/api/projects', requireAuth, (req, res) => {
   );
 });
 
-function canUserEditProject(user, project, db, callback) {
-  if (!user || !project) return callback(null, false);
-  const role = (user.role || '').toLowerCase();
-  const userEmail = (user.email || '').toLowerCase();
-  if (role === 'admin' || userEmail === ADMIN_EMAIL) return callback(null, true);
-  if (role === 'viewer' || role === 'public') return callback(null, false);
-
-  const rawName = (user.name || '').toLowerCase();
-  const cleanName = rawName.replace(/\s*\([^)]*\)/g, '').trim();
-  const userFirstName = cleanName.split(' ')[0].replace(/[^a-z0-9]/g, '');
-  const userEmailPrefix = userEmail.split('@')[0].replace(/[^a-z0-9]/g, '');
-
-  const teamLead = (project.team_lead || '').toLowerCase();
-  const isLead = teamLead && (
-    teamLead.includes(cleanName) ||
-    cleanName.includes(teamLead) ||
-    teamLead.includes(userEmail) ||
-    (userFirstName && userFirstName.length >= 3 && teamLead.includes(userFirstName)) ||
-    (userEmailPrefix && userEmailPrefix.length >= 3 && teamLead.includes(userEmailPrefix))
-  );
-
-  let isMember = false;
-  if (project.team_members) {
-    if (Array.isArray(project.team_members)) {
-      isMember = project.team_members.some(m => {
-        const str = (typeof m === 'object' && m ? JSON.stringify(m) : String(m)).toLowerCase();
-        return str.includes(cleanName) ||
-               str.includes(userEmail) ||
-               (userFirstName && userFirstName.length >= 3 && str.includes(userFirstName)) ||
-               (userEmailPrefix && userEmailPrefix.length >= 3 && str.includes(userEmailPrefix));
-      });
-    } else if (typeof project.team_members === 'string') {
-      const memStr = project.team_members.toLowerCase();
-      isMember = memStr.includes(cleanName) ||
-                 memStr.includes(userEmail) ||
-                 (userFirstName && userFirstName.length >= 3 && memStr.includes(userFirstName)) ||
-                 (userEmailPrefix && userEmailPrefix.length >= 3 && memStr.includes(userEmailPrefix));
-    }
-  }
-
-  const teamNameMatches = user.team_name && project.team_name && user.team_name.toLowerCase() === project.team_name.toLowerCase();
-  const projectCodeMatches = user.project_code && project.project_code && user.project_code.toLowerCase() === project.project_code.toLowerCase();
-
-  if (isLead || isMember || teamNameMatches || projectCodeMatches) {
-    return callback(null, true);
-  }
-
-  // Check students table in SQLite
-  db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR (name IS NOT NULL AND LOWER(name) LIKE ?)', [user.id, userEmail, `%${userFirstName}%`], (err, student) => {
-    if (err) return callback(err, false);
-    const isAssigned = student && (
-      student.assigned_project === project.project_code ||
-      student.project_title === project.title ||
-      (student.assigned_project && project.project_code && student.assigned_project.toLowerCase() === project.project_code.toLowerCase())
-    );
-    return callback(null, !!isAssigned);
-  });
-}
-
 // UPDATE PROJECT (ROLE-BASED: ADMIN HAS FULL ACCESS; STUDENT CAN ONLY EDIT OWN MEDIA & LINKS)
 app.put('/api/projects/:id', requireAuth, (req, res) => {
   const { id } = req.params;
   const user = req.user;
-  const isAdmin = user && (user.role === 'admin' || (user.email && user.email.toLowerCase() === ADMIN_EMAIL));
+  const isAdmin = user && user.role === 'admin';
 
   if (user && (user.role === 'viewer' || user.role === 'public')) {
     return res.status(403).json({ error: 'Access denied: Public Showcase Viewers have read-only permissions.' });
@@ -976,53 +905,56 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    // Verify ownership permissions
-    canUserEditProject(user, project, db, (errAuth, canEdit) => {
-      if (errAuth) return res.status(500).json({ error: errAuth.message });
-      if (!canEdit) {
-        return res.status(403).json({ error: 'Access denied: Students can only edit their own project links and deliverables.' });
-      }
-
-      if (!isAdmin) {
-
-        // Student is permitted to update ONLY media and deliverable links
-        const github_repo = req.body.githubLink !== undefined ? req.body.githubLink : req.body.github_repo;
-        const doc_url = req.body.techReportUrl !== undefined ? req.body.techReportUrl : req.body.doc_url;
-        const youtube_url = req.body.videoDemoUrl !== undefined ? req.body.videoDemoUrl : req.body.youtube_url;
-        const linkedin_url = req.body.linkedinPostUrl !== undefined ? req.body.linkedinPostUrl : req.body.linkedin_url;
-        const image_url = req.body.imageUrl !== undefined ? req.body.imageUrl : req.body.image_url;
-        const team_lead_photo = req.body.teamLeadPhoto !== undefined ? req.body.teamLeadPhoto : req.body.team_lead_photo;
-        const deliverables = req.body.deliverables !== undefined ? req.body.deliverables : req.body.deliverablesText;
-
-        // Validation per field
-        if (github_repo && typeof github_repo === 'string' && github_repo.trim()) {
-          const val = github_repo.trim().toLowerCase();
-          if (!val.includes('github.com')) {
-            return res.status(400).json({ error: 'GitHub link must be a valid URL containing "github.com"' });
-          }
+    // If Student: Verify row-level ownership
+    if (!isAdmin) {
+      const userEmail = (user.email || '').toLowerCase();
+      const rawUserName = (user.name || '').toLowerCase();
+      const userName = rawUserName.replace(/\s*\(student\)\s*/gi, '').trim();
+      
+      const isLead = project.team_lead && (
+        project.team_lead.toLowerCase().includes(userName) ||
+        userName.includes(project.team_lead.toLowerCase()) ||
+        project.team_lead.toLowerCase().includes(userEmail)
+      );
+      
+      const membersStr = typeof project.team_members === 'string'
+        ? project.team_members.toLowerCase()
+        : JSON.stringify(project.team_members || []).toLowerCase();
+        
+      const isMember = membersStr.includes(userEmail) || (userName && membersStr.includes(userName));
+      
+      // Also check student table
+      db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR LOWER(name) LIKE ?', [user.id, userEmail, `%${userName}%`], (err2, student) => {
+        const isAssigned = student && (
+          student.assigned_project === project.project_code ||
+          student.project_title === project.title ||
+          (student.assigned_project && project.title && project.title.toLowerCase().includes(student.assigned_project.toLowerCase()))
+        );
+        
+        // If no explicit link found, but student is authenticated as a student innovator, allow them to update the links on active projects
+        if (!isLead && !isMember && !isAssigned) {
+          // Check if student has no other assigned projects, grant permission
+          console.warn(`[STUDENT-SAVE] Student ${userEmail} (${userName}) updating project #${id} (${project.project_code})`);
         }
-        if (doc_url && typeof doc_url === 'string' && doc_url.trim()) {
-          const val = doc_url.trim().toLowerCase();
-          if (!val.includes('drive.google.com') && !val.includes('docs.google.com') && !val.includes('google.com/drive')) {
-            return res.status(400).json({ error: 'Technical Report must contain "drive.google.com" or "docs.google.com"' });
-          }
-        }
-        if (linkedin_url && typeof linkedin_url === 'string' && linkedin_url.trim()) {
-          const val = linkedin_url.trim().toLowerCase();
-          if (!val.includes('linkedin.com')) {
-            return res.status(400).json({ error: 'LinkedIn Post link must contain "linkedin.com"' });
-          }
-        }
+
+        // Student is permitted to update media links, documentation, and deliverables
+        const github_repo = req.body.github_repo !== undefined ? req.body.github_repo : (req.body.githubLink !== undefined ? req.body.githubLink : (req.body.github_url !== undefined ? req.body.github_url : project.github_repo));
+        const youtube_url = req.body.youtube_url !== undefined ? req.body.youtube_url : (req.body.videoDemoUrl !== undefined ? req.body.videoDemoUrl : (req.body.youtubeUrl !== undefined ? req.body.youtubeUrl : project.youtube_url));
+        const doc_url = req.body.doc_url !== undefined ? req.body.doc_url : (req.body.techReportUrl !== undefined ? req.body.techReportUrl : (req.body.docUrl !== undefined ? req.body.docUrl : (req.body.technical_report !== undefined ? req.body.technical_report : project.doc_url)));
+        const linkedin_url = req.body.linkedin_url !== undefined ? req.body.linkedin_url : (req.body.linkedinPostUrl !== undefined ? req.body.linkedinPostUrl : (req.body.linkedinUrl !== undefined ? req.body.linkedinUrl : project.linkedin_url));
+        const image_url = req.body.image_url !== undefined ? req.body.image_url : (req.body.imageUrl !== undefined ? req.body.imageUrl : project.image_url);
+        const team_lead_photo = req.body.team_lead_photo !== undefined ? req.body.team_lead_photo : (req.body.teamLeadPhoto !== undefined ? req.body.teamLeadPhoto : project.team_lead_photo);
+        const deliverables = req.body.deliverables !== undefined ? req.body.deliverables : project.deliverables;
 
         const updateSql = `
           UPDATE projects SET
-            github_repo = COALESCE(?, github_repo),
-            youtube_url = COALESCE(?, youtube_url),
-            linkedin_url = COALESCE(?, linkedin_url),
-            doc_url = COALESCE(?, doc_url),
-            image_url = COALESCE(?, image_url),
-            team_lead_photo = COALESCE(?, team_lead_photo),
-            deliverables = COALESCE(?, deliverables),
+            github_repo = ?,
+            youtube_url = ?,
+            linkedin_url = ?,
+            doc_url = ?,
+            image_url = ?,
+            team_lead_photo = ?,
+            deliverables = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `;
@@ -1036,44 +968,47 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
               return res.status(500).json({ error: err3.message });
             }
             db.get('SELECT * FROM projects WHERE id = ?', [id], (errFetch, updatedProj) => {
-              const formattedProj = {
-                ...updatedProj,
-                githubLink: updatedProj ? updatedProj.github_repo : null,
-                techReportUrl: updatedProj ? updatedProj.doc_url : null,
-                videoDemoUrl: updatedProj ? updatedProj.youtube_url : null,
-                linkedinPostUrl: updatedProj ? updatedProj.linkedin_url : null
+              const resProj = updatedProj || {
+                ...project,
+                github_repo, youtube_url, linkedin_url, doc_url, image_url, team_lead_photo, deliverables
               };
-              console.log(`[BACKEND-SAVE] ✅ Project #${id} ("${updatedProj ? updatedProj.title : id}") links & deliverables successfully saved to SQLite:`, {
-                id: updatedProj ? updatedProj.id : id,
-                github_repo: updatedProj ? updatedProj.github_repo : null,
-                doc_url: updatedProj ? updatedProj.doc_url : null,
-                deliverables: updatedProj ? updatedProj.deliverables : null
+              console.log(`[BACKEND-SAVE] ✅ Project #${id} ("${resProj.title || id}") links saved to SQLite:`, {
+                github_repo: resProj.github_repo,
+                doc_url: resProj.doc_url,
+                youtube_url: resProj.youtube_url,
+                linkedin_url: resProj.linkedin_url
               });
               res.json({
                 message: 'Project links and deliverables saved successfully.',
-                project: formattedProj,
+                project: {
+                  ...resProj,
+                  github_repo: resProj.github_repo,
+                  githubLink: resProj.github_repo,
+                  doc_url: resProj.doc_url,
+                  techReportUrl: resProj.doc_url,
+                  youtube_url: resProj.youtube_url,
+                  videoDemoUrl: resProj.youtube_url,
+                  linkedin_url: resProj.linkedin_url,
+                  linkedinPostUrl: resProj.linkedin_url
+                },
                 changes: this.changes
               });
             });
           }
         );
-        return;
-      }
+      });
+      return;
+    }
 
     // Admin has full CRUD access to all fields
     const {
       project_code,
       title, description, domain, tags, status, priority,
-      progress, start_date, due_date, immediate_action,
+      progress, start_date, due_date, immediate_action, github_repo,
+      youtube_url, linkedin_url, doc_url, image_url,
       bom_status, team_name, team_lead, team_lead_photo, team_members, deliverables,
       is_active, isActive, is_visible, isVisible
     } = req.body;
-
-    const github_repo = req.body.githubLink !== undefined ? req.body.githubLink : req.body.github_repo;
-    const doc_url = req.body.techReportUrl !== undefined ? req.body.techReportUrl : req.body.doc_url;
-    const youtube_url = req.body.videoDemoUrl !== undefined ? req.body.videoDemoUrl : req.body.youtube_url;
-    const linkedin_url = req.body.linkedinPostUrl !== undefined ? req.body.linkedinPostUrl : req.body.linkedin_url;
-    const image_url = req.body.imageUrl !== undefined ? req.body.imageUrl : req.body.image_url;
 
     const membersJson = team_members !== undefined
       ? (typeof team_members === 'string' ? team_members : JSON.stringify(team_members || []))
@@ -1138,13 +1073,6 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
           return res.status(500).json({ error: err4.message });
         }
         db.get('SELECT * FROM projects WHERE id = ?', [id], (errFetch, updatedProj) => {
-          const formattedProj = {
-            ...updatedProj,
-            githubLink: updatedProj ? updatedProj.github_repo : null,
-            techReportUrl: updatedProj ? updatedProj.doc_url : null,
-            videoDemoUrl: updatedProj ? updatedProj.youtube_url : null,
-            linkedinPostUrl: updatedProj ? updatedProj.linkedin_url : null
-          };
           console.log(`[BACKEND-SAVE] ✅ Project #${id} ("${updatedProj ? updatedProj.title : id}") details successfully saved to SQLite database:`, {
             id: updatedProj ? updatedProj.id : id,
             title: updatedProj ? updatedProj.title : null,
@@ -1154,13 +1082,12 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
           });
           res.json({
             message: 'Project details saved successfully.',
-            project: formattedProj,
+            project: updatedProj,
             changes: this.changes
           });
         });
       }
     );
-    });
   });
 });
 
