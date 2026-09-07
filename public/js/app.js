@@ -217,46 +217,6 @@ function isUserPublic() {
   return !state.currentUser || isUserViewer();
 }
 
-function canUserEditProject(project) {
-  if (!project || !state.currentUser) return false;
-  if (isUserAdmin()) return true;
-  if (isUserViewer() || isUserPublic()) return false;
-
-  if (isUserStudent()) {
-    const rawUserName = (state.currentUser.name || '').toLowerCase();
-    const userName = rawUserName.replace(/\s*\(student\)\s*/gi, '').trim();
-    const userEmail = (state.currentUser.email || '').toLowerCase();
-
-    const isLead = project.team_lead && (
-      project.team_lead.toLowerCase().includes(userName) ||
-      userName.includes(project.team_lead.toLowerCase()) ||
-      project.team_lead.toLowerCase().includes(userEmail)
-    );
-
-    const membersStr = typeof project.team_members === 'string'
-      ? project.team_members.toLowerCase()
-      : JSON.stringify(project.team_members || []).toLowerCase();
-
-    const isMember = membersStr.includes(userEmail) || (userName && membersStr.includes(userName));
-
-    const studentRecord = (state.students || []).find(s =>
-      s.user_id === state.currentUser?.id ||
-      (s.email && s.email.toLowerCase() === userEmail) ||
-      (s.name && s.name.toLowerCase().includes(userName))
-    );
-
-    const isAssigned = studentRecord && (
-      studentRecord.assigned_project === project.project_code ||
-      studentRecord.project_title === project.title ||
-      (studentRecord.assigned_project && project.title && project.title.toLowerCase().includes(studentRecord.assigned_project.toLowerCase()))
-    );
-
-    return Boolean(isLead || isMember || isAssigned);
-  }
-
-  return false;
-}
-
 async function checkSessionOrRedirect() {
   const token = getSessionToken();
   if (!token) {
@@ -2469,29 +2429,45 @@ function renderStudents() {
                 <a href="${githubLink}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github" style="font-size:11px; padding:4px 10px;">
                   🐙 GitHub Codebase
                 </a>
+              ` : (matchedProject && (isAdmin || isUserStudent()) ? `
+                <button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p=>p.id===${matchedProject.id}), 'form-github')" style="font-size:11px; padding:4px 10px;">
+                  ➕ Add GitHub
+                </button>
               ` : `
                 <span class="btn-media btn-media-disabled" style="opacity:0.5; font-size:11px; padding:4px 10px;">🐙 No GitHub Link</span>
-              `}
+              `)}
 
               ${reportLink ? `
                 <a href="${reportLink}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc" style="font-size:11px; padding:4px 10px;">
                   📄 Technical Report
                 </a>
+              ` : (matchedProject && (isAdmin || isUserStudent()) ? `
+                <button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p=>p.id===${matchedProject.id}), 'form-doc-url')" style="font-size:11px; padding:4px 10px;">
+                  📄 Add Report
+                </button>
               ` : `
                 <span class="btn-media btn-media-disabled" style="opacity:0.5; font-size:11px; padding:4px 10px;">📄 No Report Uploaded</span>
-              `}
+              `)}
 
               ${videoLink ? `
                 <a href="${videoLink}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube" style="font-size:11px; padding:4px 10px;">
                   🎥 Video Demo
                 </a>
-              ` : ''}
+              ` : (matchedProject && (isAdmin || isUserStudent()) ? `
+                <button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p=>p.id===${matchedProject.id}), 'form-youtube')" style="font-size:11px; padding:4px 10px;">
+                  🎥 Add Video
+                </button>
+              ` : '')}
 
               ${linkedinLink ? `
                 <a href="${linkedinLink}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin" style="font-size:11px; padding:4px 10px;">
                   💼 LinkedIn Showcase
                 </a>
-              ` : ''}
+              ` : (matchedProject && (isAdmin || isUserStudent()) ? `
+                <button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p=>p.id===${matchedProject.id}), 'form-linkedin')" style="font-size:11px; padding:4px 10px;">
+                  💼 Add LinkedIn
+                </button>
+              ` : '')}
             </div>
           </div>
 
@@ -2754,29 +2730,90 @@ async function deleteCalendarActivity(studentId, activityId) {
 }
 
 function openStudentEditModal(studentId) {
-  if (!isUserAdmin()) {
-    showToast('Only Admins can edit student profiles', 'error');
+  const isAdmin = isUserAdmin();
+  const isStudent = isUserStudent();
+  if (!isAdmin && !isStudent) {
+    showToast('Only Admins and Students can edit profiles', 'error');
     return;
   }
   const s = state.students.find(st => Number(st.id) === Number(studentId));
   if (!s) return;
 
+  const userEmail = (state.currentUser && state.currentUser.email || '').toLowerCase();
+  const isSelf = (state.currentUser?.student_id && Number(state.currentUser.student_id) === Number(s.id)) ||
+                 (s.user_id && Number(s.user_id) === Number(state.currentUser?.id)) ||
+                 (s.email && s.email.toLowerCase() === userEmail);
+
+  if (!isAdmin && !isSelf) {
+    showToast('You can only edit your own student profile', 'error');
+    return;
+  }
+
   document.getElementById('edit-student-id').value = s.id;
-  document.getElementById('edit-student-name').value = s.name || '';
-  document.getElementById('edit-student-roll').value = s.roll_no || '';
+  
+  const nameEl = document.getElementById('edit-student-name');
+  if (nameEl) {
+    nameEl.value = s.name || '';
+    nameEl.disabled = !isAdmin;
+  }
+
+  const rollEl = document.getElementById('edit-student-roll');
+  if (rollEl) {
+    rollEl.value = s.roll_no || '';
+    rollEl.disabled = !isAdmin;
+  }
+
   document.getElementById('edit-student-email').value = s.email || '';
   document.getElementById('edit-student-phone').value = s.phone || '';
-  document.getElementById('edit-student-dept').value = s.department || '';
-  document.getElementById('edit-student-year').value = s.year || '';
-  document.getElementById('edit-student-section').value = s.section || '';
-  document.getElementById('edit-student-college').value = s.college || 'Indra Ganesan College of Engineering';
-  document.getElementById('edit-student-role').value = s.role || '';
+  
+  const deptEl = document.getElementById('edit-student-dept');
+  if (deptEl) {
+    deptEl.value = s.department || '';
+    deptEl.disabled = !isAdmin;
+  }
+
+  const yearEl = document.getElementById('edit-student-year');
+  if (yearEl) {
+    yearEl.value = s.year || '';
+    yearEl.disabled = !isAdmin;
+  }
+
+  const secEl = document.getElementById('edit-student-section');
+  if (secEl) {
+    secEl.value = s.section || '';
+    secEl.disabled = !isAdmin;
+  }
+
+  const colEl = document.getElementById('edit-student-college');
+  if (colEl) {
+    colEl.value = s.college || 'Indra Ganesan College of Engineering';
+    colEl.disabled = !isAdmin;
+  }
+
+  const roleEl = document.getElementById('edit-student-role');
+  if (roleEl) {
+    roleEl.value = s.role || '';
+    roleEl.disabled = !isAdmin;
+  }
+
   document.getElementById('edit-student-photo').value = s.photo_url || '';
-  document.getElementById('edit-student-status').value = s.status || 'Active';
+  
+  const statusEl = document.getElementById('edit-student-status');
+  if (statusEl) {
+    statusEl.value = s.status || 'Active';
+    statusEl.disabled = !isAdmin;
+  }
+
   document.getElementById('edit-student-skills').value = s.skills || '';
   document.getElementById('edit-student-github').value = s.github_url || '';
   document.getElementById('edit-student-linkedin').value = s.linkedin_url || '';
-  document.getElementById('edit-student-team').value = s.assigned_project || '';
+  
+  const teamEl = document.getElementById('edit-student-team');
+  if (teamEl) {
+    teamEl.value = s.assigned_project || '';
+    teamEl.disabled = !isAdmin;
+  }
+
   document.getElementById('edit-student-bio').value = s.bio || '';
 
   openModal(document.getElementById('student-edit-modal'));
@@ -2784,8 +2821,10 @@ function openStudentEditModal(studentId) {
 
 async function handleStudentEditFormSubmit(e) {
   e.preventDefault();
-  if (!isUserAdmin()) {
-    showToast('Only Admins can edit student profiles', 'error');
+  const isAdmin = isUserAdmin();
+  const isStudent = isUserStudent();
+  if (!isAdmin && !isStudent) {
+    showToast('Access restricted', 'error');
     return;
   }
 
@@ -2793,7 +2832,7 @@ async function handleStudentEditFormSubmit(e) {
   const name = document.getElementById('edit-student-name').value.trim();
   const roll_no = document.getElementById('edit-student-roll').value.trim();
 
-  if (!name || !roll_no) {
+  if (isAdmin && (!name || !roll_no)) {
     showToast('Student Name and Register Number are required', 'error');
     return;
   }
@@ -3050,281 +3089,60 @@ async function openProjectDetail(projectId) {
     // BOM Status
     document.getElementById('detail-bom-status').textContent = project.bom_status || 'Not Required';
 
-    // Media Buttons (GitHub, Technical Report, Video Demo, LinkedIn) & Inline Edit Controls
+    // Media Buttons (GitHub, Technical Report, Video Demo, LinkedIn)
     const mediaBar = document.getElementById('detail-media-bar');
-    const btnEditLinks = document.getElementById('btn-edit-project-links');
-    const linksEditForm = document.getElementById('detail-links-edit-form');
-    const btnCancelLinks = document.getElementById('btn-cancel-project-links');
-    const btnSaveLinks = document.getElementById('btn-save-project-links');
+    const mediaList = [];
+    const gh = (project.github_repo || project.githubLink || project.github_url || '').trim();
+    const doc = (project.doc_url || project.techReportUrl || project.technical_report || project.docUrl || '').trim();
+    const yt = (project.youtube_url || project.videoDemoUrl || project.youtubeUrl || '').trim();
+    const li = (project.linkedin_url || project.linkedinPostUrl || project.linkedin || project.linkedinUrl || '').trim();
+    const isViewer = isUserViewer();
+    const isAdmin = isUserAdmin();
+    const isStudent = isUserStudent();
+    const isPublic = isUserPublic();
+    const canEditLinks = isAdmin || isStudent;
 
-    const inputGh = document.getElementById('link-edit-github');
-    const inputDoc = document.getElementById('link-edit-doc');
-    const inputYt = document.getElementById('link-edit-youtube');
-    const inputLi = document.getElementById('link-edit-linkedin');
-
-    const errGh = document.getElementById('error-link-edit-github');
-    const errDoc = document.getElementById('error-link-edit-doc');
-    const errYt = document.getElementById('error-link-edit-youtube');
-    const errLi = document.getElementById('error-link-edit-linkedin');
-
-    function renderMediaButtons(p) {
-      const mediaList = [];
-      const gh = (p.github_repo || p.githubLink || p.github_url || '').trim();
-      const doc = (p.doc_url || p.techReportUrl || p.technical_report || p.docUrl || '').trim();
-      const yt = (p.youtube_url || p.videoDemoUrl || p.youtubeUrl || '').trim();
-      const li = (p.linkedin_url || p.linkedinPostUrl || p.linkedin || p.linkedinUrl || '').trim();
-
-      if (gh) {
-        mediaList.push(`<a href="${gh}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github" title="${escapeHTML(gh)}">🐙 GitHub Repo</a>`);
-      } else {
-        mediaList.push(`<span class="btn-media btn-media-disabled" title="No GitHub repository link added yet">🐙 Not added yet</span>`);
-      }
-
-      if (doc) {
-        mediaList.push(`<a href="${doc}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc" title="${escapeHTML(doc)}">📄 View Technical Report</a>`);
-      } else {
-        mediaList.push(`<span class="btn-media btn-media-disabled" title="No technical report link added yet">📄 Not added yet</span>`);
-      }
-
-      if (yt) {
-        mediaList.push(`<a href="${yt}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube" title="${escapeHTML(yt)}">🎥 Video Demo</a>`);
-      } else {
-        mediaList.push(`<span class="btn-media btn-media-disabled" title="No video demo link added yet">🎥 Not added yet</span>`);
-      }
-
-      if (li) {
-        mediaList.push(`<a href="${li}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin" title="${escapeHTML(li)}">💼 LinkedIn Post</a>`);
-      } else {
-        mediaList.push(`<span class="btn-media btn-media-disabled" title="No LinkedIn post link added yet">💼 Not added yet</span>`);
-      }
-
-      if (mediaBar) mediaBar.innerHTML = mediaList.join('');
+    if (gh) {
+      mediaList.push(`<a href="${gh}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github" title="${escapeHTML(gh)}">🐙 GitHub Repo</a>`);
+    } else if (canEditLinks) {
+      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-github')" title="Add your GitHub repository link">➕ Add GitHub Repo</button>`);
+    } else {
+      mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.5; cursor: default;" title="No GitHub repository link added">🐙 No GitHub Link</span>`);
     }
 
-    renderMediaButtons(project);
-
-    // Permission check for Edit Links button
-    const canEditLinks = canUserEditProject(project);
-    if (btnEditLinks) {
-      btnEditLinks.style.display = canEditLinks ? 'inline-flex' : 'none';
+    if (doc) {
+      mediaList.push(`<a href="${doc}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc" title="${escapeHTML(doc)}">📄 View Technical Report</a>`);
+    } else if (canEditLinks) {
+      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-doc-url')" title="Add your Technical Report Google Drive / Doc link">📄 Add Technical Report</button>`);
+    } else {
+      mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.5; cursor: default;" title="No technical report link added yet">📄 No report uploaded yet</span>`);
     }
 
-    // Always reset to read-only view on modal open
-    if (linksEditForm) linksEditForm.style.display = 'none';
-    if (mediaBar) mediaBar.style.display = 'flex';
+    if (yt) {
+      mediaList.push(`<a href="${yt}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube" title="${escapeHTML(yt)}">🎥 Video Demo</a>`);
+    } else if (canEditLinks) {
+      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-youtube')" title="Add YouTube demo video link">🎥 Add Video Demo</button>`);
+    }
 
-    if (canEditLinks && btnEditLinks && linksEditForm) {
-      let initialGh = (project.github_repo || project.githubLink || project.github_url || '').trim();
-      let initialDoc = (project.doc_url || project.techReportUrl || project.technical_report || project.docUrl || '').trim();
-      let initialYt = (project.youtube_url || project.videoDemoUrl || project.youtubeUrl || '').trim();
-      let initialLi = (project.linkedin_url || project.linkedinPostUrl || project.linkedin || project.linkedinUrl || '').trim();
+    if (li) {
+      mediaList.push(`<a href="${li}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin" title="${escapeHTML(li)}">💼 LinkedIn Post</a>`);
+    } else if (canEditLinks) {
+      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-linkedin')" title="Add LinkedIn showcase post link">💼 Add LinkedIn Post</button>`);
+    }
+    mediaBar.innerHTML = mediaList.join('');
 
-      function resetFormErrors() {
-        [errGh, errDoc, errYt, errLi].forEach(errEl => {
-          if (errEl) {
-            errEl.textContent = '';
-            errEl.style.display = 'none';
-          }
-        });
-        [inputGh, inputDoc, inputYt, inputLi].forEach(inp => {
-          if (inp) inp.classList.remove('input-invalid');
-        });
-      }
-
-      function checkDirty() {
-        const curGh = inputGh ? inputGh.value.trim() : '';
-        const curDoc = inputDoc ? inputDoc.value.trim() : '';
-        const curYt = inputYt ? inputYt.value.trim() : '';
-        const curLi = inputLi ? inputLi.value.trim() : '';
-
-        const isDirty = (curGh !== initialGh) || (curDoc !== initialDoc) || (curYt !== initialYt) || (curLi !== initialLi);
-        if (btnSaveLinks) {
-          btnSaveLinks.disabled = !isDirty;
-        }
-        return isDirty;
-      }
-
-      btnEditLinks.onclick = () => {
-        initialGh = (project.github_repo || project.githubLink || project.github_url || '').trim();
-        initialDoc = (project.doc_url || project.techReportUrl || project.technical_report || project.docUrl || '').trim();
-        initialYt = (project.youtube_url || project.videoDemoUrl || project.youtubeUrl || '').trim();
-        initialLi = (project.linkedin_url || project.linkedinPostUrl || project.linkedin || project.linkedinUrl || '').trim();
-
-        if (inputGh) inputGh.value = initialGh;
-        if (inputDoc) inputDoc.value = initialDoc;
-        if (inputYt) inputYt.value = initialYt;
-        if (inputLi) inputLi.value = initialLi;
-
-        resetFormErrors();
-        checkDirty();
-
-        mediaBar.style.display = 'none';
-        btnEditLinks.style.display = 'none';
-        linksEditForm.style.display = 'block';
-        if (inputGh) inputGh.focus();
-      };
-
-      if (btnCancelLinks) {
-        btnCancelLinks.onclick = () => {
-          resetFormErrors();
-          linksEditForm.style.display = 'none';
-          mediaBar.style.display = 'flex';
-          btnEditLinks.style.display = 'inline-flex';
+    const manageLinksBtn = document.getElementById('btn-media-manage-links');
+    if (manageLinksBtn) {
+      if (canEditLinks) {
+        manageLinksBtn.style.display = 'inline-flex';
+        manageLinksBtn.onclick = (e) => {
+          e.stopPropagation();
+          closeModal(DOM.detailModal);
+          openProjectModalForEdit(project);
         };
+      } else {
+        manageLinksBtn.style.display = 'none';
       }
-
-      [inputGh, inputDoc, inputYt, inputLi].forEach(inp => {
-        if (inp) {
-          inp.oninput = () => {
-            checkDirty();
-            inp.classList.remove('input-invalid');
-            const errEl = document.getElementById(`error-${inp.id}`);
-            if (errEl) {
-              errEl.textContent = '';
-              errEl.style.display = 'none';
-            }
-          };
-          inp.onkeydown = (e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              if (checkDirty()) {
-                linksEditForm.dispatchEvent(new Event('submit'));
-              }
-            }
-          };
-        }
-      });
-
-      linksEditForm.onsubmit = async (e) => {
-        e.preventDefault();
-        resetFormErrors();
-
-        const valGh = inputGh ? inputGh.value.trim() : '';
-        const valDoc = inputDoc ? inputDoc.value.trim() : '';
-        const valYt = inputYt ? inputYt.value.trim() : '';
-        const valLi = inputLi ? inputLi.value.trim() : '';
-
-        let hasError = false;
-
-        // Validation 1: GitHub Repo -> must contain "github.com" (if filled)
-        if (valGh && !valGh.toLowerCase().includes('github.com')) {
-          if (errGh) {
-            errGh.textContent = 'Must contain "github.com"';
-            errGh.style.display = 'block';
-          }
-          if (inputGh) inputGh.classList.add('input-invalid');
-          hasError = true;
-        }
-
-        // Validation 2: Technical Report -> must contain "drive.google.com" or "docs.google.com" (if filled)
-        if (valDoc && !valDoc.toLowerCase().includes('drive.google.com') && !valDoc.toLowerCase().includes('docs.google.com')) {
-          if (errDoc) {
-            errDoc.textContent = 'Must contain "drive.google.com" or "docs.google.com"';
-            errDoc.style.display = 'block';
-          }
-          if (inputDoc) inputDoc.classList.add('input-invalid');
-          hasError = true;
-        }
-
-        // Validation 3: Video Demo -> valid URL (if filled)
-        if (valYt && !/^https?:\/\/.+/i.test(valYt)) {
-          if (errYt) {
-            errYt.textContent = 'Must be a valid URL (starting with http:// or https://)';
-            errYt.style.display = 'block';
-          }
-          if (inputYt) inputYt.classList.add('input-invalid');
-          hasError = true;
-        }
-
-        // Validation 4: LinkedIn Post -> must contain "linkedin.com" (if filled)
-        if (valLi && !valLi.toLowerCase().includes('linkedin.com')) {
-          if (errLi) {
-            errLi.textContent = 'Must contain "linkedin.com"';
-            errLi.style.display = 'block';
-          }
-          if (inputLi) inputLi.classList.add('input-invalid');
-          hasError = true;
-        }
-
-        if (hasError) {
-          showToast('Please correct the highlighted link errors.', 'warning');
-          return;
-        }
-
-        if (btnSaveLinks) {
-          btnSaveLinks.disabled = true;
-          btnSaveLinks.textContent = 'Saving...';
-        }
-
-        try {
-          const payload = {
-            github_repo: valGh,
-            githubLink: valGh,
-            doc_url: valDoc,
-            techReportUrl: valDoc,
-            youtube_url: valYt,
-            videoDemoUrl: valYt,
-            linkedin_url: valLi,
-            linkedinPostUrl: valLi
-          };
-
-          const res = await authFetch(`/api/projects/${project.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-
-          const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data.error || 'Failed to save project links.');
-          }
-
-          // Update local project in state
-          project.github_repo = valGh;
-          project.githubLink = valGh;
-          project.doc_url = valDoc;
-          project.techReportUrl = valDoc;
-          project.youtube_url = valYt;
-          project.videoDemoUrl = valYt;
-          project.linkedin_url = valLi;
-          project.linkedinPostUrl = valLi;
-
-          const stateProj = (state.projects || []).find(p => p.id === project.id);
-          if (stateProj) {
-            Object.assign(stateProj, {
-              github_repo: valGh,
-              githubLink: valGh,
-              doc_url: valDoc,
-              techReportUrl: valDoc,
-              youtube_url: valYt,
-              videoDemoUrl: valYt,
-              linkedin_url: valLi,
-              linkedinPostUrl: valLi
-            });
-          }
-
-          showToast('Project links updated successfully.', 'success');
-
-          // Switch back to read-only button view immediately with updated links
-          renderMediaButtons(project);
-          linksEditForm.style.display = 'none';
-          mediaBar.style.display = 'flex';
-          btnEditLinks.style.display = 'inline-flex';
-
-          // Re-render open views so cards update
-          if (typeof renderView === 'function') {
-            renderView();
-          }
-        } catch (err) {
-          console.error('[LINKS-EDIT] Save failed:', err);
-          showToast(err.message || 'Failed to save links.', 'error');
-        } finally {
-          if (btnSaveLinks) {
-            btnSaveLinks.disabled = false;
-            btnSaveLinks.textContent = 'Save Links';
-          }
-        }
-      };
     }
 
     // Deliverables
@@ -3346,35 +3164,42 @@ async function openProjectDetail(projectId) {
       bomWrapper.innerHTML = `
         <table class="data-table">
           <thead>
-            <tr><th>Component</th><th>Part #</th><th>Qty</th><th>Total</th><th>Status</th></tr>
+            <tr>
+              <th>Part Name</th>
+              <th>Quantity</th>
+              <th>Est. Unit Cost (₹)</th>
+              <th>Total Cost (₹)</th>
+              <th>Status</th>
+            </tr>
           </thead>
           <tbody>
             ${project.boms.map(b => `
               <tr>
                 <td><strong>${escapeHTML(b.item_name)}</strong></td>
-                <td><code>${b.part_number || '-'}</code></td>
-                <td>${b.quantity}</td>
-                <td style="color:#34d399;">₹${Number(b.total_price).toLocaleString('en-IN')}</td>
-                <td><span class="badge ${b.status === 'Approved' ? 'badge-normal' : 'badge-date'}">${b.status}</span></td>
+                <td>${b.quantity || 1}</td>
+                <td>₹${Number(b.estimated_cost || 0).toLocaleString()}</td>
+                <td>₹${((b.quantity || 1) * Number(b.estimated_cost || 0)).toLocaleString()}</td>
+                <td><span class="badge ${b.status === 'Approved' ? 'badge-approved' : (b.status === 'Pending' ? 'badge-pending' : 'badge-rejected')}">${b.status || 'Pending'}</span></td>
               </tr>
             `).join('')}
           </tbody>
         </table>
       `;
     } else {
-      bomWrapper.innerHTML = '<div style="font-size:12px; color:var(--text-dim);">No BOM requisitions submitted for this project.</div>';
+      bomWrapper.innerHTML = `
+        <div style="font-size: 13px; color: var(--text-dim); text-align: center; padding: 12px 0;">
+          No BOM items logged for this project yet.
+        </div>
+      `;
     }
 
-    // Fetch & render Project-Specific Timeline Gantt Chart
-    if (isUserViewer()) {
-      state.activeProjectTasks = [];
-    } else {
+    // Render Project Tasks in Timeline Section
+    state.activeProjectTasks = [];
+    if (!isViewer && !isPublic) {
       try {
-        const tasksRes = await authFetch(`/api/projects/${projectId}/tasks`);
+        const tasksRes = await authFetch(`/api/projects/${project.id}/tasks`);
         if (tasksRes.ok) {
           state.activeProjectTasks = await tasksRes.json();
-        } else {
-          state.activeProjectTasks = [];
         }
       } catch(e) {
         state.activeProjectTasks = [];
@@ -3385,10 +3210,6 @@ async function openProjectDetail(projectId) {
     renderProjectComments(project.activities || []);
 
     // Role-based visibility for Action Buttons (Edit Project, Delete Project, Quick Add BOM, Add Task)
-    const isViewer = isUserViewer();
-    const isAdmin = isUserAdmin();
-    const isStudent = isUserStudent();
-    const isPublic = isUserPublic();
     const addTaskBtn = document.getElementById('btn-add-project-task');
 
     // Hide internal blocker / immediate action box for viewers
@@ -3415,29 +3236,13 @@ async function openProjectDetail(projectId) {
       if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'inline-flex';
       if (addTaskBtn) addTaskBtn.style.display = 'inline-flex';
     } else if (isStudent) {
-      const userName = (state.currentUser && state.currentUser.name || '').toLowerCase();
-      const userEmail = (state.currentUser && state.currentUser.email || '').toLowerCase();
-      const isLead = project.team_lead && userName && project.team_lead.toLowerCase().includes(userName);
-      const isMember = project.team_members && (
-        (Array.isArray(project.team_members) && project.team_members.some(m => JSON.stringify(m).toLowerCase().includes(userEmail) || JSON.stringify(m).toLowerCase().includes(userName))) ||
-        (typeof project.team_members === 'string' && (project.team_members.toLowerCase().includes(userEmail) || project.team_members.toLowerCase().includes(userName)))
-      );
-      const isOwner = isLead || isMember;
-
-      if (isOwner) {
-        if (DOM.btnEditCurrentProject) {
-          DOM.btnEditCurrentProject.style.display = 'inline-flex';
-          DOM.btnEditCurrentProject.innerHTML = '✏️ Edit Links & Deliverables';
-        }
-        if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'none';
-        if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'inline-flex';
-        if (addTaskBtn) addTaskBtn.style.display = 'inline-flex';
-      } else {
-        if (DOM.btnEditCurrentProject) DOM.btnEditCurrentProject.style.display = 'none';
-        if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'none';
-        if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'none';
-        if (addTaskBtn) addTaskBtn.style.display = 'none';
+      if (DOM.btnEditCurrentProject) {
+        DOM.btnEditCurrentProject.style.display = 'inline-flex';
+        DOM.btnEditCurrentProject.innerHTML = '✏️ Edit Links & Deliverables';
       }
+      if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'none';
+      if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'inline-flex';
+      if (addTaskBtn) addTaskBtn.style.display = 'none';
     }
 
     openModal(DOM.detailModal);
@@ -3686,6 +3491,9 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
     showToast('Access denied: Public Showcase Viewers have read-only permissions.', 'error');
     return;
   }
+  const studentHintEl = document.getElementById('student-edit-hint');
+  if (studentHintEl) studentHintEl.style.display = 'none';
+
   DOM.modalProjectTitle.textContent = '🚀 Create Innovation Project / Task';
   DOM.projectForm.reset();
   document.getElementById('form-project-id').value = '';
@@ -3708,7 +3516,8 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   openModal(DOM.projectModal);
 }
 
-function openProjectModalForEdit(project) {
+function openProjectModalForEdit(project, focusField = null) {
+  if (!project) return;
   if (isUserViewer() || isUserPublic()) {
     showToast('Access denied: Public Showcase Viewers have read-only permissions.', 'error');
     return;
@@ -3716,6 +3525,15 @@ function openProjectModalForEdit(project) {
 
   const isAdmin = isUserAdmin();
   const isStudent = isUserStudent();
+
+  if (DOM.detailModal && DOM.detailModal.classList.contains('active')) {
+    closeModal(DOM.detailModal);
+  }
+
+  const studentHintEl = document.getElementById('student-edit-hint');
+  if (studentHintEl) {
+    studentHintEl.style.display = (isStudent && !isAdmin) ? 'flex' : 'none';
+  }
 
   if (isStudent) {
     const rawUserName = (state.currentUser && state.currentUser.name || '').toLowerCase();
@@ -3877,6 +3695,18 @@ function openProjectModalForEdit(project) {
   updateLinkPreviewIcon('preview-linkedin', liVal);
 
   openModal(DOM.projectModal);
+
+  if (focusField) {
+    setTimeout(() => {
+      const fieldEl = document.getElementById(focusField);
+      if (fieldEl) {
+        fieldEl.focus();
+        fieldEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        fieldEl.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.6)';
+        setTimeout(() => { fieldEl.style.boxShadow = ''; }, 2000);
+      }
+    }, 200);
+  }
 }
 
 async function handleProjectFormSubmit(e) {

@@ -829,6 +829,10 @@
       <form id="project-form" novalidate>
         <input type="hidden" id="form-project-id">
         <div class="modal-body">
+          <div id="student-edit-hint" style="display:none; background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.3); border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:12px; color:#93c5fd; display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">🎓</span>
+            <div><strong>Student Edit Access:</strong> You can add and update your project's GitHub Repository, Technical Report (Drive/PDF), Video Demo, LinkedIn Post, and Deliverables.</div>
+          </div>
           <div class="form-row">
             <div class="form-group col-4">
               <label for="form-code">Project ID Code *</label>
@@ -1026,51 +1030,17 @@
             </div>
           </div>
 
-          <!-- Project Links & Deliverables Section -->
-          <div class="detail-links-section" id="detail-links-section" style="margin-bottom: 1.5rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 16px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-              <span class="meta-label" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+          <!-- Media Links Quick Bar -->
+          <div class="detail-section" style="margin: 14px 0 16px 0; padding: 12px 14px; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-color); border-radius: 8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <span style="font-size:12px; font-weight:700; color:var(--text-main); text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
                 🔗 Project Links & Resources
               </span>
-              <button type="button" class="btn btn-secondary admin-only-date-btn" id="btn-edit-project-links" title="Edit Project Links" style="display:none; padding: 2px 10px; font-size: 11px; height: 26px; align-items: center; gap: 4px;">
-                ✏️ Edit
-              </button>
+              <button type="button" id="btn-media-manage-links" class="btn btn-sm btn-secondary" style="font-size:11px; padding:3px 10px; display:none;">✏️ Edit Links</button>
             </div>
-
-            <!-- Read-only Button Row View -->
-            <div class="detail-media-bar" id="detail-media-bar" style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <div class="detail-media-bar" id="detail-media-bar" style="display:flex; flex-wrap:wrap; gap:8px;">
               <!-- Rendered dynamically -->
             </div>
-
-            <!-- Inline Edit Form (Hidden by default) -->
-            <form id="detail-links-edit-form" style="display: none; margin-top: 10px;" novalidate>
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px;">
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="link-edit-github" style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block;">🐙 GitHub Repository Link</label>
-                  <input type="url" id="link-edit-github" class="form-input" placeholder="https://github.com/org/repo" style="font-size: 12px; padding: 6px 10px; width: 100%;" />
-                  <small id="error-link-edit-github" class="field-error" style="display: none;"></small>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="link-edit-doc" style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block;">📄 Technical Report (Google Drive Link)</label>
-                  <input type="url" id="link-edit-doc" class="form-input" placeholder="https://drive.google.com/file/d/..." style="font-size: 12px; padding: 6px 10px; width: 100%;" />
-                  <small id="error-link-edit-doc" class="field-error" style="display: none;"></small>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="link-edit-youtube" style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block;">🎥 Video Demo Link</label>
-                  <input type="url" id="link-edit-youtube" class="form-input" placeholder="https://youtube.com/watch?v=..." style="font-size: 12px; padding: 6px 10px; width: 100%;" />
-                  <small id="error-link-edit-youtube" class="field-error" style="display: none;"></small>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="link-edit-linkedin" style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block;">💼 LinkedIn Post Link</label>
-                  <input type="url" id="link-edit-linkedin" class="form-input" placeholder="https://linkedin.com/posts/..." style="font-size: 12px; padding: 6px 10px; width: 100%;" />
-                  <small id="error-link-edit-linkedin" class="field-error" style="display: none;"></small>
-                </div>
-              </div>
-              <div style="display: flex; justify-content: flex-end; gap: 8px; align-items: center; border-top: 1px solid var(--border-color); padding-top: 10px;">
-                <button type="button" id="btn-cancel-project-links" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;">Cancel</button>
-                <button type="submit" id="btn-save-project-links" class="btn btn-primary" style="padding: 4px 16px; font-size: 12px;" disabled>Save Links</button>
-              </div>
-            </form>
           </div>
 
           <!-- Metadata Grid -->
