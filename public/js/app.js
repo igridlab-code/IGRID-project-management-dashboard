@@ -40,7 +40,8 @@ const state = {
   },
   studentViewMode: 'cards',
   expandedStudentCards: new Set(),
-  togglingProjects: new Set()
+  togglingProjects: new Set(),
+  currentEditingTeamMembers: []
 };
 
 // DOM Elements
@@ -1073,6 +1074,10 @@ function initEventListeners() {
   });
 
   DOM.addCommentForm.addEventListener('submit', handleCommentSubmit);
+
+  // Initialize Team Members chip listeners & Form link preview listeners
+  initTeamMembersInputListeners();
+  initEditFormLinkProtection();
 
   // Topbar New Project button
   const topbarNewProjectBtn = document.getElementById('open-add-task-modal');
@@ -3610,6 +3615,76 @@ function initEditFormLinkProtection() {
   });
 }
 
+function renderTeamMembersChips() {
+  const container = document.getElementById('form-team-members-chips');
+  if (!container) return;
+  const isAdmin = isUserAdmin();
+
+  if (!state.currentEditingTeamMembers || state.currentEditingTeamMembers.length === 0) {
+    container.innerHTML = '<span style="font-size:12px; color:var(--text-dim); font-style:italic;">No team members added yet.</span>';
+    return;
+  }
+
+  container.innerHTML = state.currentEditingTeamMembers.map((name, idx) => `
+    <span class="card-tag-pill" style="display:inline-flex; align-items:center; gap:6px; background:rgba(99,102,241,0.18); border:1px solid rgba(99,102,241,0.35); color:#c7d2fe; padding:4px 10px; border-radius:16px; font-size:12px; font-weight:600;">
+      <span>👤 ${escapeHTML(name)}</span>
+      ${isAdmin ? `<button type="button" onclick="event.stopPropagation(); removeTeamMemberChip(${idx})" style="background:none; border:none; color:#f87171; cursor:pointer; font-weight:700; font-size:14px; line-height:1; padding:0 2px; margin-left:4px;" title="Remove ${escapeHTML(name)}">&times;</button>` : ''}
+    </span>
+  `).join('');
+}
+
+function addTeamMemberChip(rawName) {
+  if (!rawName) return;
+  const names = String(rawName).split(',').map(n => n.trim()).filter(Boolean);
+  if (!state.currentEditingTeamMembers) state.currentEditingTeamMembers = [];
+  
+  names.forEach(name => {
+    if (name && !state.currentEditingTeamMembers.includes(name)) {
+      state.currentEditingTeamMembers.push(name);
+    }
+  });
+
+  renderTeamMembersChips();
+  const input = document.getElementById('form-team-members-input');
+  if (input) input.value = '';
+}
+
+function removeTeamMemberChip(idx) {
+  if (state.currentEditingTeamMembers && idx >= 0 && idx < state.currentEditingTeamMembers.length) {
+    state.currentEditingTeamMembers.splice(idx, 1);
+    renderTeamMembersChips();
+  }
+}
+
+function initTeamMembersInputListeners() {
+  const input = document.getElementById('form-team-members-input');
+  const addBtn = document.getElementById('btn-add-team-member');
+
+  if (input) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        addTeamMemberChip(input.value);
+      }
+    });
+
+    input.addEventListener('input', () => {
+      if (input.value.includes(',')) {
+        addTeamMemberChip(input.value);
+      }
+    });
+  }
+
+  if (addBtn) {
+    addBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (input) addTeamMemberChip(input.value);
+    });
+  }
+}
+
 function openProjectModalForCreate(defaultStatus = 'in_progress') {
   if (isUserViewer() || isUserPublic()) {
     showToast('Access denied: Public Showcase Viewers have read-only permissions.', 'error');
@@ -3623,6 +3698,16 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   document.getElementById('form-project-id').value = '';
   document.getElementById('form-status').value = defaultStatus;
   
+  state.currentEditingTeamMembers = [];
+  renderTeamMembersChips();
+  const tmInput = document.getElementById('form-team-members-input');
+  if (tmInput) {
+    tmInput.value = '';
+    tmInput.disabled = false;
+  }
+  const tmAddBtn = document.getElementById('btn-add-team-member');
+  if (tmAddBtn) tmAddBtn.disabled = false;
+
   const today = new Date();
   const nextMonth = new Date();
   nextMonth.setDate(nextMonth.getDate() + 30);
@@ -3812,6 +3897,34 @@ function openProjectModalForEdit(project, focusField = null) {
   document.getElementById('form-team-lead-photo').value = project.team_logo_url || project.team_lead_photo || project.teamLeadPhoto || project.teamLogoUrl || '';
   document.getElementById('form-deliverables').value = project.deliverables || '';
 
+  // Pre-fill Team Members
+  let membersList = [];
+  if (Array.isArray(project.team_members)) {
+    membersList = project.team_members.map(m => typeof m === 'object' && m ? (m.name || m.email || JSON.stringify(m)) : String(m)).filter(Boolean);
+  } else if (Array.isArray(project.teamMembers)) {
+    membersList = project.teamMembers.map(m => typeof m === 'object' && m ? (m.name || m.email || JSON.stringify(m)) : String(m)).filter(Boolean);
+  } else if (typeof project.team_members === 'string' && project.team_members.trim()) {
+    try {
+      const parsed = JSON.parse(project.team_members);
+      if (Array.isArray(parsed)) {
+        membersList = parsed.map(m => typeof m === 'object' && m ? (m.name || m.email || JSON.stringify(m)) : String(m)).filter(Boolean);
+      } else {
+        membersList = project.team_members.split(',').map(m => m.trim()).filter(Boolean);
+      }
+    } catch (e) {
+      membersList = project.team_members.split(',').map(m => m.trim()).filter(Boolean);
+    }
+  }
+  state.currentEditingTeamMembers = [...membersList];
+  renderTeamMembersChips();
+  const tmInput = document.getElementById('form-team-members-input');
+  if (tmInput) {
+    tmInput.value = '';
+    tmInput.disabled = !isAdmin;
+  }
+  const tmAddBtn = document.getElementById('btn-add-team-member');
+  if (tmAddBtn) tmAddBtn.disabled = !isAdmin;
+
   updateLinkPreviewIcon('preview-image-url', imgVal);
   updateLinkPreviewIcon('preview-github', ghVal);
   updateLinkPreviewIcon('preview-youtube', ytVal);
@@ -3904,6 +4017,12 @@ async function handleProjectFormSubmit(e) {
     const leadPhotoVal = normalizeUrl(document.getElementById('form-team-lead-photo') ? document.getElementById('form-team-lead-photo').value : '');
     const deliverablesVal = (document.getElementById('form-deliverables') ? document.getElementById('form-deliverables').value : (existingProject ? existingProject.deliverables : '')).trim();
 
+    // Flush any pending typed team member
+    const pendingMemberInput = document.getElementById('form-team-members-input') ? document.getElementById('form-team-members-input').value.trim() : '';
+    if (pendingMemberInput) {
+      addTeamMemberChip(pendingMemberInput);
+    }
+
     const payload = {
       project_code: (document.getElementById('form-code') ? document.getElementById('form-code').value : (existingProject ? existingProject.project_code : '')).trim(),
       title: title,
@@ -3936,6 +4055,8 @@ async function handleProjectFormSubmit(e) {
       team_logo_url: leadPhotoVal,
       teamLogoUrl: leadPhotoVal,
       teamLeadPhoto: leadPhotoVal,
+      team_members: state.currentEditingTeamMembers || [],
+      teamMembers: state.currentEditingTeamMembers || [],
       deliverables: deliverablesVal
     };
 
@@ -5007,5 +5128,8 @@ window.handleToggleProjectActive = handleToggleProjectActive;
 window.renderProjectActiveToggleHTML = renderProjectActiveToggleHTML;
 window.confirmDeleteStudent = confirmDeleteStudent;
 window.executeStudentDelete = executeStudentDelete;
+window.renderTeamMembersChips = renderTeamMembersChips;
+window.addTeamMemberChip = addTeamMemberChip;
+window.removeTeamMemberChip = removeTeamMemberChip;
 
 

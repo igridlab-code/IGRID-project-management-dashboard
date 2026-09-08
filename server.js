@@ -755,12 +755,17 @@ app.get('/api/projects', optionalAuth, (req, res) => {
       try {
         members = r.team_members ? JSON.parse(r.team_members) : [];
       } catch(e) {
-        members = [];
+        if (typeof r.team_members === 'string' && r.team_members.trim()) {
+          members = r.team_members.split(',').map(m => m.trim()).filter(Boolean);
+        } else {
+          members = [];
+        }
       }
       const visState = (r.is_visible === undefined || r.is_visible === null) ? (r.is_active === undefined ? 1 : Number(r.is_active)) : Number(r.is_visible);
       const item = {
         ...r,
         team_members: members,
+        teamMembers: members,
         team_logo_url: r.team_logo_url || r.team_lead_photo || '',
         teamLogoUrl: r.team_logo_url || r.team_lead_photo || '',
         is_visible: visState,
@@ -783,10 +788,19 @@ app.get('/api/public/projects', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     const projects = rows.map(r => {
       let members = [];
-      try { members = r.team_members ? JSON.parse(r.team_members) : []; } catch(e) { members = []; }
+      try {
+        members = r.team_members ? JSON.parse(r.team_members) : [];
+      } catch(e) {
+        if (typeof r.team_members === 'string' && r.team_members.trim()) {
+          members = r.team_members.split(',').map(m => m.trim()).filter(Boolean);
+        } else {
+          members = [];
+        }
+      }
       return {
         ...r,
         team_members: members,
+        teamMembers: members,
         team_logo_url: r.team_logo_url || r.team_lead_photo || '',
         teamLogoUrl: r.team_logo_url || r.team_lead_photo || '',
         immediate_action: '',
@@ -822,9 +836,14 @@ app.get('/api/projects/:id', optionalAuth, (req, res) => {
     try {
       members = project.team_members ? JSON.parse(project.team_members) : [];
     } catch(e) {
-      members = [];
+      if (typeof project.team_members === 'string' && project.team_members.trim()) {
+        members = project.team_members.split(',').map(m => m.trim()).filter(Boolean);
+      } else {
+        members = [];
+      }
     }
     project.team_members = members;
+    project.teamMembers = members;
     project.team_logo_url = project.team_logo_url || project.team_lead_photo || '';
     project.teamLogoUrl = project.team_logo_url || project.team_lead_photo || '';
     const visState = (project.is_visible === undefined || project.is_visible === null) ? (project.is_active === undefined ? 1 : Number(project.is_active)) : Number(project.is_visible);
@@ -1023,8 +1042,9 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
 
     const resolvedLeadPhoto = team_logo_url !== undefined ? team_logo_url : (teamLogoUrl !== undefined ? teamLogoUrl : (team_lead_photo !== undefined ? team_lead_photo : (teamLeadPhoto !== undefined ? teamLeadPhoto : null)));
 
-    const membersJson = team_members !== undefined
-      ? (typeof team_members === 'string' ? team_members : JSON.stringify(team_members || []))
+    const rawMembers = team_members !== undefined ? team_members : req.body.teamMembers;
+    const membersJson = rawMembers !== undefined
+      ? (typeof rawMembers === 'string' ? rawMembers : JSON.stringify(rawMembers || []))
       : null;
 
     const progressNum = (progress !== undefined && progress !== null && progress !== '')
@@ -1086,17 +1106,30 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
           return res.status(500).json({ error: err4.message });
         }
         db.get('SELECT * FROM projects WHERE id = ?', [id], (errFetch, updatedProj) => {
+          let parsedMembers = [];
+          if (updatedProj && updatedProj.team_members) {
+            try {
+              parsedMembers = JSON.parse(updatedProj.team_members);
+            } catch(e) {
+              if (typeof updatedProj.team_members === 'string' && updatedProj.team_members.trim()) {
+                parsedMembers = updatedProj.team_members.split(',').map(m => m.trim()).filter(Boolean);
+              }
+            }
+          }
           console.log(`[BACKEND-SAVE] ✅ Project #${id} ("${updatedProj ? updatedProj.title : id}") details successfully saved to SQLite database:`, {
             id: updatedProj ? updatedProj.id : id,
             title: updatedProj ? updatedProj.title : null,
             progress: updatedProj ? updatedProj.progress : null,
             status: updatedProj ? updatedProj.status : null,
+            team_members: parsedMembers,
             team_logo_url: updatedProj ? updatedProj.team_lead_photo : null
           });
           res.json({
             message: 'Project details saved successfully.',
             project: updatedProj ? {
               ...updatedProj,
+              team_members: parsedMembers,
+              teamMembers: parsedMembers,
               team_logo_url: updatedProj.team_lead_photo,
               teamLogoUrl: updatedProj.team_lead_photo
             } : null,

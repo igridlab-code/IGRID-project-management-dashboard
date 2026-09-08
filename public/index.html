@@ -973,6 +973,21 @@
             </div>
           </div>
 
+          <div class="form-group" style="margin-top: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label for="form-team-members-input" style="margin: 0; font-weight: 600;">👥 Team Members (Full Team List)</label>
+              <span style="font-size: 11px; color: var(--text-dim);">Type name and press Enter, comma, or click + Add</span>
+            </div>
+            <div id="form-team-members-chips" class="team-members-chips-wrap" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; min-height: 28px; padding: 4px 0;"></div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="form-team-members-input" placeholder="e.g. R. Vanmathi, S. Nirmal Sri, Kuzhali M..." style="flex: 1;">
+              <button type="button" class="btn btn-secondary" id="btn-add-team-member" style="white-space: nowrap; padding: 8px 14px; font-weight: 600;">
+                ➕ Add Member
+              </button>
+            </div>
+            <small class="form-help">Add multiple student researchers / team innovators. Lead can also be listed or kept separate.</small>
+          </div>
+
           <div class="form-group">
             <label for="form-deliverables">Deliverables & Showcase Highlights (for completed projects)</label>
             <input type="text" id="form-deliverables" placeholder="e.g. Flight logs, ROS2 package, 3D printed enclosure">
