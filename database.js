@@ -61,6 +61,7 @@ function initDb() {
       { name: 'linkedin_url', type: 'TEXT' },
       { name: 'doc_url', type: 'TEXT' },
       { name: 'team_lead_photo', type: 'TEXT' },
+      { name: 'team_logo_url', type: 'TEXT' },
       { name: 'is_active', type: 'INTEGER DEFAULT 1' },
       { name: 'is_visible', type: 'INTEGER DEFAULT 1' }
     ];
@@ -74,6 +75,7 @@ function initDb() {
     // Backfill any null is_active or is_visible to 1 (Visible)
     db.run(`UPDATE projects SET is_active = 1 WHERE is_active IS NULL`);
     db.run(`UPDATE projects SET is_visible = COALESCE(is_active, 1) WHERE is_visible IS NULL`);
+    db.run(`UPDATE projects SET team_logo_url = team_lead_photo WHERE team_logo_url IS NULL`);
 
     // Students Directory
     db.run(`

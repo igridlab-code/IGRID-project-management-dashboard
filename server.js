@@ -761,6 +761,8 @@ app.get('/api/projects', optionalAuth, (req, res) => {
       const item = {
         ...r,
         team_members: members,
+        team_logo_url: r.team_logo_url || r.team_lead_photo || '',
+        teamLogoUrl: r.team_logo_url || r.team_lead_photo || '',
         is_visible: visState,
         isVisible: visState === 1,
         is_active: visState,
@@ -785,6 +787,8 @@ app.get('/api/public/projects', (req, res) => {
       return {
         ...r,
         team_members: members,
+        team_logo_url: r.team_logo_url || r.team_lead_photo || '',
+        teamLogoUrl: r.team_logo_url || r.team_lead_photo || '',
         immediate_action: '',
         is_visible: 1,
         isVisible: true,
@@ -821,6 +825,8 @@ app.get('/api/projects/:id', optionalAuth, (req, res) => {
       members = [];
     }
     project.team_members = members;
+    project.team_logo_url = project.team_logo_url || project.team_lead_photo || '';
+    project.teamLogoUrl = project.team_logo_url || project.team_lead_photo || '';
     const visState = (project.is_visible === undefined || project.is_visible === null) ? (project.is_active === undefined ? 1 : Number(project.is_active)) : Number(project.is_visible);
     project.is_visible = visState;
     project.isVisible = visState === 1;
@@ -856,13 +862,14 @@ app.post('/api/projects', requireAuth, (req, res) => {
     project_code, title, description, domain, tags, status, priority,
     progress, start_date, due_date, immediate_action, github_repo,
     youtube_url, linkedin_url, doc_url, image_url,
-    bom_status, team_name, team_lead, team_lead_photo, team_members, deliverables
+    bom_status, team_name, team_lead, team_lead_photo, team_logo_url, teamLogoUrl, teamLeadPhoto, team_members, deliverables
   } = req.body;
 
   if (!title || !domain) {
     return res.status(400).json({ error: 'Title and Domain are required.' });
   }
 
+  const resolvedTeamLogo = team_logo_url || teamLogoUrl || team_lead_photo || teamLeadPhoto || '';
   const code = project_code || `IGRID-${(domain || 'GEN').substring(0,3).toUpperCase()}-${Date.now().toString().slice(-4)}${Math.floor(10 + Math.random() * 90)}`;
   const membersJson = typeof team_members === 'string' ? team_members : JSON.stringify(team_members || []);
   const leadName = (req.user && req.user.role === 'student') ? (req.user.name || team_lead || '') : (team_lead || '');
@@ -882,7 +889,7 @@ app.post('/api/projects', requireAuth, (req, res) => {
       code, title, description || '', domain, tags || '', status || 'in_queue', priority || 'Normal',
       Number(progress) || 0, start_date || '', due_date || '', immediate_action || '', github_repo || '',
       youtube_url || '', linkedin_url || '', doc_url || '', image_url || '',
-      bom_status || 'Not Required', team_name || '', leadName, team_lead_photo || '', membersJson, deliverables || ''
+      bom_status || 'Not Required', team_name || '', leadName, resolvedTeamLogo, membersJson, deliverables || ''
     ],
     function(err) {
       if (err) return res.status(500).json({ error: err.message });
@@ -943,7 +950,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         const doc_url = req.body.doc_url !== undefined ? req.body.doc_url : (req.body.techReportUrl !== undefined ? req.body.techReportUrl : (req.body.docUrl !== undefined ? req.body.docUrl : (req.body.technical_report !== undefined ? req.body.technical_report : project.doc_url)));
         const linkedin_url = req.body.linkedin_url !== undefined ? req.body.linkedin_url : (req.body.linkedinPostUrl !== undefined ? req.body.linkedinPostUrl : (req.body.linkedinUrl !== undefined ? req.body.linkedinUrl : project.linkedin_url));
         const image_url = req.body.image_url !== undefined ? req.body.image_url : (req.body.imageUrl !== undefined ? req.body.imageUrl : project.image_url);
-        const team_lead_photo = req.body.team_lead_photo !== undefined ? req.body.team_lead_photo : (req.body.teamLeadPhoto !== undefined ? req.body.teamLeadPhoto : project.team_lead_photo);
+        const team_lead_photo = req.body.team_logo_url !== undefined ? req.body.team_logo_url : (req.body.teamLogoUrl !== undefined ? req.body.teamLogoUrl : (req.body.team_lead_photo !== undefined ? req.body.team_lead_photo : (req.body.teamLeadPhoto !== undefined ? req.body.teamLeadPhoto : project.team_lead_photo)));
         const deliverables = req.body.deliverables !== undefined ? req.body.deliverables : project.deliverables;
 
         const updateSql = `
@@ -976,7 +983,8 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
                 github_repo: resProj.github_repo,
                 doc_url: resProj.doc_url,
                 youtube_url: resProj.youtube_url,
-                linkedin_url: resProj.linkedin_url
+                linkedin_url: resProj.linkedin_url,
+                team_logo_url: resProj.team_lead_photo
               });
               res.json({
                 message: 'Project links and deliverables saved successfully.',
@@ -989,7 +997,10 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
                   youtube_url: resProj.youtube_url,
                   videoDemoUrl: resProj.youtube_url,
                   linkedin_url: resProj.linkedin_url,
-                  linkedinPostUrl: resProj.linkedin_url
+                  linkedinPostUrl: resProj.linkedin_url,
+                  team_lead_photo: resProj.team_lead_photo,
+                  team_logo_url: resProj.team_lead_photo,
+                  teamLogoUrl: resProj.team_lead_photo
                 },
                 changes: this.changes
               });
@@ -1006,9 +1017,11 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
       title, description, domain, tags, status, priority,
       progress, start_date, due_date, immediate_action, github_repo,
       youtube_url, linkedin_url, doc_url, image_url,
-      bom_status, team_name, team_lead, team_lead_photo, team_members, deliverables,
+      bom_status, team_name, team_lead, team_lead_photo, team_logo_url, teamLogoUrl, teamLeadPhoto, team_members, deliverables,
       is_active, isActive, is_visible, isVisible
     } = req.body;
+
+    const resolvedLeadPhoto = team_logo_url !== undefined ? team_logo_url : (teamLogoUrl !== undefined ? teamLogoUrl : (team_lead_photo !== undefined ? team_lead_photo : (teamLeadPhoto !== undefined ? teamLeadPhoto : null)));
 
     const membersJson = team_members !== undefined
       ? (typeof team_members === 'string' ? team_members : JSON.stringify(team_members || []))
@@ -1062,7 +1075,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         progressNum,
         start_date, due_date, immediate_action, github_repo,
         youtube_url, linkedin_url, doc_url, image_url,
-        bom_status, team_name, team_lead, team_lead_photo, membersJson, deliverables,
+        bom_status, team_name, team_lead, resolvedLeadPhoto, membersJson, deliverables,
         activeStateNum,
         activeStateNum,
         id
@@ -1078,11 +1091,15 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
             title: updatedProj ? updatedProj.title : null,
             progress: updatedProj ? updatedProj.progress : null,
             status: updatedProj ? updatedProj.status : null,
-            due_date: updatedProj ? updatedProj.due_date : null
+            team_logo_url: updatedProj ? updatedProj.team_lead_photo : null
           });
           res.json({
             message: 'Project details saved successfully.',
-            project: updatedProj,
+            project: updatedProj ? {
+              ...updatedProj,
+              team_logo_url: updatedProj.team_lead_photo,
+              teamLogoUrl: updatedProj.team_lead_photo
+            } : null,
             changes: this.changes
           });
         });

@@ -1376,8 +1376,8 @@ function renderExecutiveShowcase() {
     const defaultHero = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80';
     const heroImg = p.image_url || defaultHero;
 
-    // Team Lead Photo
-    const leadPhoto = p.team_lead_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'Lead')}&background=6366f1&color=fff`;
+    // Team Logo & Photo
+    const leadPhoto = p.team_logo_url || p.team_lead_photo || (p.team_name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_name)}&background=6366f1&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'Team')}&background=6366f1&color=fff`);
 
     // Team Member Avatars
     const members = Array.isArray(p.team_members) ? p.team_members : [];
@@ -1432,10 +1432,10 @@ function renderExecutiveShowcase() {
           <h3 class="exec-card-title">${escapeHTML(p.title)}</h3>
           <p class="exec-card-desc">${escapeHTML(p.description || '')}</p>
 
-          <!-- Team Lead Row -->
+          <!-- Team Lead & Logo Row -->
           <div class="exec-card-lead-row">
             <div class="exec-lead-info">
-              <img src="${leadPhoto}" alt="${escapeHTML(p.team_lead || 'Lead')}" class="exec-lead-avatar">
+              <img src="${leadPhoto}" alt="Team Logo" title="Team Logo: ${escapeHTML(p.team_name || p.team_lead || 'Team')}" class="exec-lead-avatar">
               <div>
                 <div class="exec-lead-name">${escapeHTML(p.team_lead || 'Student Lead')}</div>
                 <div class="exec-lead-role">${escapeHTML(p.team_name || 'Innovation Group')}</div>
@@ -1490,7 +1490,7 @@ async function openSpotlightPresentation(projectId) {
 
     const defaultHero = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80';
     const heroImg = project.image_url || defaultHero;
-    const leadPhoto = project.team_lead_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(project.team_lead || 'Lead')}&background=6366f1&color=fff`;
+    const leadPhoto = project.team_logo_url || project.team_lead_photo || (project.team_name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(project.team_name)}&background=6366f1&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(project.team_lead || 'Team')}&background=6366f1&color=fff`);
 
     // Members list
     const members = Array.isArray(project.team_members) ? project.team_members : [];
@@ -1571,9 +1571,9 @@ async function openSpotlightPresentation(projectId) {
 
         <div class="spotlight-sidebar">
           <div class="student-card">
-            <span style="font-size:10px; font-weight:700; color:var(--text-dim); text-transform:uppercase;">TEAM LEAD</span>
+            <span style="font-size:10px; font-weight:700; color:var(--text-dim); text-transform:uppercase;">TEAM & LEAD</span>
             <div style="display:flex; align-items:center; gap:10px; margin-top:6px;">
-              <img src="${leadPhoto}" style="width:44px; height:44px; border-radius:50%; object-fit:cover; border:2px solid var(--primary);">
+              <img src="${leadPhoto}" alt="Team Logo" title="Team Logo: ${escapeHTML(project.team_name || project.team_lead || 'Team')}" style="width:44px; height:44px; border-radius:8px; object-fit:cover; border:2px solid var(--primary);">
               <div>
                 <h4 style="font-size:14px; font-weight:700; color:#fff;">${escapeHTML(project.team_lead || 'Lead')}</h4>
                 <span style="font-size:11px; color:var(--text-dim);">${escapeHTML(project.team_name || 'Lab Group')}</span>
@@ -1691,7 +1691,7 @@ function createCardHTML(p) {
       avatarsHTML += `<div class="avatar-badge" style="background:#475569" title="More members">+${members.length - 3}</div>`;
     }
   } else {
-    avatarsHTML = `<img src="${p.team_lead_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'IG')}&background=6366f1&color=fff`}" class="avatar-badge" title="${escapeHTML(p.team_lead || 'Lead')}">`;
+    avatarsHTML = `<img src="${p.team_logo_url || p.team_lead_photo || (p.team_name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_name)}&background=6366f1&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'IG')}&background=6366f1&color=fff`)}" class="avatar-badge" title="Team Logo: ${escapeHTML(p.team_name || p.team_lead || 'Team')}" alt="Team Logo">`;
   }
 
   let bomIcon = '';
@@ -3685,7 +3685,7 @@ function openProjectModalForEdit(project, focusField = null) {
     teamLeadEl.disabled = !isAdmin;
   }
 
-  document.getElementById('form-team-lead-photo').value = project.team_lead_photo || '';
+  document.getElementById('form-team-lead-photo').value = project.team_logo_url || project.team_lead_photo || project.teamLeadPhoto || project.teamLogoUrl || '';
   document.getElementById('form-deliverables').value = project.deliverables || '';
 
   updateLinkPreviewIcon('preview-image-url', imgVal);
@@ -3809,6 +3809,9 @@ async function handleProjectFormSubmit(e) {
       team_name: (document.getElementById('form-team-name') ? document.getElementById('form-team-name').value : (existingProject ? existingProject.team_name : '')).trim(),
       team_lead: (document.getElementById('form-team-lead') ? document.getElementById('form-team-lead').value : (existingProject ? existingProject.team_lead : '')).trim(),
       team_lead_photo: leadPhotoVal,
+      team_logo_url: leadPhotoVal,
+      teamLogoUrl: leadPhotoVal,
+      teamLeadPhoto: leadPhotoVal,
       deliverables: deliverablesVal
     };
 
