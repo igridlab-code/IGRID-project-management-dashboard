@@ -43,7 +43,10 @@ function initDb() {
         team_name TEXT,
         team_lead TEXT,
         team_lead_photo TEXT,
+        team_logo_url TEXT,
         team_members TEXT,
+        batch INTEGER DEFAULT 1,
+        team_number INTEGER,
         deliverables TEXT,
         is_active INTEGER DEFAULT 1,
         is_visible INTEGER DEFAULT 1,
@@ -62,6 +65,9 @@ function initDb() {
       { name: 'doc_url', type: 'TEXT' },
       { name: 'team_lead_photo', type: 'TEXT' },
       { name: 'team_logo_url', type: 'TEXT' },
+      { name: 'team_members', type: 'TEXT' },
+      { name: 'batch', type: 'INTEGER DEFAULT 1' },
+      { name: 'team_number', type: 'INTEGER' },
       { name: 'is_active', type: 'INTEGER DEFAULT 1' },
       { name: 'is_visible', type: 'INTEGER DEFAULT 1' }
     ];

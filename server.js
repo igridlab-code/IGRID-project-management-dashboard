@@ -881,7 +881,8 @@ app.post('/api/projects', requireAuth, (req, res) => {
     project_code, title, description, domain, tags, status, priority,
     progress, start_date, due_date, immediate_action, github_repo,
     youtube_url, linkedin_url, doc_url, image_url,
-    bom_status, team_name, team_lead, team_lead_photo, team_logo_url, teamLogoUrl, teamLeadPhoto, team_members, deliverables
+    bom_status, team_name, team_lead, team_lead_photo, team_logo_url, teamLogoUrl, teamLeadPhoto, team_members, deliverables,
+    batch, team_number, teamNumber
   } = req.body;
 
   if (!title || !domain) {
@@ -892,14 +893,17 @@ app.post('/api/projects', requireAuth, (req, res) => {
   const code = project_code || `IGRID-${(domain || 'GEN').substring(0,3).toUpperCase()}-${Date.now().toString().slice(-4)}${Math.floor(10 + Math.random() * 90)}`;
   const membersJson = typeof team_members === 'string' ? team_members : JSON.stringify(team_members || []);
   const leadName = (req.user && req.user.role === 'student') ? (req.user.name || team_lead || '') : (team_lead || '');
+  const batchVal = batch !== undefined ? Number(batch) : 1;
+  const teamNumVal = (team_number !== undefined || teamNumber !== undefined) ? Number(team_number || teamNumber) : null;
 
   const sql = `
     INSERT INTO projects (
       project_code, title, description, domain, tags, status, priority,
       progress, start_date, due_date, immediate_action, github_repo,
       youtube_url, linkedin_url, doc_url, image_url,
-      bom_status, team_name, team_lead, team_lead_photo, team_members, deliverables
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      bom_status, team_name, team_lead, team_lead_photo, team_logo_url, team_members, deliverables,
+      batch, team_number
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.run(
@@ -908,7 +912,8 @@ app.post('/api/projects', requireAuth, (req, res) => {
       code, title, description || '', domain, tags || '', status || 'in_queue', priority || 'Normal',
       Number(progress) || 0, start_date || '', due_date || '', immediate_action || '', github_repo || '',
       youtube_url || '', linkedin_url || '', doc_url || '', image_url || '',
-      bom_status || 'Not Required', team_name || '', leadName, resolvedTeamLogo, membersJson, deliverables || ''
+      bom_status || 'Not Required', team_name || '', leadName, resolvedTeamLogo, resolvedTeamLogo, membersJson, deliverables || '',
+      batchVal, teamNumVal
     ],
     function(err) {
       if (err) return res.status(500).json({ error: err.message });
@@ -1037,6 +1042,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
       progress, start_date, due_date, immediate_action, github_repo,
       youtube_url, linkedin_url, doc_url, image_url,
       bom_status, team_name, team_lead, team_lead_photo, team_logo_url, teamLogoUrl, teamLeadPhoto, team_members, deliverables,
+      batch, team_number, teamNumber,
       is_active, isActive, is_visible, isVisible
     } = req.body;
 
@@ -1046,6 +1052,9 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
     const membersJson = rawMembers !== undefined
       ? (typeof rawMembers === 'string' ? rawMembers : JSON.stringify(rawMembers || []))
       : null;
+
+    const batchNum = batch !== undefined && batch !== null && batch !== '' ? Number(batch) : null;
+    const teamNum = (team_number !== undefined && team_number !== null && team_number !== '') ? Number(team_number) : ((teamNumber !== undefined && teamNumber !== null && teamNumber !== '') ? Number(teamNumber) : null);
 
     const progressNum = (progress !== undefined && progress !== null && progress !== '')
       ? Number(progress)
@@ -1079,7 +1088,10 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         team_name = COALESCE(?, team_name),
         team_lead = COALESCE(?, team_lead),
         team_lead_photo = COALESCE(?, team_lead_photo),
+        team_logo_url = COALESCE(?, team_logo_url, team_lead_photo),
         team_members = COALESCE(?, team_members),
+        batch = COALESCE(?, batch),
+        team_number = COALESCE(?, team_number),
         deliverables = COALESCE(?, deliverables),
         is_active = COALESCE(?, is_active, 1),
         is_visible = COALESCE(?, is_visible, 1),
@@ -1095,7 +1107,9 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         progressNum,
         start_date, due_date, immediate_action, github_repo,
         youtube_url, linkedin_url, doc_url, image_url,
-        bom_status, team_name, team_lead, resolvedLeadPhoto, membersJson, deliverables,
+        bom_status, team_name, team_lead, resolvedLeadPhoto, resolvedLeadPhoto, membersJson,
+        batchNum, teamNum,
+        deliverables,
         activeStateNum,
         activeStateNum,
         id
