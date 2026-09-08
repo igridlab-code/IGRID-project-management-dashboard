@@ -1123,6 +1123,16 @@ function initEventListeners() {
   const studentEditForm = document.getElementById('student-edit-form');
   if (studentEditForm) studentEditForm.addEventListener('submit', handleStudentEditFormSubmit);
 
+  // Student Delete Modal Actions
+  const closeStudentDeleteModal = document.getElementById('close-student-delete-modal');
+  if (closeStudentDeleteModal) closeStudentDeleteModal.addEventListener('click', () => closeModal(document.getElementById('student-delete-modal')));
+
+  const cancelStudentDeleteBtn = document.getElementById('btn-cancel-delete-student');
+  if (cancelStudentDeleteBtn) cancelStudentDeleteBtn.addEventListener('click', () => closeModal(document.getElementById('student-delete-modal')));
+
+  const confirmStudentDeleteBtn = document.getElementById('btn-confirm-delete-student');
+  if (confirmStudentDeleteBtn) confirmStudentDeleteBtn.addEventListener('click', executeStudentDelete);
+
   // Student Search & Filter Listeners
   const studentSearchInput = document.getElementById('student-search-input');
   if (studentSearchInput) studentSearchInput.addEventListener('input', renderStudents);
@@ -2206,7 +2216,8 @@ function renderStudents() {
           </td>
           <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
             <button class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" style="margin-right: 6px;">👁️ View Profile</button>
-            ${(isAdmin || isOwner) ? `<button class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})">✏️ Edit</button>` : ''}
+            ${(isAdmin || isOwner) ? `<button class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})" style="margin-right: 6px;">✏️ Edit</button>` : ''}
+            ${isAdmin ? `<button class="btn btn-sm btn-danger btn-student-delete" onclick="event.stopPropagation(); confirmDeleteStudent(${s.id}, '${escapeHTML((s.name || '').replace(/'/g, "\\'"))}')" title="Delete Student Record" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-weight:600;">🗑️ Delete</button>` : ''}
           </td>
         </tr>
       `;
@@ -2329,6 +2340,11 @@ function renderStudents() {
             ${(isAdmin || isOwner) ? `
               <button type="button" class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})" title="Edit Profile Details">
                 ✏️ Edit
+              </button>
+            ` : ''}
+            ${isAdmin ? `
+              <button type="button" class="btn btn-sm btn-danger btn-student-delete" onclick="event.stopPropagation(); confirmDeleteStudent(${s.id}, '${escapeHTML((s.name || '').replace(/'/g, "\\'"))}')" title="Delete Student Record" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-weight:600; padding: 4px 8px; border-radius: 6px;">
+                🗑️ Delete
               </button>
             ` : ''}
           </div>
@@ -2587,6 +2603,18 @@ function openStudentViewModal(studentId) {
       };
     } else {
       btnEditFromView.style.display = 'none';
+    }
+  }
+
+  const btnDeleteFromView = document.getElementById('btn-admin-delete-from-view');
+  if (btnDeleteFromView) {
+    if (isUserAdmin()) {
+      btnDeleteFromView.style.display = 'inline-block';
+      btnDeleteFromView.onclick = () => {
+        confirmDeleteStudent(s.id, s.name);
+      };
+    } else {
+      btnDeleteFromView.style.display = 'none';
     }
   }
 
@@ -2900,6 +2928,102 @@ async function handleStudentEditFormSubmit(e) {
   } catch (err) {
     console.error('Error updating student:', err);
     showToast(`Failed to update student: ${err.message}`, 'error');
+  }
+}
+
+// ----------------------------------------------------
+// STUDENT DELETION (ADMIN ONLY)
+// ----------------------------------------------------
+let pendingDeleteStudentId = null;
+
+function confirmDeleteStudent(studentId, studentName) {
+  if (!isUserAdmin()) {
+    showToast('Only administrators can delete student records.', 'error');
+    return;
+  }
+  const s = state.students.find(st => Number(st.id) === Number(studentId));
+  const name = s ? s.name : (studentName || 'Student');
+  pendingDeleteStudentId = Number(studentId);
+
+  const nameEl = document.getElementById('delete-student-target-name');
+  if (nameEl) nameEl.textContent = name;
+
+  const promptEl = document.getElementById('delete-student-prompt');
+  if (promptEl) {
+    promptEl.innerHTML = `Delete <strong style="color: #f87171;">${escapeHTML(name)}</strong>? This will permanently remove their record, including their profile, project assignments, and progress data. This can't be undone.`;
+  }
+
+  const confirmBtn = document.getElementById('btn-confirm-delete-student');
+  if (confirmBtn) {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = '🗑️ Confirm Delete';
+  }
+
+  openModal(document.getElementById('student-delete-modal'));
+}
+
+async function executeStudentDelete() {
+  if (!pendingDeleteStudentId) return;
+  if (!isUserAdmin()) {
+    showToast('Only administrators can delete student records.', 'error');
+    return;
+  }
+
+  const confirmBtn = document.getElementById('btn-confirm-delete-student');
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Deleting...';
+  }
+
+  const s = state.students.find(st => Number(st.id) === pendingDeleteStudentId);
+  const studentName = s ? s.name : 'Student';
+  const targetId = pendingDeleteStudentId;
+
+  try {
+    const res = await authFetch(`/api/students/${targetId}`, {
+      method: 'DELETE'
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to delete student record');
+    }
+
+    // 1. Remove student from state
+    state.students = state.students.filter(st => Number(st.id) !== targetId);
+    state.expandedStudentCards.delete(targetId);
+
+    // 2. Unlink from local state.projects if present
+    state.projects.forEach(p => {
+      if (Array.isArray(p.team_members)) {
+        p.team_members = p.team_members.filter(m => {
+          if (typeof m === 'object' && m !== null) {
+            return (m.name || '').toLowerCase() !== studentName.toLowerCase();
+          }
+          return String(m).toLowerCase() !== studentName.toLowerCase();
+        });
+      }
+    });
+
+    // 3. Close modals
+    closeModal(document.getElementById('student-delete-modal'));
+    closeModal(document.getElementById('student-view-modal'));
+    closeModal(document.getElementById('student-edit-modal'));
+
+    // 4. Update UI
+    renderStudents();
+    updateStatsSummary();
+
+    showToast(`Student ${studentName} removed successfully`, 'success');
+  } catch (err) {
+    console.error('Error deleting student:', err);
+    showToast(`Error deleting student: ${err.message}`, 'error');
+  } finally {
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = '🗑️ Confirm Delete';
+    }
+    pendingDeleteStudentId = null;
   }
 }
 
@@ -4881,5 +5005,7 @@ window.openAdminAuditEditModal = openAdminAuditEditModal;
 window.toggleStudentCardExpand = toggleStudentCardExpand;
 window.handleToggleProjectActive = handleToggleProjectActive;
 window.renderProjectActiveToggleHTML = renderProjectActiveToggleHTML;
+window.confirmDeleteStudent = confirmDeleteStudent;
+window.executeStudentDelete = executeStudentDelete;
 
 

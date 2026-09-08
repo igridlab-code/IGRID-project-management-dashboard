@@ -1334,6 +1334,59 @@ app.get('/api/students', optionalAuth, (req, res) => {
   });
 });
 
+// REGISTER NEW STUDENT (ADMIN ONLY)
+app.post('/api/students', requireAuth, requireAdmin, (req, res) => {
+  const { name, roll_no, email, phone, department, year, section, college, role, skills, photo_url, github_url, linkedin_url, bio, assigned_project, project_title, team_members, guide } = req.body;
+
+  if (!name || !roll_no) {
+    return res.status(400).json({ error: 'Student Name and Register Number / Roll No are required.' });
+  }
+
+  const sql = `
+    INSERT INTO students (
+      name, roll_no, email, phone, department, year, section, college,
+      role, skills, photo_url, github_url, linkedin_url, bio,
+      assigned_project, project_title, team_members, guide, status, progress
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', 0)
+  `;
+
+  const params = [
+    name.trim(),
+    roll_no.trim(),
+    email ? email.trim().toLowerCase() : '',
+    phone || '',
+    department || 'ECE',
+    year || '3rd Year',
+    section || 'A',
+    college || 'Indra Ganesan College of Engineering',
+    role || 'Member',
+    skills || '',
+    photo_url || '',
+    github_url || '',
+    linkedin_url || '',
+    bio || '',
+    assigned_project || project_title || '',
+    project_title || assigned_project || '',
+    team_members || '',
+    guide || ''
+  ];
+
+  db.run(sql, params, function(err) {
+    if (err) {
+      if (err.message.includes('UNIQUE')) {
+        return res.status(400).json({ error: 'A student with this Register Number already exists.' });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+
+    const newId = this.lastID;
+    db.get('SELECT * FROM students WHERE id = ?', [newId], (err2, student) => {
+      res.status(201).json({ message: 'Student registered successfully', student });
+    });
+  });
+});
+
 // GET SINGLE STUDENT PROFILE (ADMIN & STUDENT ONLY)
 app.get('/api/students/:id', optionalAuth, (req, res) => {
   const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
@@ -1435,6 +1488,153 @@ app.put('/api/students/:id', requireAuth, (req, res) => {
         });
       });
     }
+  });
+});
+
+// DELETE STUDENT RECORD (ADMIN ONLY)
+app.delete('/api/students/:id', requireAuth, requireAdmin, (req, res) => {
+  const reqStudentId = Number(req.params.id);
+
+  db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err, student) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!student) return res.status(404).json({ error: 'Student record not found.' });
+
+    const studentName = student.name;
+    const studentEmail = (student.email || '').toLowerCase();
+    const studentRoll = student.roll_no;
+
+    // 1. Delete associated student calendar records
+    db.run('DELETE FROM student_calendar WHERE student_id = ?', [reqStudentId], (errCal) => {
+      if (errCal) console.error('Error removing student calendar entries:', errCal.message);
+
+      // 2. Delete linked auth_user if exists and role is student
+      if (student.user_id || studentEmail) {
+        db.run('DELETE FROM auth_users WHERE (id = ? OR LOWER(email) = ?) AND role = ?', [student.user_id || -1, studentEmail, 'student'], (errAuth) => {
+          if (errAuth) console.error('Error removing student auth user:', errAuth.message);
+        });
+      }
+
+      // 3. Unlink student from any projects without breaking or deleting the projects
+      db.all('SELECT id, project_code, team_members, team_lead FROM projects', [], (errProj, projects) => {
+        if (!errProj && Array.isArray(projects)) {
+          projects.forEach(proj => {
+            let updated = false;
+            let members = [];
+            let isJson = false;
+
+            if (proj.team_members) {
+              try {
+                const parsed = JSON.parse(proj.team_members);
+                if (Array.isArray(parsed)) {
+                  isJson = true;
+                  const initialLen = parsed.length;
+                  members = parsed.filter(m => {
+                    if (typeof m === 'object' && m !== null) {
+                      const mName = (m.name || '').toLowerCase();
+                      const mEmail = (m.email || '').toLowerCase();
+                      const mRoll = (m.roll_no || m.roll || '').toLowerCase();
+                      if (studentName && mName === studentName.toLowerCase()) return false;
+                      if (studentEmail && mEmail === studentEmail) return false;
+                      if (studentRoll && mRoll === studentRoll.toLowerCase()) return false;
+                      return true;
+                    } else if (typeof m === 'string') {
+                      const mStr = m.toLowerCase();
+                      if (studentName && mStr === studentName.toLowerCase()) return false;
+                      if (studentEmail && mStr === studentEmail) return false;
+                      if (studentRoll && mStr === studentRoll.toLowerCase()) return false;
+                      return true;
+                    }
+                    return true;
+                  });
+                  if (members.length !== initialLen) {
+                    updated = true;
+                  }
+                }
+              } catch (e) {
+                const strMembers = proj.team_members.split(',').map(m => m.trim());
+                const filtered = strMembers.filter(m => {
+                  const mLower = m.toLowerCase();
+                  if (studentName && mLower.includes(studentName.toLowerCase())) return false;
+                  if (studentEmail && mLower.includes(studentEmail)) return false;
+                  return true;
+                });
+                if (filtered.length !== strMembers.length) {
+                  updated = true;
+                  members = filtered.join(', ');
+                }
+              }
+            }
+
+            if (updated) {
+              const newMembersValue = isJson ? JSON.stringify(members) : members;
+              db.run('UPDATE projects SET team_members = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newMembersValue, proj.id]);
+            }
+          });
+        }
+
+        // 4. Delete the student record from database
+        db.run('DELETE FROM students WHERE id = ?', [reqStudentId], function(errDel) {
+          if (errDel) return res.status(500).json({ error: errDel.message });
+
+          // 5. Log audit entry
+          const clientIp = getClientIp(req);
+          const adminEmail = (req.user && req.user.email) ? req.user.email : ADMIN_EMAIL;
+          db.run(
+            `INSERT INTO audit_logs (email, role, team_name, method, ip_address, event_type, status, details, timestamp)
+             VALUES (?, 'admin', ?, 'API', ?, 'DELETE_STUDENT', 'SUCCESS', ?, CURRENT_TIMESTAMP)`,
+            [adminEmail, student.assigned_project || 'N/A', clientIp, `Permanently deleted student ${studentName} (${studentRoll})`]
+          );
+
+          res.json({
+            message: `Student ${studentName} removed successfully`,
+            studentId: reqStudentId,
+            studentName: studentName
+          });
+        });
+      });
+    });
+  });
+});
+
+// BULK DELETE STUDENTS (ADMIN ONLY)
+app.post('/api/students/bulk-delete', requireAuth, requireAdmin, (req, res) => {
+  const { studentIds } = req.body;
+  if (!Array.isArray(studentIds) || studentIds.length === 0) {
+    return res.status(400).json({ error: 'Array of studentIds is required.' });
+  }
+
+  const ids = studentIds.map(Number).filter(id => !isNaN(id) && id > 0);
+  if (ids.length === 0) {
+    return res.status(400).json({ error: 'No valid student IDs provided.' });
+  }
+
+  const placeholders = ids.map(() => '?').join(',');
+  db.all(`SELECT * FROM students WHERE id IN (${placeholders})`, ids, (err, studentsToDelete) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!studentsToDelete || studentsToDelete.length === 0) {
+      return res.status(404).json({ error: 'No matching student records found.' });
+    }
+
+    // Delete calendar records
+    db.run(`DELETE FROM student_calendar WHERE student_id IN (${placeholders})`, ids, () => {});
+
+    // Delete auth users
+    studentsToDelete.forEach(st => {
+      if (st.user_id || st.email) {
+        db.run('DELETE FROM auth_users WHERE (id = ? OR LOWER(email) = ?) AND role = ?', [st.user_id || -1, (st.email || '').toLowerCase(), 'student'], () => {});
+      }
+    });
+
+    // Delete students
+    db.run(`DELETE FROM students WHERE id IN (${placeholders})`, ids, function(errDel) {
+      if (errDel) return res.status(500).json({ error: errDel.message });
+
+      res.json({
+        message: `Successfully deleted ${this.changes} student record(s)`,
+        deletedIds: ids,
+        count: this.changes
+      });
+    });
   });
 });
 
