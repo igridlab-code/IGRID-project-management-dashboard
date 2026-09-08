@@ -324,6 +324,67 @@
     <main class="main-viewport">
       <!-- 1. BOARD (KANBAN) VIEW -->
       <div class="view-panel active" id="view-board">
+        <!-- Live Active Projects Counter & Status Breakdown Banner -->
+        <div class="active-stats-banner" id="board-active-stats-banner">
+          <div class="active-stat-card main-active-card">
+            <div class="active-stat-icon icon-active">🚀</div>
+            <div class="active-stat-content">
+              <div class="active-stat-header">
+                <span class="active-stat-label">Active Projects</span>
+                <span class="badge badge-success active-stat-badge" id="stat-active-badge">--% Active</span>
+              </div>
+              <div class="active-stat-val-row">
+                <span class="active-stat-number" id="stat-active-ratio">-- / --</span>
+              </div>
+              <span class="active-stat-sub" id="stat-active-sub">In Development & Testing</span>
+            </div>
+          </div>
+
+          <div class="active-stat-card">
+            <div class="active-stat-icon icon-queue">📥</div>
+            <div class="active-stat-content">
+              <span class="active-stat-label">In Queue</span>
+              <div class="active-stat-val-row">
+                <span class="active-stat-number" id="stat-in-queue-num">0</span>
+              </div>
+              <span class="active-stat-sub">Ideation & Specs</span>
+            </div>
+          </div>
+
+          <div class="active-stat-card">
+            <div class="active-stat-icon icon-progress">🛠️</div>
+            <div class="active-stat-content">
+              <span class="active-stat-label">In Progress</span>
+              <div class="active-stat-val-row">
+                <span class="active-stat-number" id="stat-in-progress-num">0</span>
+              </div>
+              <span class="active-stat-sub">Prototyping & Code</span>
+            </div>
+          </div>
+
+          <div class="active-stat-card">
+            <div class="active-stat-icon icon-testing">🧪</div>
+            <div class="active-stat-content">
+              <span class="active-stat-label">Testing & QA</span>
+              <div class="active-stat-val-row">
+                <span class="active-stat-number" id="stat-testing-num">0</span>
+              </div>
+              <span class="active-stat-sub">Validation & BOM</span>
+            </div>
+          </div>
+
+          <div class="active-stat-card">
+            <div class="active-stat-icon icon-completed">🏆</div>
+            <div class="active-stat-content">
+              <span class="active-stat-label">Completed</span>
+              <div class="active-stat-val-row">
+                <span class="active-stat-number" id="stat-completed-num">0</span>
+              </div>
+              <span class="active-stat-sub">Showcase Deployed</span>
+            </div>
+          </div>
+        </div>
+
         <div class="kanban-container" id="kanban-board">
           <div class="kanban-col" data-status="in_queue">
             <div class="col-header">
@@ -381,6 +442,21 @@
           <!-- Executive Metrics KPI Header -->
           <div class="exec-kpi-grid" id="exec-kpi-root">
             <div class="exec-kpi-card">
+              <div class="exec-kpi-icon icon-yellow">🚀</div>
+              <div class="exec-kpi-body">
+                <span class="exec-kpi-label">Active Projects</span>
+                <div class="exec-kpi-val-row">
+                  <span class="exec-kpi-num" id="exec-active-projects-num">-- / --</span>
+                  <span class="exec-kpi-badge badge-success" id="exec-active-projects-pct">--% Active</span>
+                </div>
+                <div class="exec-kpi-bar">
+                  <div class="exec-kpi-bar-fill" id="exec-active-projects-bar" style="width: 0%;"></div>
+                </div>
+                <span class="exec-kpi-sub" id="exec-active-projects-sub" style="margin-top: 4px;">Loading active pipeline...</span>
+              </div>
+            </div>
+
+            <div class="exec-kpi-card">
               <div class="exec-kpi-icon icon-purple">⚡</div>
               <div class="exec-kpi-body">
                 <span class="exec-kpi-label">Average Lab Progress</span>
@@ -401,7 +477,7 @@
                 <div class="exec-kpi-val-row">
                   <span class="exec-kpi-num text-success" id="exec-approved-budget">₹0.00</span>
                 </div>
-                <span class="exec-kpi-sub">Across 6 Component Procurements</span>
+                <span class="exec-kpi-sub">Across Approved Component Procurements</span>
               </div>
             </div>
 
@@ -410,7 +486,7 @@
               <div class="exec-kpi-body">
                 <span class="exec-kpi-label">Urgent Procurement Requisitions</span>
                 <div class="exec-kpi-val-row">
-                  <span class="exec-kpi-num text-warning" id="exec-pending-bom-count">2 Items</span>
+                  <span class="exec-kpi-num text-warning" id="exec-pending-bom-count">0 Items</span>
                   <button class="btn btn-sm btn-primary" onclick="switchView('bom')">Review Now</button>
                 </div>
                 <span class="exec-kpi-sub">Awaiting Lab In-Charge Sign-off</span>
@@ -422,9 +498,9 @@
               <div class="exec-kpi-body">
                 <span class="exec-kpi-label">Active Student Innovators</span>
                 <div class="exec-kpi-val-row">
-                  <span class="exec-kpi-num" id="exec-student-count">8 Engineers</span>
+                  <span class="exec-kpi-num" id="exec-student-count">0 Engineers</span>
                 </div>
-                <span class="exec-kpi-sub">5 Multi-Disciplinary Domains</span>
+                <span class="exec-kpi-sub" id="exec-student-sub">Multi-Disciplinary Engineering Teams</span>
               </div>
             </div>
           </div>

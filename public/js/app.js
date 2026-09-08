@@ -801,6 +801,19 @@ async function fetchBoms() {
   }
 }
 
+async function fetchServerStats() {
+  try {
+    const res = await authFetch('/api/projects/stats');
+    if (res.ok) {
+      state.serverStats = await res.json();
+      return state.serverStats;
+    }
+  } catch (err) {
+    console.warn('Failed to fetch server stats:', err);
+  }
+  return null;
+}
+
 async function fetchNotifications() {
   if (isUserViewer()) {
     if (DOM.notifBadge) DOM.notifBadge.textContent = '0';
@@ -1362,6 +1375,7 @@ function renderAllViews() {
     }
     populateBomProjectSelect();
   }
+  updateStatsSummary();
 }
 
 // 1. RENDER EXECUTIVE MANAGEMENT SHOWCASE (NEW COMPONENT)
@@ -3039,10 +3053,66 @@ function populateBomProjectSelect() {
   `).join('');
 }
 
-function updateStatsSummary() {
-  const activeCount = state.projects.filter(p => p.status !== 'completed').length;
-  const domains = new Set(state.projects.map(p => p.domain)).size;
-  DOM.statsSummaryPill.textContent = `${activeCount} Active Projects • ${domains} Domains • ${state.students.length} Students`;
+async function updateStatsSummary() {
+  const stats = await fetchServerStats();
+
+  const fallbackTotal = (state.allProjectsCache && state.allProjectsCache.length > 0) ? state.allProjectsCache.length : state.projects.length;
+  const targetDataset = (state.allProjectsCache && state.allProjectsCache.length > 0) ? state.allProjectsCache : state.projects;
+  const fallbackActive = targetDataset.filter(p => p.status !== 'completed').length;
+  const fallbackCompleted = targetDataset.filter(p => p.status === 'completed').length;
+  const fallbackInQueue = targetDataset.filter(p => p.status === 'in_queue').length;
+  const fallbackInProgress = targetDataset.filter(p => p.status === 'in_progress').length;
+  const fallbackTesting = targetDataset.filter(p => p.status === 'testing').length;
+
+  const total = stats ? stats.total : fallbackTotal;
+  const active = stats ? stats.active : fallbackActive;
+  const completed = stats ? stats.completed : fallbackCompleted;
+  const inQueue = stats && stats.breakdown ? stats.breakdown.in_queue : fallbackInQueue;
+  const inProgress = stats && stats.breakdown ? stats.breakdown.in_progress : fallbackInProgress;
+  const testing = stats && stats.breakdown ? stats.breakdown.testing : fallbackTesting;
+  const activeRatio = stats ? stats.active_ratio : `${active} / ${total}`;
+  const activePct = stats ? stats.active_percentage : (total > 0 ? Math.round((active / total) * 100) : 0);
+  const domainsCount = stats ? stats.domains_count : new Set(targetDataset.map(p => p.domain)).size;
+  const studentsCount = stats ? stats.students_count : state.students.length;
+
+  // 1. Top Navigation Summary Pill (#stats-summary-pill)
+  if (DOM.statsSummaryPill) {
+    DOM.statsSummaryPill.textContent = `⚡ Active Projects: ${activeRatio} (${activePct}%) • ${domainsCount} Domains • ${studentsCount} Students`;
+    DOM.statsSummaryPill.title = `Active: ${active} of ${total} | In Queue: ${inQueue} | In Progress: ${inProgress} | Testing: ${testing} | Completed: ${completed}`;
+  }
+
+  // 2. Board (Kanban) View Live Active Projects Banner (#board-active-stats-banner)
+  const statActiveRatio = document.getElementById('stat-active-ratio');
+  const statActiveBadge = document.getElementById('stat-active-badge');
+  const statActiveSub = document.getElementById('stat-active-sub');
+  const statInQueueNum = document.getElementById('stat-in-queue-num');
+  const statInProgressNum = document.getElementById('stat-in-progress-num');
+  const statTestingNum = document.getElementById('stat-testing-num');
+  const statCompletedNum = document.getElementById('stat-completed-num');
+
+  if (statActiveRatio) statActiveRatio.textContent = activeRatio;
+  if (statActiveBadge) statActiveBadge.textContent = `${activePct}% Active`;
+  if (statActiveSub) statActiveSub.textContent = `${active} in pipeline (${domainsCount} domains)`;
+  if (statInQueueNum) statInQueueNum.textContent = inQueue;
+  if (statInProgressNum) statInProgressNum.textContent = inProgress;
+  if (statTestingNum) statTestingNum.textContent = testing;
+  if (statCompletedNum) statCompletedNum.textContent = completed;
+
+  // 3. Executive Management Showcase KPI Card
+  const execActiveNum = document.getElementById('exec-active-projects-num');
+  const execActivePct = document.getElementById('exec-active-projects-pct');
+  const execActiveBar = document.getElementById('exec-active-projects-bar');
+  const execActiveSub = document.getElementById('exec-active-projects-sub');
+
+  if (execActiveNum) execActiveNum.textContent = activeRatio;
+  if (execActivePct) execActivePct.textContent = `${activePct}% Active`;
+  if (execActiveBar) execActiveBar.style.width = `${activePct}%`;
+  if (execActiveSub) execActiveSub.textContent = `Queue: ${inQueue} • Progress: ${inProgress} • Testing: ${testing} • Done: ${completed}`;
+
+  // 4. Update Student Count in Showcase
+  const execStudentSub = document.getElementById('exec-student-sub');
+  if (DOM.execStudentCount) DOM.execStudentCount.textContent = `${studentsCount} Engineers`;
+  if (execStudentSub) execStudentSub.textContent = `Across ${domainsCount} Engineering Domains`;
 }
 
 // ----------------------------------------------------

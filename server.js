@@ -814,6 +814,73 @@ app.get('/api/public/projects', (req, res) => {
   });
 });
 
+// GET REAL-TIME PROJECT STATS & ACTIVE COUNTER (SERVER-SIDE CALCULATION)
+app.get(['/api/projects/stats', '/api/stats'], optionalAuth, (req, res) => {
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
+  const isAdmin = userRole === 'admin' || userEmail === ADMIN_EMAIL;
+
+  let baseWhere = '1=1';
+  if (!isAdmin) {
+    baseWhere += ' AND (is_visible = 1 OR is_visible IS NULL) AND (is_active = 1 OR is_active IS NULL)';
+  }
+
+  const statsSql = `
+    SELECT
+      COUNT(*) as total_projects,
+      SUM(CASE WHEN status != 'completed' THEN 1 ELSE 0 END) as active_projects,
+      SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_projects,
+      SUM(CASE WHEN status = 'in_queue' THEN 1 ELSE 0 END) as in_queue_count,
+      SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_count,
+      SUM(CASE WHEN status = 'testing' THEN 1 ELSE 0 END) as testing_count,
+      COUNT(DISTINCT domain) as domains_count,
+      AVG(progress) as avg_progress
+    FROM projects
+    WHERE ${baseWhere}
+  `;
+
+  db.get(statsSql, [], (err, projectStats) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    db.get('SELECT COUNT(*) as student_count FROM students', [], (err2, studentStats) => {
+      db.get(`
+        SELECT
+          SUM(CASE WHEN status = 'Approved' THEN total_price ELSE 0 END) as approved_budget,
+          SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) as pending_boms
+        FROM bom_items
+      `, [], (err3, bomStats) => {
+        const total = projectStats ? (projectStats.total_projects || 0) : 0;
+        const active = projectStats ? (projectStats.active_projects || 0) : 0;
+        const completed = projectStats ? (projectStats.completed_projects || 0) : 0;
+        const inQueue = projectStats ? (projectStats.in_queue_count || 0) : 0;
+        const inProgress = projectStats ? (projectStats.in_progress_count || 0) : 0;
+        const testing = projectStats ? (projectStats.testing_count || 0) : 0;
+        const avgProgress = projectStats ? Math.round(projectStats.avg_progress || 0) : 0;
+
+        res.json({
+          total,
+          active,
+          completed,
+          active_ratio: `${active} / ${total}`,
+          active_percentage: total > 0 ? Math.round((active / total) * 100) : 0,
+          avg_progress: avgProgress,
+          breakdown: {
+            in_queue: inQueue,
+            in_progress: inProgress,
+            testing: testing,
+            completed: completed
+          },
+          domains_count: projectStats ? (projectStats.domains_count || 0) : 0,
+          students_count: studentStats ? (studentStats.student_count || 0) : 0,
+          approved_budget: bomStats ? (bomStats.approved_budget || 0) : 0,
+          pending_boms: bomStats ? (bomStats.pending_boms || 0) : 0,
+          is_admin: isAdmin
+        });
+      });
+    });
+  });
+});
+
 // GET SINGLE PROJECT WITH BOM & ACTIVITIES (PUBLIC & AUTHENTICATED)
 app.get('/api/projects/:id', optionalAuth, (req, res) => {
   const { id } = req.params;
