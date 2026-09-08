@@ -820,11 +820,6 @@ app.get(['/api/projects/stats', '/api/stats'], optionalAuth, (req, res) => {
   const userEmail = (req.user && req.user.email) ? req.user.email.toLowerCase() : '';
   const isAdmin = userRole === 'admin' || userEmail === ADMIN_EMAIL;
 
-  let baseWhere = '1=1';
-  if (!isAdmin) {
-    baseWhere += ' AND (is_visible = 1 OR is_visible IS NULL) AND (is_active = 1 OR is_active IS NULL)';
-  }
-
   const statsSql = `
     SELECT
       COUNT(*) as total_projects,
@@ -836,7 +831,6 @@ app.get(['/api/projects/stats', '/api/stats'], optionalAuth, (req, res) => {
       COUNT(DISTINCT domain) as domains_count,
       AVG(progress) as avg_progress
     FROM projects
-    WHERE ${baseWhere}
   `;
 
   db.get(statsSql, [], (err, projectStats) => {

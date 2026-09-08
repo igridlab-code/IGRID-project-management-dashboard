@@ -3077,8 +3077,8 @@ async function updateStatsSummary() {
 
   // 1. Top Navigation Summary Pill (#stats-summary-pill)
   if (DOM.statsSummaryPill) {
-    DOM.statsSummaryPill.textContent = `⚡ Active Projects: ${activeRatio} (${activePct}%) • ${domainsCount} Domains • ${studentsCount} Students`;
-    DOM.statsSummaryPill.title = `Active: ${active} of ${total} | In Queue: ${inQueue} | In Progress: ${inProgress} | Testing: ${testing} | Completed: ${completed}`;
+    DOM.statsSummaryPill.textContent = `Total Projects: ${total} • ${domainsCount} Domains • ${studentsCount} Students`;
+    DOM.statsSummaryPill.title = `Total: ${total} Projects across ${domainsCount} Domains | In Queue: ${inQueue} | In Progress: ${inProgress} | Testing: ${testing} | Completed: ${completed}`;
   }
 
   // 2. Executive Management Showcase KPI Card
@@ -3087,12 +3087,12 @@ async function updateStatsSummary() {
   const execActiveBar = document.getElementById('exec-active-projects-bar');
   const execActiveSub = document.getElementById('exec-active-projects-sub');
 
-  if (execActiveNum) execActiveNum.textContent = activeRatio;
-  if (execActivePct) execActivePct.textContent = `${activePct}% Active`;
-  if (execActiveBar) execActiveBar.style.width = `${activePct}%`;
+  if (execActiveNum) execActiveNum.textContent = `${total} Projects`;
+  if (execActivePct) execActivePct.textContent = `${total} Total`;
+  if (execActiveBar) execActiveBar.style.width = `100%`;
   if (execActiveSub) execActiveSub.textContent = `Queue: ${inQueue} • Progress: ${inProgress} • Testing: ${testing} • Done: ${completed}`;
 
-  // 4. Update Student Count in Showcase
+  // 3. Update Student Count in Showcase
   const execStudentSub = document.getElementById('exec-student-sub');
   if (DOM.execStudentCount) DOM.execStudentCount.textContent = `${studentsCount} Engineers`;
   if (execStudentSub) execStudentSub.textContent = `Across ${domainsCount} Engineering Domains`;
