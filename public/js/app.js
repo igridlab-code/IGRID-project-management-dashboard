@@ -3081,24 +3081,7 @@ async function updateStatsSummary() {
     DOM.statsSummaryPill.title = `Active: ${active} of ${total} | In Queue: ${inQueue} | In Progress: ${inProgress} | Testing: ${testing} | Completed: ${completed}`;
   }
 
-  // 2. Board (Kanban) View Live Active Projects Banner (#board-active-stats-banner)
-  const statActiveRatio = document.getElementById('stat-active-ratio');
-  const statActiveBadge = document.getElementById('stat-active-badge');
-  const statActiveSub = document.getElementById('stat-active-sub');
-  const statInQueueNum = document.getElementById('stat-in-queue-num');
-  const statInProgressNum = document.getElementById('stat-in-progress-num');
-  const statTestingNum = document.getElementById('stat-testing-num');
-  const statCompletedNum = document.getElementById('stat-completed-num');
-
-  if (statActiveRatio) statActiveRatio.textContent = activeRatio;
-  if (statActiveBadge) statActiveBadge.textContent = `${activePct}% Active`;
-  if (statActiveSub) statActiveSub.textContent = `${active} in pipeline (${domainsCount} domains)`;
-  if (statInQueueNum) statInQueueNum.textContent = inQueue;
-  if (statInProgressNum) statInProgressNum.textContent = inProgress;
-  if (statTestingNum) statTestingNum.textContent = testing;
-  if (statCompletedNum) statCompletedNum.textContent = completed;
-
-  // 3. Executive Management Showcase KPI Card
+  // 2. Executive Management Showcase KPI Card
   const execActiveNum = document.getElementById('exec-active-projects-num');
   const execActivePct = document.getElementById('exec-active-projects-pct');
   const execActiveBar = document.getElementById('exec-active-projects-bar');
