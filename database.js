@@ -114,9 +114,9 @@ function initDb() {
       )
     `);
 
-    const studentCols = ['user_id', 'phone', 'section', 'college', 'github_url', 'linkedin_url', 'bio', 'assigned_project', 'project_title', 'project_desc', 'team_members', 'guide', 'status', 'progress'];
+    const studentCols = ['user_id', 'phone', 'section', 'college', 'github_url', 'linkedin_url', 'bio', 'assigned_project', 'project_title', 'project_desc', 'team_members', 'guide', 'status', 'progress', 'batch'];
     studentCols.forEach(col => {
-      db.run(`ALTER TABLE students ADD COLUMN ${col} TEXT`, () => {});
+      db.run(`ALTER TABLE students ADD COLUMN ${col} ${col === 'batch' ? 'INTEGER' : 'TEXT'}`, () => {});
     });
 
     // BOM Items
@@ -228,6 +228,7 @@ function initDb() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT NOT NULL,
         role TEXT NOT NULL,
+        batch INTEGER,
         team_name TEXT DEFAULT 'N/A',
         method TEXT DEFAULT 'Email / Password',
         ip_address TEXT DEFAULT '127.0.0.1',
@@ -237,8 +238,10 @@ function initDb() {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    db.run(`ALTER TABLE audit_logs ADD COLUMN batch INTEGER`, () => {});
     db.run(`CREATE INDEX IF NOT EXISTS idx_audit_email_time ON audit_logs(email, timestamp)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp DESC)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_audit_batch ON audit_logs(batch)`);
 
     // Seed default domains if domains table is empty
     db.get('SELECT COUNT(*) as count FROM domains', (err, row) => {

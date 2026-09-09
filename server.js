@@ -98,6 +98,48 @@ function getClientIp(req) {
   return req.ip || (req.socket && req.socket.remoteAddress) || '127.0.0.1';
 }
 
+const BATCH_PROJECT_MAPPING = {
+  // Batch 1: IG26010001 - IG26010005
+  'IG26010001': 1, 'Academic ERP System': 1, 'Team 1': 1,
+  'IG26010002': 1, 'Transport ERP System': 1, 'Team 2': 1,
+  'IG26010003': 1, 'AI-Based Waste Segregation System': 1, 'Team 3': 1,
+  'IG26010004': 1, 'Campus Carbon Footprint Dashboard': 1, 'Team 4': 1,
+  'IG26010005': 1, 'Tree Health Monitoring System': 1, 'Team 5': 1,
+
+  // Batch 2: IG26010006 - IG26010010
+  'IG26010006': 2, 'Smart Gesture-Based IoT Switch': 2, 'Smart Gesture-based IOT switch': 2, 'Team 6': 2,
+  'IG26010007': 2, 'Inventory management': 2, 'Team 7': 2,
+  'IG26010008': 2, 'Smart Irrigation System': 2, 'AI Smart Irrigation System': 2, 'Team 8': 2,
+  'IG26010009': 2, 'Camera-Based Attendance System': 2, 'Team 9': 2,
+  'IG26010010': 2, 'Placement Readiness Scoring System': 2, 'Team 10': 2,
+
+  // Batch 3: IG26010011 - IG26010015
+  'IG26010011': 3, 'Autonomous Floor Cleaning Robot': 3, 'Team 11': 3,
+  'IG26010012': 3, 'Robotic Waste Collection System': 3, 'Team 12': 3,
+  'IG26010013': 3, 'Robotic Gardening System': 3, 'Team 13': 3,
+  'IG26010014': 3, 'project monitoring system': 3, 'Project monitoring system': 3, 'Team 14': 3,
+  'IG26010015': 3, 'Virtual Campus Tour': 3, 'Team 15': 3,
+
+  // Batch 4: IG26010016 - IG26010020
+  'IG26010016': 4, 'Vehicle Entry & Traffic Analytics': 4, 'Team 16': 4,
+  'IG26010017': 4, 'Drone Crowd Monitoring System': 4, 'Team 17': 4,
+  'IG26010018': 4, 'Drone Digital Twin Data Capture System': 4, 'Smart Drone Delivery': 4, 'Team 18': 4,
+  'IG26010019': 4, 'Smart Medical Device Prototype': 4, 'Team 19': 4,
+  'IG26010020': 4, 'Smart Food Monitoring Device': 4, 'Team 20': 4
+};
+
+function resolveProjectBatch(key) {
+  if (!key) return null;
+  const str = String(key).trim();
+  if (BATCH_PROJECT_MAPPING[str]) return BATCH_PROJECT_MAPPING[str];
+  for (const [k, v] of Object.entries(BATCH_PROJECT_MAPPING)) {
+    if (str.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(str.toLowerCase())) {
+      return v;
+    }
+  }
+  return null;
+}
+
 function logAuditEvent({ email, role, team_name, ip_address, method, event_type, status, details }) {
   const cleanEmail = (email || '').toLowerCase().trim();
   const userRole = role || 'student';
@@ -108,27 +150,31 @@ function logAuditEvent({ email, role, team_name, ip_address, method, event_type,
   const detailStr = details ? (typeof details === 'object' ? JSON.stringify(details) : String(details)) : '';
 
   if (team_name && team_name !== 'N/A') {
-    insertLog(team_name);
+    const b = (userRole === 'admin' || userRole === 'viewer') ? null : resolveProjectBatch(team_name);
+    insertLog(team_name, b);
   } else {
-    db.get('SELECT team_name, assigned_project, project_title FROM students WHERE LOWER(email) = ?', [cleanEmail], (err, row) => {
+    db.get('SELECT team_name, assigned_project, project_title, batch FROM students WHERE LOWER(email) = ?', [cleanEmail], (err, row) => {
       let resolvedTeam = 'N/A';
+      let resolvedBatch = null;
       if (userRole === 'admin') {
         resolvedTeam = 'IGRID Lab Admin Core';
       } else if (userRole === 'viewer') {
         resolvedTeam = 'Public Viewer';
       } else if (row) {
         resolvedTeam = row.team_name || row.assigned_project || row.project_title || 'Student Innovator';
+        resolvedBatch = row.batch || resolveProjectBatch(row.assigned_project) || resolveProjectBatch(row.project_title);
       }
-      insertLog(resolvedTeam);
+      insertLog(resolvedTeam, resolvedBatch);
     });
   }
 
-  function insertLog(team) {
+  function insertLog(team, batchVal) {
+    const batch = (userRole === 'admin' || userRole === 'viewer') ? null : (batchVal || resolveProjectBatch(team));
     const sql = `
-      INSERT INTO audit_logs (email, role, team_name, method, ip_address, event_type, status, details, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      INSERT INTO audit_logs (email, role, batch, team_name, method, ip_address, event_type, status, details, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `;
-    db.run(sql, [cleanEmail, userRole, team || 'N/A', loginMethod, ip, type, logStatus, detailStr], function(err) {
+    db.run(sql, [cleanEmail, userRole, batch, team || 'N/A', loginMethod, ip, type, logStatus, detailStr], function(err) {
       if (err) {
         console.error('[Audit Log Insert Error]', err.message);
       }
@@ -386,7 +432,7 @@ app.post('/api/auth/logout', optionalAuth, (req, res) => {
 // ADMIN AUDIT LOGS ENDPOINTS (ADMIN ONLY)
 // ----------------------------------------------------
 app.get('/api/admin/audit-logs', requireAuth, requireAdmin, (req, res) => {
-  const { search, role, event_type, start_date, end_date, page = 1, limit = 50 } = req.query;
+  const { search, role, event_type, batch, sort, start_date, end_date, page = 1, limit = 50 } = req.query;
 
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const limitNum = Math.max(1, Math.min(200, parseInt(limit, 10) || 50));
@@ -406,6 +452,15 @@ app.get('/api/admin/audit-logs', requireAuth, requireAdmin, (req, res) => {
     params.push(role.toLowerCase());
   }
 
+  if (batch && batch !== 'all') {
+    if (batch === 'none' || batch === 'admin') {
+      whereClauses.push('batch IS NULL');
+    } else {
+      whereClauses.push('batch = ?');
+      params.push(parseInt(batch, 10));
+    }
+  }
+
   if (event_type && event_type !== 'all') {
     whereClauses.push('event_type = ?');
     params.push(event_type);
@@ -423,6 +478,16 @@ app.get('/api/admin/audit-logs', requireAuth, requireAdmin, (req, res) => {
 
   const whereSql = whereClauses.join(' AND ');
 
+  // Sorting
+  let orderSql = 'timestamp DESC, id DESC';
+  if (sort === 'batch_asc') {
+    orderSql = 'CASE WHEN batch IS NULL THEN 999 ELSE batch END ASC, timestamp DESC, id DESC';
+  } else if (sort === 'batch_desc') {
+    orderSql = 'CASE WHEN batch IS NULL THEN 999 ELSE batch END DESC, timestamp DESC, id DESC';
+  } else if (sort === 'timestamp_asc') {
+    orderSql = 'timestamp ASC, id ASC';
+  }
+
   // 1. Total Count for pagination
   db.get(`SELECT COUNT(*) as total FROM audit_logs WHERE ${whereSql}`, params, (errCount, countRow) => {
     if (errCount) return res.status(500).json({ error: errCount.message });
@@ -432,7 +497,7 @@ app.get('/api/admin/audit-logs', requireAuth, requireAdmin, (req, res) => {
     const querySql = `
       SELECT * FROM audit_logs
       WHERE ${whereSql}
-      ORDER BY timestamp DESC, id DESC
+      ORDER BY ${orderSql}
       LIMIT ? OFFSET ?
     `;
     const queryParams = [...params, limitNum, offset];
@@ -490,7 +555,7 @@ app.get('/api/admin/audit-logs', requireAuth, requireAdmin, (req, res) => {
 
 // CSV EXPORT ENDPOINT (ADMIN ONLY)
 app.get('/api/admin/audit-logs/export', requireAuth, requireAdmin, (req, res) => {
-  const { search, role, event_type, start_date, end_date } = req.query;
+  const { search, role, event_type, batch, sort, start_date, end_date } = req.query;
 
   let whereClauses = ['1=1'];
   let params = [];
@@ -503,6 +568,14 @@ app.get('/api/admin/audit-logs/export', requireAuth, requireAdmin, (req, res) =>
   if (role && role !== 'all') {
     whereClauses.push('LOWER(role) = ?');
     params.push(role.toLowerCase());
+  }
+  if (batch && batch !== 'all') {
+    if (batch === 'none' || batch === 'admin') {
+      whereClauses.push('batch IS NULL');
+    } else {
+      whereClauses.push('batch = ?');
+      params.push(parseInt(batch, 10));
+    }
   }
   if (event_type && event_type !== 'all') {
     whereClauses.push('event_type = ?');
@@ -517,24 +590,33 @@ app.get('/api/admin/audit-logs/export', requireAuth, requireAdmin, (req, res) =>
     params.push(end_date);
   }
 
+  let orderSql = 'timestamp DESC';
+  if (sort === 'batch_asc') {
+    orderSql = 'CASE WHEN batch IS NULL THEN 999 ELSE batch END ASC, timestamp DESC';
+  } else if (sort === 'batch_desc') {
+    orderSql = 'CASE WHEN batch IS NULL THEN 999 ELSE batch END DESC, timestamp DESC';
+  }
+
   const sql = `
-    SELECT id, email, role, team_name, method, ip_address, event_type, status, details, timestamp
+    SELECT id, email, role, batch, team_name, method, ip_address, event_type, status, details, timestamp
     FROM audit_logs
     WHERE ${whereClauses.join(' AND ')}
-    ORDER BY timestamp DESC
+    ORDER BY ${orderSql}
     LIMIT 5000
   `;
 
   db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
 
-    const csvHeaders = 'ID,Timestamp_UTC,Email,Role,Team,Method,IP_Address,Event_Type,Status,Details\n';
+    const csvHeaders = 'ID,Timestamp_UTC,Email,Role,Batch,Team,Method,IP_Address,Event_Type,Status,Details\n';
     const csvRows = (rows || []).map(r => {
+      const batchStr = r.batch ? `Batch ${r.batch}` : '—';
       return [
         r.id,
         `"${r.timestamp}"`,
         `"${r.email}"`,
         `"${r.role}"`,
+        `"${batchStr}"`,
         `"${(r.team_name || '').replace(/"/g, '""')}"`,
         `"${(r.method || '').replace(/"/g, '""')}"`,
         `"${r.ip_address}"`,

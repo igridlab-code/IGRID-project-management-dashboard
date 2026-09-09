@@ -34,6 +34,8 @@ const state = {
   auditFilters: {
     search: '',
     role: 'all',
+    batch: 'all',
+    sort: 'timestamp_desc',
     event_type: 'all',
     start_date: '',
     end_date: ''
@@ -4895,12 +4897,14 @@ async function fetchAndRenderAuditLogs() {
 
   const tbody = document.getElementById('audit-logs-tbody');
   if (tbody && state.auditLogs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="padding:32px; text-align:center; color:var(--text-dim);">Fetching login activity records...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="padding:32px; text-align:center; color:var(--text-dim);">Fetching login activity records...</td></tr>';
   }
 
   const params = new URLSearchParams();
   if (state.auditFilters.search) params.append('search', state.auditFilters.search);
   if (state.auditFilters.role && state.auditFilters.role !== 'all') params.append('role', state.auditFilters.role);
+  if (state.auditFilters.batch && state.auditFilters.batch !== 'all') params.append('batch', state.auditFilters.batch);
+  if (state.auditFilters.sort) params.append('sort', state.auditFilters.sort);
   if (state.auditFilters.event_type && state.auditFilters.event_type !== 'all') params.append('event_type', state.auditFilters.event_type);
   if (state.auditFilters.start_date) params.append('start_date', state.auditFilters.start_date);
   if (state.auditFilters.end_date) params.append('end_date', state.auditFilters.end_date);
@@ -4911,7 +4915,7 @@ async function fetchAndRenderAuditLogs() {
     const res = await authFetch(`/api/admin/audit-logs?${params.toString()}`);
     if (!res.ok) {
       if (res.status === 403) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="padding:32px; text-align:center; color:#ef4444;">🔒 Access Denied. Administrator credentials required.</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="padding:32px; text-align:center; color:#ef4444;">🔒 Access Denied. Administrator credentials required.</td></tr>';
         return;
       }
       throw new Error(`HTTP ${res.status}`);
@@ -4928,7 +4932,7 @@ async function fetchAndRenderAuditLogs() {
   } catch (err) {
     console.error('Error fetching audit logs:', err);
     if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="8" style="padding:32px; text-align:center; color:#ef4444;">Failed to load audit logs: ${escapeHTML(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" style="padding:32px; text-align:center; color:#ef4444;">Failed to load audit logs: ${escapeHTML(err.message)}</td></tr>`;
     }
   }
 }
@@ -4969,7 +4973,7 @@ function renderAuditLogsUI() {
   if (!tbody) return;
 
   if (state.auditLogs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="padding:40px; text-align:center; color:var(--text-dim);">No login activity records match the selected filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="padding:40px; text-align:center; color:var(--text-dim);">No login activity records match the selected filters.</td></tr>';
     return;
   }
 
@@ -4984,6 +4988,18 @@ function renderAuditLogsUI() {
     let roleBadge = '<span class="badge badge-success">🎓 Student</span>';
     if (log.role === 'admin') roleBadge = '<span class="badge badge-primary">👑 Admin</span>';
     else if (log.role === 'viewer') roleBadge = '<span class="badge badge-blue">👁️ Viewer</span>';
+
+    // Batch badge
+    let batchBadge = '<span style="color:var(--text-dim); font-family:var(--font-mono); font-size:12px;">—</span>';
+    if (log.batch === 1) {
+      batchBadge = '<span class="badge" style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.35); font-weight:700; font-size:11px; padding:2px 8px; border-radius:4px;">Batch 1</span>';
+    } else if (log.batch === 2) {
+      batchBadge = '<span class="badge" style="background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.35); font-weight:700; font-size:11px; padding:2px 8px; border-radius:4px;">Batch 2</span>';
+    } else if (log.batch === 3) {
+      batchBadge = '<span class="badge" style="background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.35); font-weight:700; font-size:11px; padding:2px 8px; border-radius:4px;">Batch 3</span>';
+    } else if (log.batch === 4) {
+      batchBadge = '<span class="badge" style="background:rgba(139,92,246,0.15); color:#c084fc; border:1px solid rgba(139,92,246,0.35); font-weight:700; font-size:11px; padding:2px 8px; border-radius:4px;">Batch 4</span>';
+    }
 
     // Status badge
     let statusBadge = '<span style="color:#10b981; font-weight:600;">✓ Success</span>';
@@ -5023,6 +5039,7 @@ function renderAuditLogsUI() {
           </div>
         </td>
         <td style="padding:12px 16px;">${roleBadge}</td>
+        <td style="padding:12px 16px;">${batchBadge}</td>
         <td style="padding:12px 16px; color:var(--text-dim); max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
           ${escapeHTML(log.team_name || 'N/A')}
         </td>
@@ -5046,6 +5063,8 @@ function renderAuditLogsUI() {
 function initAuditLogListeners() {
   const searchInput = document.getElementById('audit-search-input');
   const roleSelect = document.getElementById('audit-role-filter');
+  const batchSelect = document.getElementById('audit-batch-filter');
+  const sortSelect = document.getElementById('audit-sort-filter');
   const eventSelect = document.getElementById('audit-event-filter');
   const dateFrom = document.getElementById('audit-date-from');
   const dateTo = document.getElementById('audit-date-to');
@@ -5083,9 +5102,25 @@ function initAuditLogListeners() {
     });
   }
 
+  if (batchSelect) {
+    batchSelect.addEventListener('change', () => {
+      state.auditFilters.batch = batchSelect.value;
+      state.auditPage = 1;
+      fetchAndRenderAuditLogs();
+    });
+  }
+
   if (roleSelect) {
     roleSelect.addEventListener('change', () => {
       state.auditFilters.role = roleSelect.value;
+      state.auditPage = 1;
+      fetchAndRenderAuditLogs();
+    });
+  }
+
+  if (sortSelect) {
+    sortSelect.addEventListener('change', () => {
+      state.auditFilters.sort = sortSelect.value;
       state.auditPage = 1;
       fetchAndRenderAuditLogs();
     });
@@ -5119,11 +5154,13 @@ function initAuditLogListeners() {
     btnReset.addEventListener('click', () => {
       if (searchInput) searchInput.value = '';
       if (roleSelect) roleSelect.value = 'all';
+      if (batchSelect) batchSelect.value = 'all';
+      if (sortSelect) sortSelect.value = 'timestamp_desc';
       if (eventSelect) eventSelect.value = 'all';
       if (dateFrom) dateFrom.value = '';
       if (dateTo) dateTo.value = '';
 
-      state.auditFilters = { search: '', role: 'all', event_type: 'all', start_date: '', end_date: '' };
+      state.auditFilters = { search: '', role: 'all', batch: 'all', sort: 'timestamp_desc', event_type: 'all', start_date: '', end_date: '' };
       state.auditPage = 1;
       fetchAndRenderAuditLogs();
       showToast('Audit filters reset');
@@ -5160,6 +5197,8 @@ function initAuditLogListeners() {
       const params = new URLSearchParams();
       if (state.auditFilters.search) params.append('search', state.auditFilters.search);
       if (state.auditFilters.role && state.auditFilters.role !== 'all') params.append('role', state.auditFilters.role);
+      if (state.auditFilters.batch && state.auditFilters.batch !== 'all') params.append('batch', state.auditFilters.batch);
+      if (state.auditFilters.sort) params.append('sort', state.auditFilters.sort);
       if (state.auditFilters.event_type && state.auditFilters.event_type !== 'all') params.append('event_type', state.auditFilters.event_type);
       if (state.auditFilters.start_date) params.append('start_date', state.auditFilters.start_date);
       if (state.auditFilters.end_date) params.append('end_date', state.auditFilters.end_date);
@@ -5167,7 +5206,7 @@ function initAuditLogListeners() {
       const token = getSessionToken();
       if (token) params.append('token', token);
 
-      showToast('Generating official audit CSV report...');
+      showToast('Generating official audit CSV report with batches...');
       window.location.href = `/api/admin/audit-logs/export?${params.toString()}`;
     });
   }
