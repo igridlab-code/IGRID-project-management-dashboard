@@ -3889,6 +3889,175 @@ h1, h2, h3, h4, h5, h6, p, span, a, label, .card-title, .card-desc, .action-item
   border-radius: 4px;
 }
 
+/* ==========================================================================
+   BATCH PROJECT HUB VIEW STYLES
+   ========================================================================== */
+.batch-hub-container {
+  width: 100%;
+}
+
+.batch-filter-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 4px 0 16px 0;
+}
+
+.batch-pill {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 7px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.batch-pill:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-main);
+  border-color: var(--border-light);
+}
+
+.batch-pill.active {
+  background: var(--primary);
+  color: var(--primary-text);
+  border-color: var(--primary);
+  font-weight: 700;
+  box-shadow: 0 2px 10px var(--primary-glow);
+}
+
+.batch-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-card);
+}
+
+.batch-section:hover {
+  border-color: var(--border-light);
+}
+
+.batch-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.batch-section-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.batch-section.collapsed .batch-section-header {
+  border-bottom: none;
+}
+
+.batch-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.batch-tag-badge {
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.2), rgba(234, 179, 8, 0.3));
+  border: 1px solid rgba(250, 204, 21, 0.4);
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+.batch-title-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.batch-count-tag {
+  font-size: 12px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.batch-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.batch-stats-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.batch-chevron-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.batch-section.collapsed .batch-chevron-btn svg {
+  transform: rotate(-90deg);
+}
+
+.batch-section-body {
+  padding: 20px;
+}
+
+.batch-section.collapsed .batch-section-body {
+  display: none;
+}
+
+.batch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .batch-section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .batch-header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .batch-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 
 
 

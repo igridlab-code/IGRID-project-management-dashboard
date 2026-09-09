@@ -43,7 +43,9 @@ const state = {
   studentViewMode: 'cards',
   expandedStudentCards: new Set(),
   togglingProjects: new Set(),
-  currentEditingTeamMembers: []
+  currentEditingTeamMembers: [],
+  batchFilter: 'all',
+  collapsedBatches: new Set()
 };
 
 // DOM Elements
@@ -1223,6 +1225,9 @@ function initEventListeners() {
 
   // Audit Logs listeners
   initAuditLogListeners();
+
+  // Batch View listeners
+  initBatchViewListeners();
 }
 
 function resolveCurrentRoute() {
@@ -1255,6 +1260,8 @@ function resolveCurrentRoute() {
     targetView = 'analytics';
   } else if (hash === 'audit' || hash === 'audit-log' || path === '/audit' || path === '/audit-log' || path === '/admin') {
     targetView = 'audit';
+  } else if (hash === 'batch' || hash === 'batches' || path === '/batch' || path === '/batches') {
+    targetView = 'batch';
   }
 
   // Enforce viewer role restriction: ONLY Management Showcase and Board allowed!
@@ -1375,6 +1382,7 @@ function renderAllViews() {
     if (state.currentView === 'audit' && isUserAdmin()) {
       fetchAndRenderAuditLogs();
     }
+    renderBatchView();
     populateBomProjectSelect();
   }
   updateStatsSummary();
@@ -5223,5 +5231,210 @@ window.executeStudentDelete = executeStudentDelete;
 window.renderTeamMembersChips = renderTeamMembersChips;
 window.addTeamMemberChip = addTeamMemberChip;
 window.removeTeamMemberChip = removeTeamMemberChip;
+window.toggleBatchSection = toggleBatchSection;
+window.renderBatchView = renderBatchView;
+
+// ==========================================================================
+// BATCH PROJECT HUB VIEW LOGIC
+// ==========================================================================
+const BATCH_INFO = {
+  1: {
+    number: 1,
+    name: 'Batch 1',
+    theme: 'Enterprise ERP & Smart Campus Ecology',
+    description: 'Academic ERP, Transport ERP, AI Waste Segregation, Campus Carbon Footprint, Tree Health Monitoring',
+    codes: ['IG26010001', 'IG26010002', 'IG26010003', 'IG26010004', 'IG26010005']
+  },
+  2: {
+    number: 2,
+    name: 'Batch 2',
+    theme: 'Smart IoT, Automation & Logistics',
+    description: 'Smart Gesture Switch, Inventory Management, Smart Irrigation, Camera Attendance, Placement Readiness',
+    codes: ['IG26010006', 'IG26010007', 'IG26010008', 'IG26010009', 'IG26010010']
+  },
+  3: {
+    number: 3,
+    name: 'Batch 3',
+    theme: 'Robotics, Autonomous Agents & Simulation',
+    description: 'Autonomous Cleaning Robot, Robotic Waste Collection, Robotic Gardening, Project Monitoring, Virtual Tour',
+    codes: ['IG26010011', 'IG26010012', 'IG26010013', 'IG26010014', 'IG26010015']
+  },
+  4: {
+    number: 4,
+    name: 'Batch 4',
+    theme: 'UAVs, Digital Twins & Biomedical Sensors',
+    description: 'Vehicle Entry & Traffic Analytics, Drone Crowd Monitoring, Drone Digital Twin, Smart Medical Device, Food Monitoring',
+    codes: ['IG26010016', 'IG26010017', 'IG26010018', 'IG26010019', 'IG26010020']
+  }
+};
+
+function getProjectBatch(p) {
+  if (p.batch && Number(p.batch) >= 1 && Number(p.batch) <= 4) {
+    return Number(p.batch);
+  }
+  const code = (p.project_code || '').toUpperCase().trim();
+  for (let b = 1; b <= 4; b++) {
+    if (BATCH_INFO[b].codes.includes(code)) return b;
+  }
+  const match = code.match(/IG\d{2}\d{2}(\d{4})/i) || code.match(/(\d+)/);
+  if (match) {
+    const num = parseInt(match[1], 10);
+    if (num >= 1 && num <= 5) return 1;
+    if (num >= 6 && num <= 10) return 2;
+    if (num >= 11 && num <= 15) return 3;
+    if (num >= 16 && num <= 20) return 4;
+  }
+  if (p.id >= 1 && p.id <= 5) return 1;
+  if (p.id >= 6 && p.id <= 10) return 2;
+  if (p.id >= 11 && p.id <= 15) return 3;
+  if (p.id >= 16 && p.id <= 20) return 4;
+  return 1;
+}
+
+function renderBatchView() {
+  const root = document.getElementById('batch-sections-root');
+  if (!root) return;
+
+  // Group state.projects into batches
+  const batchGroups = { 1: [], 2: [], 3: [], 4: [] };
+  state.projects.forEach(p => {
+    const b = getProjectBatch(p);
+    if (batchGroups[b]) {
+      batchGroups[b].push(p);
+    }
+  });
+
+  // Filter batch numbers based on state.batchFilter ('all', 1, 2, 3, 4)
+  const batchesToRender = (state.batchFilter === 'all')
+    ? [1, 2, 3, 4]
+    : [Number(state.batchFilter)];
+
+  if (state.projects.length === 0) {
+    root.innerHTML = `<div style="padding: 40px 20px; text-align: center; color: var(--text-dim); background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px;">No projects found matching the current search / filters.</div>`;
+    return;
+  }
+
+  let html = '';
+  batchesToRender.forEach(bNum => {
+    const info = BATCH_INFO[bNum];
+    const projects = batchGroups[bNum] || [];
+    const isCollapsed = state.collapsedBatches.has(bNum);
+    const avgProgress = projects.length > 0 ? Math.round(projects.reduce((acc, p) => acc + (p.progress || 0), 0) / projects.length) : 0;
+    const domains = Array.from(new Set(projects.map(p => p.domain).filter(Boolean)));
+
+    html += `
+      <div class="batch-section ${isCollapsed ? 'collapsed' : ''}" id="batch-section-${bNum}">
+        <div class="batch-section-header" onclick="toggleBatchSection(${bNum})">
+          <div class="batch-header-left">
+            <span class="batch-tag-badge">BATCH ${bNum}</span>
+            <span class="batch-title-text">${escapeHTML(info.theme)}</span>
+            <span class="batch-count-tag">${projects.length} / 5 Projects</span>
+            ${domains.length > 0 ? `<span style="font-size: 11px; color: var(--text-dim);">• ${escapeHTML(domains.slice(0, 3).join(', '))}</span>` : ''}
+          </div>
+          <div class="batch-header-right">
+            <div class="batch-stats-summary">
+              <span>Avg Progress: <strong style="color: var(--primary);">${avgProgress}%</strong></span>
+            </div>
+            <button type="button" class="batch-chevron-btn" title="${isCollapsed ? 'Expand Batch' : 'Collapse Batch'}">
+              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="batch-section-body">
+          ${projects.length > 0 ? `
+            <div class="batch-grid">
+              ${projects.map(createCardHTML).join('')}
+            </div>
+          ` : `
+            <div style="padding: 24px; text-align: center; color: var(--text-dim); font-size: 13px;">No matching projects in Batch ${bNum} for current filters.</div>
+          `}
+        </div>
+      </div>
+    `;
+  });
+
+  root.innerHTML = html;
+
+  // Attach card click handlers for Batch view
+  root.querySelectorAll('.kanban-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.classList.contains('card-tag-pill') || e.target.closest('.card-tag-pill') || e.target.closest('.project-active-toggle-wrapper')) return;
+      const id = Number(card.getAttribute('data-id'));
+      openProjectDetail(id);
+    });
+  });
+
+  // Attach tag pill handlers
+  root.querySelectorAll('.card-tag-pill').forEach(pill => {
+    pill.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const tag = pill.getAttribute('data-tag') || '';
+      const cleanTag = tag.startsWith('#') ? tag : `#${tag}`;
+      if (state.filterTag.toLowerCase() === cleanTag.toLowerCase()) {
+        state.filterTag = '';
+      } else {
+        state.filterTag = cleanTag;
+      }
+      await fetchProjects();
+      renderAllViews();
+    });
+  });
+}
+
+function toggleBatchSection(batchNum) {
+  const b = Number(batchNum);
+  if (state.collapsedBatches.has(b)) {
+    state.collapsedBatches.delete(b);
+  } else {
+    state.collapsedBatches.add(b);
+  }
+  const section = document.getElementById(`batch-section-${b}`);
+  if (section) {
+    section.classList.toggle('collapsed', state.collapsedBatches.has(b));
+    const btn = section.querySelector('.batch-chevron-btn');
+    if (btn) {
+      btn.setAttribute('title', state.collapsedBatches.has(b) ? 'Expand Batch' : 'Collapse Batch');
+    }
+  }
+  updateBatchToggleAllButton();
+}
+
+function updateBatchToggleAllButton() {
+  const textElem = document.getElementById('batch-toggle-all-text');
+  if (!textElem) return;
+  const allCollapsed = [1, 2, 3, 4].every(b => state.collapsedBatches.has(b));
+  textElem.textContent = allCollapsed ? 'Expand All' : 'Collapse All';
+}
+
+function initBatchViewListeners() {
+  // Batch Filter Pills
+  const batchFilterPills = document.querySelectorAll('.batch-pill');
+  batchFilterPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      batchFilterPills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      state.batchFilter = pill.getAttribute('data-batch');
+      renderBatchView();
+    });
+  });
+
+  // Batch Toggle All Button
+  const btnBatchToggleAll = document.getElementById('btn-batch-toggle-all');
+  if (btnBatchToggleAll) {
+    btnBatchToggleAll.addEventListener('click', () => {
+      const allCollapsed = [1, 2, 3, 4].every(b => state.collapsedBatches.has(b));
+      if (allCollapsed) {
+        state.collapsedBatches.clear();
+      } else {
+        state.collapsedBatches = new Set([1, 2, 3, 4]);
+      }
+      renderBatchView();
+      updateBatchToggleAllButton();
+    });
+  }
+}
+
 
 
