@@ -44,8 +44,8 @@ const state = {
   expandedStudentCards: new Set(),
   togglingProjects: new Set(),
   currentEditingTeamMembers: [],
-  batchFilter: 'all',
-  collapsedBatches: new Set()
+  tableSortKey: 'id',
+  tableSortAsc: true
 };
 
 // DOM Elements
@@ -662,6 +662,18 @@ function renderDomainsUI() {
     drawerSelect.innerHTML = drawerHtml;
     drawerSelect.value = state.filterDomain || 'All';
   }
+
+  // 4. Table View Domain Filter (#table-domain-filter)
+  const tableDomainSelect = document.getElementById('table-domain-filter');
+  if (tableDomainSelect) {
+    const currentVal = tableDomainSelect.value;
+    let tableDomainHtml = '<option value="All">All Domains</option>';
+    tableDomainHtml += state.domains.map(d => `<option value="${escapeHTML(d.name)}">${escapeHTML(d.name)}</option>`).join('');
+    tableDomainSelect.innerHTML = tableDomainHtml;
+    if (currentVal && state.domains.some(d => d.name === currentVal)) {
+      tableDomainSelect.value = currentVal;
+    }
+  }
 }
 
 let lastSelectedDomainVal = 'AI';
@@ -1159,6 +1171,9 @@ function initEventListeners() {
   const studentSearchInput = document.getElementById('student-search-input');
   if (studentSearchInput) studentSearchInput.addEventListener('input', renderStudents);
 
+  const studentBatchFilter = document.getElementById('student-batch-filter');
+  if (studentBatchFilter) studentBatchFilter.addEventListener('change', renderStudents);
+
   const studentDeptFilter = document.getElementById('student-dept-filter');
   if (studentDeptFilter) studentDeptFilter.addEventListener('change', renderStudents);
 
@@ -1187,6 +1202,37 @@ function initEventListeners() {
       btnStudentViewTable.classList.add('active');
       if (btnStudentViewCards) btnStudentViewCards.classList.remove('active');
       renderStudents();
+    });
+  }
+
+  // Table Search & Filter Listeners
+  const tableSearchInput = document.getElementById('table-search-input');
+  if (tableSearchInput) tableSearchInput.addEventListener('input', renderTable);
+
+  const tableBatchFilter = document.getElementById('table-batch-filter');
+  if (tableBatchFilter) tableBatchFilter.addEventListener('change', renderTable);
+
+  const tableDomainFilter = document.getElementById('table-domain-filter');
+  if (tableDomainFilter) tableDomainFilter.addEventListener('change', renderTable);
+
+  const tableStatusFilter = document.getElementById('table-status-filter');
+  if (tableStatusFilter) tableStatusFilter.addEventListener('change', renderTable);
+
+  const tablePriorityFilter = document.getElementById('table-priority-filter');
+  if (tablePriorityFilter) tablePriorityFilter.addEventListener('change', renderTable);
+
+  const btnResetTableFilters = document.getElementById('btn-reset-table-filters');
+  if (btnResetTableFilters) {
+    btnResetTableFilters.addEventListener('click', () => {
+      if (tableSearchInput) tableSearchInput.value = '';
+      if (tableBatchFilter) tableBatchFilter.value = 'All';
+      if (tableDomainFilter) tableDomainFilter.value = 'All';
+      if (tableStatusFilter) tableStatusFilter.value = 'All';
+      if (tablePriorityFilter) tablePriorityFilter.value = 'All';
+      state.tableSortKey = 'id';
+      state.tableSortAsc = true;
+      renderTable();
+      showToast('Table filters reset to default');
     });
   }
 
@@ -1225,9 +1271,6 @@ function initEventListeners() {
 
   // Audit Logs listeners
   initAuditLogListeners();
-
-  // Batch View listeners
-  initBatchViewListeners();
 }
 
 function resolveCurrentRoute() {
@@ -1260,8 +1303,6 @@ function resolveCurrentRoute() {
     targetView = 'analytics';
   } else if (hash === 'audit' || hash === 'audit-log' || path === '/audit' || path === '/audit-log' || path === '/admin') {
     targetView = 'audit';
-  } else if (hash === 'batch' || hash === 'batches' || path === '/batch' || path === '/batches') {
-    targetView = 'batch';
   }
 
   // Enforce viewer role restriction: ONLY Management Showcase and Board allowed!
@@ -1382,7 +1423,6 @@ function renderAllViews() {
     if (state.currentView === 'audit' && isUserAdmin()) {
       fetchAndRenderAuditLogs();
     }
-    renderBatchView();
     populateBomProjectSelect();
   }
   updateStatsSummary();
@@ -1948,15 +1988,114 @@ function renderList() {
 }
 
 // 6. RENDER TABLE VIEW
+function handleTableSort(sortKey) {
+  if (state.tableSortKey === sortKey) {
+    state.tableSortAsc = !state.tableSortAsc;
+  } else {
+    state.tableSortKey = sortKey;
+    state.tableSortAsc = true;
+  }
+  renderTable();
+}
+window.handleTableSort = handleTableSort;
+
 function renderTable() {
   if (!DOM.tableBodyRoot) return;
-  if (state.projects.length === 0) {
-    DOM.tableBodyRoot.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--text-dim);">No data available</td></tr>';
+
+  const searchInput = document.getElementById('table-search-input');
+  const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+  const batchSelect = document.getElementById('table-batch-filter');
+  const selectedBatch = batchSelect ? batchSelect.value : 'All';
+
+  const domainSelect = document.getElementById('table-domain-filter');
+  const selectedDomain = domainSelect ? domainSelect.value : 'All';
+
+  const statusSelect = document.getElementById('table-status-filter');
+  const selectedStatus = statusSelect ? statusSelect.value : 'All';
+
+  const prioritySelect = document.getElementById('table-priority-filter');
+  const selectedPriority = prioritySelect ? prioritySelect.value : 'All';
+
+  // Filter projects
+  let filtered = state.projects.filter(p => {
+    const pBatch = getProjectBatch(p);
+    if (selectedBatch !== 'All' && String(pBatch) !== String(selectedBatch)) {
+      return false;
+    }
+    if (selectedDomain !== 'All' && (p.domain || '').toLowerCase() !== selectedDomain.toLowerCase()) {
+      return false;
+    }
+    if (selectedStatus !== 'All' && (p.status || '').toLowerCase() !== selectedStatus.toLowerCase()) {
+      return false;
+    }
+    if (selectedPriority !== 'All' && (p.priority || '').toLowerCase() !== selectedPriority.toLowerCase()) {
+      return false;
+    }
+    if (query) {
+      const matchTitle = (p.title || '').toLowerCase().includes(query);
+      const matchCode = (p.project_code || '').toLowerCase().includes(query);
+      const matchDomain = (p.domain || '').toLowerCase().includes(query);
+      const matchLead = (p.team_lead || '').toLowerCase().includes(query);
+      const matchTeam = (p.team_name || '').toLowerCase().includes(query);
+      const matchDesc = (p.description || '').toLowerCase().includes(query);
+      if (!matchTitle && !matchCode && !matchDomain && !matchLead && !matchTeam && !matchDesc) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  // Sort projects
+  filtered.sort((a, b) => {
+    let valA = a[state.tableSortKey];
+    let valB = b[state.tableSortKey];
+
+    if (state.tableSortKey === 'batch') {
+      valA = getProjectBatch(a);
+      valB = getProjectBatch(b);
+    } else if (state.tableSortKey === 'id') {
+      valA = Number(a.id) || 0;
+      valB = Number(b.id) || 0;
+    } else if (state.tableSortKey === 'progress') {
+      valA = Number(a.progress) || 0;
+      valB = Number(b.progress) || 0;
+    } else if (state.tableSortKey === 'due_date') {
+      valA = a.due_date || '';
+      valB = b.due_date || '';
+    } else {
+      valA = (valA || '').toString().toLowerCase();
+      valB = (valB || '').toString().toLowerCase();
+    }
+
+    if (valA < valB) return state.tableSortAsc ? -1 : 1;
+    if (valA > valB) return state.tableSortAsc ? 1 : -1;
+    return 0;
+  });
+
+  // Update table header sort indicators
+  const sortKeys = ['id', 'batch', 'title', 'domain', 'status', 'priority', 'progress', 'due_date', 'team_lead', 'bom_status'];
+  sortKeys.forEach(k => {
+    const icon = document.getElementById(`th-sort-${k}`);
+    if (icon) {
+      if (state.tableSortKey === k) {
+        icon.textContent = state.tableSortAsc ? '▲' : '▼';
+        icon.style.color = 'var(--primary)';
+      } else {
+        icon.textContent = '⇕';
+        icon.style.color = 'var(--text-dim)';
+      }
+    }
+  });
+
+  if (filtered.length === 0) {
+    DOM.tableBodyRoot.innerHTML = '<tr><td colspan="12" style="text-align:center; padding:30px; color:var(--text-dim);">No project records match the filter criteria.</td></tr>';
     return;
   }
 
   let html = '';
-  state.projects.forEach(p => {
+  filtered.forEach(p => {
+    const bNum = getProjectBatch(p);
     html += `
       <tr>
         <td class="table-code">
@@ -1965,8 +2104,11 @@ function renderTable() {
             ${renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active, { showLabel: false })}
           </div>
         </td>
+        <td>
+          <span class="batch-badge batch-badge-${bNum}">Batch ${bNum}</span>
+        </td>
         <td><span class="table-title" onclick="openProjectDetail(${p.id})">${escapeHTML(p.title)}</span></td>
-        <td><span class="badge badge-blue">${p.domain}</span></td>
+        <td><span class="badge badge-blue">${escapeHTML(p.domain)}</span></td>
         <td>
           <select onchange="updateProjectField(${p.id}, 'status', this.value)" style="padding:4px 8px; font-size:12px;">
             <option value="in_queue" ${p.status === 'in_queue' ? 'selected' : ''}>In Queue</option>
@@ -1984,7 +2126,7 @@ function renderTable() {
         </td>
         <td><strong>${p.progress || 0}%</strong></td>
         <td>${formatDate(p.due_date)}</td>
-        <td>${p.team_lead || 'Lead'}</td>
+        <td>${escapeHTML(p.team_lead || 'Lead')}</td>
         <td><span class="badge badge-date">${p.bom_status || 'N/A'}</span></td>
         <td>
           ${p.github_repo ? `<a href="${p.github_repo}" target="_blank" class="meta-link">🐙 Repo</a>` : '<span style="color:var(--text-dim)">-</span>'}
@@ -2122,6 +2264,22 @@ function toggleStudentCardExpand(studentId) {
   }
 }
 
+function getStudentBatch(s) {
+  if (s && s.batch && Number(s.batch) >= 1 && Number(s.batch) <= 4) {
+    return Number(s.batch);
+  }
+  const matchedProject = state.projects.find(p => 
+    (p.project_code && s.assigned_project && p.project_code.toLowerCase() === s.assigned_project.toLowerCase()) ||
+    (p.title && s.project_title && p.title.toLowerCase() === s.project_title.toLowerCase()) ||
+    (s.assigned_project && p.project_code && p.project_code.toLowerCase().includes(s.assigned_project.toLowerCase())) ||
+    (s.assigned_project && p.title && p.title.toLowerCase().includes(s.assigned_project.toLowerCase()))
+  );
+  if (matchedProject) {
+    return getProjectBatch(matchedProject);
+  }
+  return 1;
+}
+
 function renderStudents() {
   if (!DOM.studentsGridRoot) return;
   if (state.students.length === 0) {
@@ -2136,6 +2294,9 @@ function renderStudents() {
   // Search & Filters
   const searchInput = document.getElementById('student-search-input');
   const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+  const batchSelect = document.getElementById('student-batch-filter');
+  const selectedBatch = batchSelect ? batchSelect.value : 'All';
 
   const deptSelect = document.getElementById('student-dept-filter');
   const selectedDept = deptSelect ? deptSelect.value : 'All';
@@ -2158,6 +2319,10 @@ function renderStudents() {
       const matchGuide = (s.guide || '').toLowerCase().includes(query);
       if (!matchName && !matchRoll && !matchProject && !matchDept && !matchGuide) return false;
     }
+    if (selectedBatch !== 'All') {
+      const sBatch = getStudentBatch(s);
+      if (String(sBatch) !== String(selectedBatch)) return false;
+    }
     if (selectedDept !== 'All' && (s.department || '').toLowerCase() !== selectedDept.toLowerCase()) {
       return false;
     }
@@ -2175,6 +2340,7 @@ function renderStudents() {
     if (selectedSort === 'name_asc') return (a.name || '').localeCompare(b.name || '');
     if (selectedSort === 'name_desc') return (b.name || '').localeCompare(a.name || '');
     if (selectedSort === 'roll_asc') return (a.roll_no || '').localeCompare(b.roll_no || '');
+    if (selectedSort === 'batch_asc') return getStudentBatch(a) - getStudentBatch(b);
     if (selectedSort === 'progress_desc') return (b.progress || 0) - (a.progress || 0);
     return 0;
   });
@@ -2192,6 +2358,7 @@ function renderStudents() {
           <thead>
             <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
               <th style="padding: 12px 16px;">Student</th>
+              <th style="padding: 12px 16px;">Batch</th>
               <th style="padding: 12px 16px;">Register No</th>
               <th style="padding: 12px 16px;">Dept & Year</th>
               <th style="padding: 12px 16px;">Project & Guide</th>
@@ -2210,6 +2377,7 @@ function renderStudents() {
       const projName = s.assigned_project || s.project_title || 'Unassigned';
       const guideName = s.guide || 'Not assigned';
       const prog = s.progress || 0;
+      const sBatch = getStudentBatch(s);
       const isOwner = (s.email && s.email.toLowerCase() === currentEmail) || (s.name && s.name.toLowerCase() === currentName);
 
       tableHtml += `
@@ -2222,6 +2390,9 @@ function renderStudents() {
                 <div style="font-size: 11px; color: var(--text-dim);">${escapeHTML(s.email || '')}</div>
               </div>
             </div>
+          </td>
+          <td style="padding: 12px 16px;">
+            <span class="batch-badge batch-badge-${sBatch}">Batch ${sBatch}</span>
           </td>
           <td style="padding: 12px 16px; font-weight: 600; color: var(--text-muted);">${escapeHTML(s.roll_no)}</td>
           <td style="padding: 12px 16px;">
@@ -2271,6 +2442,7 @@ function renderStudents() {
     const statusBadge = statusText === 'Active' ? 'badge-success' : 'badge-normal';
     const prog = s.progress || 0;
     const isOwner = (s.email && s.email.toLowerCase() === currentEmail) || (s.name && s.name.toLowerCase() === currentName);
+    const sBatch = getStudentBatch(s);
 
     // Cross-reference with Project Database
     const matchedProject = state.projects.find(p => 
@@ -2332,6 +2504,7 @@ function renderStudents() {
 
         <!-- Badges Bar -->
         <div class="student-card-badges">
+          <span class="batch-badge batch-badge-${sBatch}">Batch ${sBatch}</span>
           <span class="badge badge-blue">${escapeHTML(s.department || 'Lab')}</span>
           <span class="badge badge-normal">${escapeHTML(s.year || 'Student')}${s.section ? ' • Sec ' + escapeHTML(s.section) : ''}</span>
           ${matchedProject ? `<span class="badge badge-primary">${escapeHTML(projectCode)}</span>` : ''}
@@ -5231,11 +5404,9 @@ window.executeStudentDelete = executeStudentDelete;
 window.renderTeamMembersChips = renderTeamMembersChips;
 window.addTeamMemberChip = addTeamMemberChip;
 window.removeTeamMemberChip = removeTeamMemberChip;
-window.toggleBatchSection = toggleBatchSection;
-window.renderBatchView = renderBatchView;
 
 // ==========================================================================
-// BATCH PROJECT HUB VIEW LOGIC
+// OFFICIAL BATCH MAPPING & UTILITIES
 // ==========================================================================
 const BATCH_INFO = {
   1: {
@@ -5269,10 +5440,10 @@ const BATCH_INFO = {
 };
 
 function getProjectBatch(p) {
-  if (p.batch && Number(p.batch) >= 1 && Number(p.batch) <= 4) {
+  if (p && p.batch && Number(p.batch) >= 1 && Number(p.batch) <= 4) {
     return Number(p.batch);
   }
-  const code = (p.project_code || '').toUpperCase().trim();
+  const code = (p && p.project_code ? p.project_code : '').toUpperCase().trim();
   for (let b = 1; b <= 4; b++) {
     if (BATCH_INFO[b].codes.includes(code)) return b;
   }
@@ -5284,157 +5455,15 @@ function getProjectBatch(p) {
     if (num >= 11 && num <= 15) return 3;
     if (num >= 16 && num <= 20) return 4;
   }
-  if (p.id >= 1 && p.id <= 5) return 1;
-  if (p.id >= 6 && p.id <= 10) return 2;
-  if (p.id >= 11 && p.id <= 15) return 3;
-  if (p.id >= 16 && p.id <= 20) return 4;
+  if (p && p.id >= 1 && p.id <= 5) return 1;
+  if (p && p.id >= 6 && p.id <= 10) return 2;
+  if (p && p.id >= 11 && p.id <= 15) return 3;
+  if (p && p.id >= 16 && p.id <= 20) return 4;
   return 1;
 }
+window.getProjectBatch = getProjectBatch;
+window.getStudentBatch = getStudentBatch;
 
-function renderBatchView() {
-  const root = document.getElementById('batch-sections-root');
-  if (!root) return;
-
-  // Group state.projects into batches
-  const batchGroups = { 1: [], 2: [], 3: [], 4: [] };
-  state.projects.forEach(p => {
-    const b = getProjectBatch(p);
-    if (batchGroups[b]) {
-      batchGroups[b].push(p);
-    }
-  });
-
-  // Filter batch numbers based on state.batchFilter ('all', 1, 2, 3, 4)
-  const batchesToRender = (state.batchFilter === 'all')
-    ? [1, 2, 3, 4]
-    : [Number(state.batchFilter)];
-
-  if (state.projects.length === 0) {
-    root.innerHTML = `<div style="padding: 40px 20px; text-align: center; color: var(--text-dim); background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px;">No projects found matching the current search / filters.</div>`;
-    return;
-  }
-
-  let html = '';
-  batchesToRender.forEach(bNum => {
-    const info = BATCH_INFO[bNum];
-    const projects = batchGroups[bNum] || [];
-    const isCollapsed = state.collapsedBatches.has(bNum);
-    const avgProgress = projects.length > 0 ? Math.round(projects.reduce((acc, p) => acc + (p.progress || 0), 0) / projects.length) : 0;
-    const domains = Array.from(new Set(projects.map(p => p.domain).filter(Boolean)));
-
-    html += `
-      <div class="batch-section ${isCollapsed ? 'collapsed' : ''}" id="batch-section-${bNum}">
-        <div class="batch-section-header" onclick="toggleBatchSection(${bNum})">
-          <div class="batch-header-left">
-            <span class="batch-tag-badge">BATCH ${bNum}</span>
-            <span class="batch-title-text">${escapeHTML(info.theme)}</span>
-            <span class="batch-count-tag">${projects.length} / 5 Projects</span>
-            ${domains.length > 0 ? `<span style="font-size: 11px; color: var(--text-dim);">• ${escapeHTML(domains.slice(0, 3).join(', '))}</span>` : ''}
-          </div>
-          <div class="batch-header-right">
-            <div class="batch-stats-summary">
-              <span>Avg Progress: <strong style="color: var(--primary);">${avgProgress}%</strong></span>
-            </div>
-            <button type="button" class="batch-chevron-btn" title="${isCollapsed ? 'Expand Batch' : 'Collapse Batch'}">
-              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div class="batch-section-body">
-          ${projects.length > 0 ? `
-            <div class="batch-grid">
-              ${projects.map(createCardHTML).join('')}
-            </div>
-          ` : `
-            <div style="padding: 24px; text-align: center; color: var(--text-dim); font-size: 13px;">No matching projects in Batch ${bNum} for current filters.</div>
-          `}
-        </div>
-      </div>
-    `;
-  });
-
-  root.innerHTML = html;
-
-  // Attach card click handlers for Batch view
-  root.querySelectorAll('.kanban-card').forEach(card => {
-    card.addEventListener('click', (e) => {
-      if (e.target.classList.contains('card-tag-pill') || e.target.closest('.card-tag-pill') || e.target.closest('.project-active-toggle-wrapper')) return;
-      const id = Number(card.getAttribute('data-id'));
-      openProjectDetail(id);
-    });
-  });
-
-  // Attach tag pill handlers
-  root.querySelectorAll('.card-tag-pill').forEach(pill => {
-    pill.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const tag = pill.getAttribute('data-tag') || '';
-      const cleanTag = tag.startsWith('#') ? tag : `#${tag}`;
-      if (state.filterTag.toLowerCase() === cleanTag.toLowerCase()) {
-        state.filterTag = '';
-      } else {
-        state.filterTag = cleanTag;
-      }
-      await fetchProjects();
-      renderAllViews();
-    });
-  });
-}
-
-function toggleBatchSection(batchNum) {
-  const b = Number(batchNum);
-  if (state.collapsedBatches.has(b)) {
-    state.collapsedBatches.delete(b);
-  } else {
-    state.collapsedBatches.add(b);
-  }
-  const section = document.getElementById(`batch-section-${b}`);
-  if (section) {
-    section.classList.toggle('collapsed', state.collapsedBatches.has(b));
-    const btn = section.querySelector('.batch-chevron-btn');
-    if (btn) {
-      btn.setAttribute('title', state.collapsedBatches.has(b) ? 'Expand Batch' : 'Collapse Batch');
-    }
-  }
-  updateBatchToggleAllButton();
-}
-
-function updateBatchToggleAllButton() {
-  const textElem = document.getElementById('batch-toggle-all-text');
-  if (!textElem) return;
-  const allCollapsed = [1, 2, 3, 4].every(b => state.collapsedBatches.has(b));
-  textElem.textContent = allCollapsed ? 'Expand All' : 'Collapse All';
-}
-
-function initBatchViewListeners() {
-  // Batch Filter Pills
-  const batchFilterPills = document.querySelectorAll('.batch-pill');
-  batchFilterPills.forEach(pill => {
-    pill.addEventListener('click', () => {
-      batchFilterPills.forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      state.batchFilter = pill.getAttribute('data-batch');
-      renderBatchView();
-    });
-  });
-
-  // Batch Toggle All Button
-  const btnBatchToggleAll = document.getElementById('btn-batch-toggle-all');
-  if (btnBatchToggleAll) {
-    btnBatchToggleAll.addEventListener('click', () => {
-      const allCollapsed = [1, 2, 3, 4].every(b => state.collapsedBatches.has(b));
-      if (allCollapsed) {
-        state.collapsedBatches.clear();
-      } else {
-        state.collapsedBatches = new Set([1, 2, 3, 4]);
-      }
-      renderBatchView();
-      updateBatchToggleAllButton();
-    });
-  }
-}
 
 
 

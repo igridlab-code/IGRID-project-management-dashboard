@@ -263,15 +263,6 @@
           </svg>
           <span>Login Activity</span>
         </button>
-
-        <button class="tab-btn" data-view="batch" id="tab-batch">
-          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
-            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-            <polyline points="2 17 12 22 22 17"></polyline>
-            <polyline points="2 12 12 17 22 12"></polyline>
-          </svg>
-          <span>Batch</span>
-        </button>
       </nav>
 
       <!-- Right Controls -->
@@ -506,19 +497,59 @@
       <!-- 5. TABLE (SPREADSHEET) VIEW -->
       <div class="view-panel" id="view-table">
         <div class="table-container">
+          <!-- Table Controls & Filters -->
+          <div class="table-filters-bar" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); align-items: center;">
+            <div style="flex: 2; min-width: 180px;">
+              <input type="text" id="table-search-input" placeholder="🔍 Search projects by title, ID, domain, lead..." style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px;">
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+              <select id="table-batch-filter" style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px; font-weight: 600;">
+                <option value="All">All Batches</option>
+                <option value="1">Batch 1</option>
+                <option value="2">Batch 2</option>
+                <option value="3">Batch 3</option>
+                <option value="4">Batch 4</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+              <select id="table-domain-filter" style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px;">
+                <option value="All">All Domains</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 120px;">
+              <select id="table-status-filter" style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px;">
+                <option value="All">All Statuses</option>
+                <option value="in_queue">In Queue</option>
+                <option value="in_progress">On Progress</option>
+                <option value="testing">Testing</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 120px;">
+              <select id="table-priority-filter" style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px;">
+                <option value="All">All Priorities</option>
+                <option value="High">High</option>
+                <option value="Normal">Normal</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+            <button class="btn btn-secondary" id="btn-reset-table-filters" style="font-size: 12px; padding: 8px 12px;">Reset</button>
+          </div>
+
           <div class="table-responsive">
             <table class="data-table" id="data-table-root">
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Title</th>
-                  <th>Domain</th>
-                  <th>Status</th>
-                  <th>Priority</th>
-                  <th>Progress</th>
-                  <th>Due Date</th>
-                  <th>Team Lead</th>
-                  <th>BOM Requisition</th>
+                  <th style="cursor: pointer;" onclick="handleTableSort('id')" title="Click to sort by ID">ID <span id="th-sort-id">⇕</span></th>
+                  <th style="cursor: pointer;" onclick="handleTableSort('batch')" title="Click to sort by Batch (1-4)">Batch <span id="th-sort-batch">⇕</span></th>
+                  <th style="cursor: pointer;" onclick="handleTableSort('title')" title="Click to sort by Title">Title <span id="th-sort-title">⇕</span></th>
+                  <th style="cursor: pointer;" onclick="handleTableSort('domain')" title="Click to sort by Domain">Domain <span id="th-sort-domain">⇕</span></th>
+                  <th style="cursor: pointer;" onclick="handleTableSort('status')" title="Click to sort by Status">Status <span id="th-sort-status">⇕</span></th>
+                  <th style="cursor: pointer;" onclick="handleTableSort('priority')" title="Click to sort by Priority">Priority <span id="th-sort-priority">⇕</span></th>
+                  <th style="cursor: pointer;" onclick="handleTableSort('progress')" title="Click to sort by Progress">Progress <span id="th-sort-progress">⇕</span></th>
+                  <th style="cursor: pointer;" onclick="handleTableSort('due_date')" title="Click to sort by Due Date">Due Date <span id="th-sort-due_date">⇕</span></th>
+                  <th style="cursor: pointer;" onclick="handleTableSort('team_lead')" title="Click to sort by Team Lead">Team Lead <span id="th-sort-team_lead">⇕</span></th>
+                  <th style="cursor: pointer;" onclick="handleTableSort('bom_status')" title="Click to sort by BOM">BOM Requisition <span id="th-sort-bom_status">⇕</span></th>
                   <th>GitHub</th>
                   <th>Actions</th>
                 </tr>
@@ -609,9 +640,18 @@
           </div>
 
           <!-- ADMIN STUDENT SEARCH & FILTERS -->
-          <div class="student-filters-bar" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 10px; border: 1px solid var(--border-color);">
+          <div class="student-filters-bar" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); align-items: center;">
             <div style="flex: 2; min-width: 180px;">
               <input type="text" id="student-search-input" placeholder="🔍 Search by name, roll no, or project..." style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px;">
+            </div>
+            <div style="flex: 1; min-width: 120px;">
+              <select id="student-batch-filter" style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px; font-weight: 600;">
+                <option value="All">All Batches</option>
+                <option value="1">Batch 1</option>
+                <option value="2">Batch 2</option>
+                <option value="3">Batch 3</option>
+                <option value="4">Batch 4</option>
+              </select>
             </div>
             <div style="flex: 1; min-width: 130px;">
               <select id="student-dept-filter" style="width: 100%; padding: 8px 12px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); font-size: 13px;">
@@ -644,6 +684,7 @@
                 <option value="name_asc">Sort: Name (A-Z)</option>
                 <option value="name_desc">Sort: Name (Z-A)</option>
                 <option value="roll_asc">Sort: Register No</option>
+                <option value="batch_asc">Sort: Batch (1-4)</option>
                 <option value="progress_desc">Sort: Highest Progress</option>
               </select>
             </div>
@@ -853,40 +894,6 @@
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- 10. BATCH-WISE PROJECTS VIEW -->
-      <div class="view-panel" id="view-batch">
-        <div class="batch-hub-container" style="max-width: 1400px; margin: 0 auto; padding: 10px 0;">
-          <div class="batch-header-wrapper" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
-            <div>
-              <h2 style="font-size: 22px; font-weight: 800; display: flex; align-items: center; gap: 8px; color: var(--text-main);">
-                <span>📚</span> Batch Project Hub
-                <span class="badge badge-primary" style="font-size: 11px;">20 Projects • 4 Batches</span>
-              </h2>
-              <p style="color: var(--text-dim); font-size: 13px; margin-top: 4px;">
-                Official batch-wise grouping of all 20 innovation projects across the IGRID Elite Program.
-              </p>
-            </div>
-            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-              <button class="btn btn-secondary btn-sm" id="btn-batch-toggle-all" style="font-size: 12px; padding: 6px 12px;">
-                <span id="batch-toggle-all-text">Collapse All</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Batch Filter Pills Bar -->
-          <div class="batch-filter-bar" id="batch-filter-pills-bar" style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
-            <button class="batch-pill active" data-batch="all">All Batches (20)</button>
-            <button class="batch-pill" data-batch="1">Batch 1 (5)</button>
-            <button class="batch-pill" data-batch="2">Batch 2 (5)</button>
-            <button class="batch-pill" data-batch="3">Batch 3 (5)</button>
-            <button class="batch-pill" data-batch="4">Batch 4 (5)</button>
-          </div>
-
-          <!-- Batch Sections Root -->
-          <div id="batch-sections-root" class="batch-sections-root" style="display: flex; flex-direction: column; gap: 24px;"></div>
         </div>
       </div>
     </main>
