@@ -1,30 +1,28 @@
-# Use Node 20 LTS Alpine image for high performance and lightweight footprint
-FROM node:20-alpine
+﻿# Production Dockerfile for IGRID Project Management Dashboard
+FROM node:18-alpine
 
-# Set working directory
 WORKDIR /app
 
-# Install build dependencies for native modules (like sqlite3)
+# Install build dependencies for sqlite3 if needed
 RUN apk add --no-cache python3 make g++
 
-# Copy package manifests
+# Copy package files and install dependencies
 COPY package*.json ./
+RUN npm ci --only=production
 
-# Install production dependencies
-RUN npm install --omit=dev
-
-# Copy source code and static assets
+# Copy application files
 COPY . .
 
-# Create data directory for persistent SQLite database
-RUN mkdir -p /app/data
+# Run build verification
+RUN npm run build
 
 # Expose server port
 EXPOSE 3000
 
-# Environment defaults
+# Environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV ENABLE_NGROK=false
 
-# Start command
-CMD ["npm", "start"]
+# Start server
+CMD ["node", "server.js"]

@@ -2615,32 +2615,41 @@ DATA: ${JSON.stringify({
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`====================================================`);
   console.log(`🚀 IGRID Innovation Lab PM Dashboard is running!`);
-  console.log(`🌐 Local Access:   http://localhost:${PORT}`);
+  console.log(`🌐 Server Port:    ${PORT}`);
+  console.log(`🌍 Environment:    ${process.env.NODE_ENV || 'development'}`);
   console.log(`📡 Network/Docker: http://0.0.0.0:${PORT}`);
   console.log(`====================================================`);
 
-  // Auto-connect to permanent Ngrok domain
-  async function connectNgrok(retries = 5) {
-    try {
-      const ngrok = require('@ngrok/ngrok');
-      const NGROK_DOMAIN = process.env.NGROK_DOMAIN || 'kabob-suspect-mandate.ngrok-free.dev';
-      const NGROK_AUTHTOKEN = process.env.NGROK_AUTHTOKEN || '3Hr56NkQmK7fScedP090Ry6c8ll_78W6QjADbCB92cWhD8ZpT';
-      
-      console.log(`Connecting to permanent Ngrok public domain: ${NGROK_DOMAIN}...`);
-      global.ngrokListener = await ngrok.forward({
-        addr: PORT,
-        authtoken: NGROK_AUTHTOKEN,
-        domain: NGROK_DOMAIN
-      });
-      console.log(`🎉 LIVE PUBLIC URL (PERMANENT FIXED DOMAIN): ${global.ngrokListener.url()}`);
-      console.log(`====================================================`);
-    } catch (ngrokErr) {
-      console.warn(`[Ngrok Notice] ${ngrokErr.message || ngrokErr}`);
-      if (retries > 0) {
-        console.log(`Retrying Ngrok connection in 3 seconds (${retries} retries left)...`);
-        setTimeout(() => connectNgrok(retries - 1), 3000);
+  // Optional Ngrok Tunnel (for local development tunneling only)
+  const shouldEnableNgrok = process.env.ENABLE_NGROK === 'true' || 
+    (process.env.NODE_ENV !== 'production' && process.env.ENABLE_NGROK !== 'false' && !process.env.RENDER && !process.env.RAILWAY_ENVIRONMENT);
+
+  if (shouldEnableNgrok) {
+    async function connectNgrok(retries = 3) {
+      try {
+        const ngrok = require('@ngrok/ngrok');
+        const NGROK_DOMAIN = process.env.NGROK_DOMAIN || 'kabob-suspect-mandate.ngrok-free.dev';
+        const NGROK_AUTHTOKEN = process.env.NGROK_AUTHTOKEN || '3Hr56NkQmK7fScedP090Ry6c8ll_78W6QjADbCB92cWhD8ZpT';
+        
+        console.log(`Connecting to Ngrok public domain: ${NGROK_DOMAIN}...`);
+        global.ngrokListener = await ngrok.forward({
+          addr: PORT,
+          authtoken: NGROK_AUTHTOKEN,
+          domain: NGROK_DOMAIN
+        });
+        console.log(`🎉 LIVE PUBLIC TUNNEL URL: ${global.ngrokListener.url()}`);
+        console.log(`====================================================`);
+      } catch (ngrokErr) {
+        console.warn(`[Ngrok Notice] ${ngrokErr.message || ngrokErr}`);
+        if (retries > 0) {
+          console.log(`Retrying Ngrok connection in 3 seconds (${retries} retries left)...`);
+          setTimeout(() => connectNgrok(retries - 1), 3000);
+        }
       }
     }
+    connectNgrok();
+  } else {
+    console.log(`☁️ Cloud Production Mode: Native HTTPS cloud routing active (Ngrok disabled).`);
+    console.log(`====================================================`);
   }
-  connectNgrok();
 });

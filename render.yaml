@@ -1,11 +1,18 @@
-services:
+﻿services:
   - type: web
     name: igrid-project-management-dashboard
     env: node
-    buildCommand: npm install
+    plan: free
+    buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
-      - key: PORT
-        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: ENABLE_NGROK
+        value: "false"
       - key: JWT_SECRET
-        value: igrid_lab_dashboard_session_secret_2026_auth
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: admin@igridlab.edu.in
+      - key: ADMIN_DEFAULT_PASSWORD
+        value: Admin@123

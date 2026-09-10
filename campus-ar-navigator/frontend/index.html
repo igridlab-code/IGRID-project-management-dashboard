@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>CampusAR Navigator — WebAR Campus Navigation</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <div id="app-container">
+    <!-- Camera Feed Background -->
+    <video id="camera-feed" autoplay playsinline muted></video>
+    <div id="simulated-camera-bg" class="hidden">
+      <div class="campus-grid-lines"></div>
+      <div class="campus-horizon"></div>
+    </div>
+
+    <!-- WebGL AR Three.js Canvas -->
+    <canvas id="ar-canvas"></canvas>
+
+    <!-- Prominent Floating Distance Counter Hero (Meters) -->
+    <div class="ar-distance-hero hidden" id="ar-distance-hero">
+      <div class="distance-number-wrap">
+        <span class="distance-val" id="hero-distance-val">0</span>
+        <span class="distance-unit">m</span>
+      </div>
+      <div class="distance-target-row">
+        <span class="pulse-beacon-dot"></span>
+        <span class="distance-sub" id="hero-distance-sub">Select Destination</span>
+      </div>
+    </div>
+
+    <!-- Top Bar HUD -->
+    <header class="top-hud">
+      <div class="brand-row">
+        <div class="brand-badge">
+          <span class="pulse-dot"></span>
+          <span class="brand-title">CampusAR</span>
+          <span class="badge-tag">NAVIGATOR</span>
+        </div>
+        <div class="telemetry-badges">
+          <div class="telemetry-pill" id="compass-badge">
+            <span class="icon">🧭</span>
+            <span id="heading-display">000° N</span>
+          </div>
+          <button class="cam-toggle-btn" id="cam-toggle-btn" title="Toggle Real/Simulated Camera">
+            <span class="icon" id="cam-icon">📹</span>
+            <span id="cam-label">Camera</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Agent NLP Query Bar -->
+      <div class="agent-search-container">
+        <div class="agent-input-wrapper">
+          <span class="agent-icon">✨</span>
+          <input 
+            type="text" 
+            id="agent-query-input" 
+            placeholder="Ask Agent: 'go to CS lab then canteen'..." 
+            autocomplete="off"
+          />
+          <button id="agent-send-btn" title="Plan Multi-Stop Route">
+            <span>Route</span>
+            <span class="arrow-icon">➔</span>
+          </button>
+        </div>
+
+        <!-- Quick Suggestion Chips -->
+        <div class="quick-chips-scroll">
+          <button class="chip" data-query="go to CS lab then canteen">🚀 CS Lab ➔ Canteen</button>
+          <button class="chip" data-query="take me to library then grab coffee">☕ Library ➔ Coffee</button>
+          <button class="chip" data-query="workout at gym then eat lunch">🥗 Gym ➔ Food Court</button>
+          <button class="chip" data-query="visit medical clinic then gate 2">🏥 Clinic ➔ Metro Gate</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Direct Route Selector Bar (Collapsible) -->
+    <div class="route-panel glass-card" id="route-panel">
+      <div class="route-panel-toggle" id="route-panel-toggle">
+        <span>📍 Manual Route Planner</span>
+        <span class="toggle-chevron" id="toggle-chevron">▼</span>
+      </div>
+      <div class="route-form" id="route-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="start-select">From:</label>
+            <select id="start-select"></select>
+          </div>
+          <div class="form-group">
+            <label for="dest-select">To:</label>
+            <select id="dest-select"></select>
+          </div>
+        </div>
+        <button id="find-route-btn" class="primary-btn">Calculate A* Route</button>
+      </div>
+    </div>
+
+    <!-- Active Navigation HUD (Visible during routing) -->
+    <div class="navigation-hud hidden" id="navigation-hud">
+      <!-- Main Direction Card -->
+      <div class="direction-card glass-card">
+        <div class="direction-header">
+          <div class="step-indicator">
+            <span id="nav-step-label">Step 1 of 4</span>
+            <span class="step-progress-bar"><span id="step-progress-fill"></span></span>
+          </div>
+          <div class="total-stats">
+            <span id="nav-remaining-dist">180m</span>
+            <span class="dot-separator">•</span>
+            <span id="nav-remaining-time">~2 min</span>
+          </div>
+        </div>
+
+        <div class="instruction-main">
+          <div class="turn-symbol" id="turn-symbol">⬆️</div>
+          <div class="instruction-text-block">
+            <h2 id="instruction-title">Head North toward Administration Block</h2>
+            <p id="instruction-sub">Target: <strong id="step-dist">72m</strong> • Bearing: <strong id="step-bearing">34°</strong></p>
+          </div>
+        </div>
+
+        <!-- Live Waypoint Status Card -->
+        <div class="live-status-card" id="live-status-card">
+          <div class="status-badge-row">
+            <span class="live-pulse"></span>
+            <span class="status-node-name" id="status-node-name">Administration Block</span>
+            <span class="status-pill emerald" id="status-pill">Open</span>
+          </div>
+          <div class="status-metrics">
+            <div class="status-metric-item">
+              <span class="metric-lbl" id="status-metric-label">Office Hours:</span>
+              <strong class="metric-val" id="status-metric-value">Open until 5:00 PM</strong>
+            </div>
+            <p class="status-notes" id="status-notes">Student services desk accepting document submissions</p>
+          </div>
+        </div>
+
+        <!-- Navigation Action Buttons -->
+        <div class="nav-controls">
+          <button id="prev-step-btn" class="nav-btn secondary-btn" disabled>◀ Prev</button>
+          <button id="next-step-btn" class="nav-btn primary-btn">Next Waypoint ▶</button>
+          <button id="cancel-nav-btn" class="nav-btn danger-btn" title="End Navigation">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agent Response Banner / Multi-Stop Itinerary Drawer -->
+    <div class="agent-itinerary-card glass-card hidden" id="agent-itinerary-card">
+      <div class="agent-itinerary-header">
+        <div class="agent-avatar">🤖</div>
+        <div>
+          <h4>Campus AI Agent</h4>
+          <p id="agent-itinerary-summary">Itinerary details...</p>
+        </div>
+        <button id="close-itinerary-btn" class="close-icon-btn">✕</button>
+      </div>
+      <div class="itinerary-stops-list" id="itinerary-stops-list"></div>
+    </div>
+
+    <!-- "You Have Arrived" Waypoint Reached Popup Modal -->
+    <div class="arrival-modal hidden" id="arrival-modal">
+      <div class="arrival-card glass-card">
+        <div class="arrival-confetti-ring">
+          <div class="arrival-icon" id="arrival-icon">🎯</div>
+        </div>
+        <div class="arrival-badge" id="arrival-badge">WAYPOINT REACHED</div>
+        <h2 id="arrival-title">You have arrived at Administration Block!</h2>
+        <p id="arrival-subtitle">Step 1 of 4 completed</p>
+
+        <div class="arrival-status-box" id="arrival-status-box"></div>
+
+        <div class="arrival-actions">
+          <button id="arrival-next-btn" class="primary-btn arrival-btn">
+            <span id="arrival-next-label">Continue to Next Stop ▶</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Controls & Mini-Map Radar -->
+    <footer class="bottom-hud">
+      <!-- Interactive Mini-Map Canvas -->
+      <div class="minimap-container glass-card" id="minimap-container">
+        <div class="minimap-header">
+          <div class="minimap-title-row">
+            <span class="minimap-dot"></span>
+            <span>Campus Radar</span>
+          </div>
+          <div class="minimap-tools">
+            <button id="toggle-expand-map-btn" title="Expand/Collapse Map">⛶</button>
+            <button id="recenter-map-btn" title="Recenter View">🎯</button>
+          </div>
+        </div>
+        <canvas id="minimap-canvas" width="240" height="150"></canvas>
+        <div class="minimap-legend">
+          <span class="legend-item"><span class="legend-dot route-dot"></span>Route</span>
+          <span class="legend-item"><span class="legend-dot user-dot"></span>You</span>
+          <span class="legend-item"><span class="legend-dot poi-dot"></span>POI</span>
+        </div>
+      </div>
+
+      <!-- Desktop Sensor Simulation & Heading Controls (Collapsible for Mobile) -->
+      <div class="simulator-card glass-card" id="simulator-card">
+        <div class="sim-header" id="sim-header-toggle">
+          <div class="sim-title-group">
+            <span>🧪 Sensor Simulator</span>
+            <span class="badge-tag">Yaw Control</span>
+          </div>
+          <button id="sim-toggle-btn" class="sim-minimize-btn" title="Minimize Simulator">▾</button>
+        </div>
+        <div class="sim-body" id="sim-body">
+          <div class="slider-group">
+            <label for="heading-slider">Rotate View Yaw: <span id="slider-heading-val">0°</span></label>
+            <input type="range" id="heading-slider" min="0" max="360" value="0" step="1">
+          </div>
+          <div class="sim-actions">
+            <button id="sim-walk-btn" class="small-btn">👟 Walk 10m Forward</button>
+            <button id="calibrate-btn" class="small-btn">🔄 Reset 0°</button>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- POI Quick Information Modal -->
+    <div class="poi-modal hidden" id="poi-modal">
+      <div class="poi-modal-content glass-card">
+        <div class="modal-header">
+          <h3 id="modal-poi-name">Building Name</h3>
+          <button id="modal-close-btn">✕</button>
+        </div>
+        <p id="modal-poi-desc" class="poi-desc">Description</p>
+        <div class="modal-status-box" id="modal-status-box"></div>
+        <button id="modal-route-here-btn" class="primary-btn">Navigate Here</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/ar-view.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

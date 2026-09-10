@@ -1,0 +1,243 @@
+{
+  "campus_name": "Nova Tech University Campus",
+  "campus_bounds": {
+    "min_x": -150,
+    "max_x": 450,
+    "min_y": -150,
+    "max_y": 450
+  },
+  "nodes": [
+    {
+      "id": "gate_1",
+      "name": "Main Gate 1",
+      "category": "entrance",
+      "description": "Primary campus entrance with visitor registration desk and shuttle stop",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "aliases": ["gate 1", "main gate", "entrance", "front gate", "security gate 1"]
+    },
+    {
+      "id": "admin_block",
+      "name": "Administration Block",
+      "category": "admin",
+      "description": "Dean's office, registrar, admissions, and financial aid",
+      "x": 40,
+      "y": 60,
+      "z": 0,
+      "aliases": ["admin", "admin block", "administration", "dean office", "registrar", "office"]
+    },
+    {
+      "id": "cs_lab",
+      "name": "Computer Science & AI Lab",
+      "category": "academic",
+      "description": "Advanced AI research clusters, software labs, and robotics facility",
+      "x": 110,
+      "y": 140,
+      "z": 0,
+      "aliases": ["cs lab", "cs department", "computer science", "ai lab", "coding lab", "computer lab"]
+    },
+    {
+      "id": "mech_block",
+      "name": "Mechanical Engineering Hall",
+      "category": "academic",
+      "description": "Robotics fabrication, 3D printing workshop, and thermodynamic labs",
+      "x": 190,
+      "y": 120,
+      "z": 0,
+      "aliases": ["mech block", "mechanical", "mechanical engineering", "workshop", "maker lab"]
+    },
+    {
+      "id": "ee_dept",
+      "name": "Electrical & Electronics Dept",
+      "category": "academic",
+      "description": "Microchip testbeds, signal processing labs, and IoT development center",
+      "x": 200,
+      "y": 60,
+      "z": 0,
+      "aliases": ["ee dept", "electrical", "electronics", "eee", "iot lab", "circuits lab"]
+    },
+    {
+      "id": "central_library",
+      "name": "Central Library",
+      "category": "academic",
+      "description": "Three-story research library, quiet study pods, and digital media commons",
+      "x": 100,
+      "y": 230,
+      "z": 0,
+      "aliases": ["library", "central library", "books", "study center", "reading room"]
+    },
+    {
+      "id": "innovation_center",
+      "name": "Innovation & Incubation Hub",
+      "category": "academic",
+      "description": "Startup incubator, venture studio, and collaboration conference rooms",
+      "x": 30,
+      "y": 190,
+      "z": 0,
+      "aliases": ["innovation center", "incubation", "hub", "startup lab", "tech hub"]
+    },
+    {
+      "id": "main_canteen",
+      "name": "Central Canteen & Food Court",
+      "category": "food",
+      "description": "Multi-cuisine dining hall, healthy juice bar, and outdoor terrace seating",
+      "x": 170,
+      "y": 210,
+      "z": 0,
+      "aliases": ["canteen", "cafeteria", "food court", "mess", "lunch", "food", "dining", "main canteen"]
+    },
+    {
+      "id": "coffee_kiosk",
+      "name": "Express Coffee & Bakery Kiosk",
+      "category": "food",
+      "description": "Artisan espresso, teas, fresh pastries, and grab-and-go sandwiches",
+      "x": 80,
+      "y": 90,
+      "z": 0,
+      "aliases": ["coffee", "coffee kiosk", "cafe", "espresso", "bakery", "snacks"]
+    },
+    {
+      "id": "student_center",
+      "name": "Student Activity Center",
+      "category": "facility",
+      "description": "Student club offices, game lounge, indoor auditorium, and music rooms",
+      "x": 20,
+      "y": 280,
+      "z": 0,
+      "aliases": ["student center", "sac", "student club", "lounge", "student union"]
+    },
+    {
+      "id": "auditorium",
+      "name": "Grand University Auditorium",
+      "category": "facility",
+      "description": "1,200-seat performance hall for convocations, keynote lectures, and events",
+      "x": 120,
+      "y": 320,
+      "z": 0,
+      "aliases": ["auditorium", "hall", "main auditorium", "event hall", "theater"]
+    },
+    {
+      "id": "sports_complex",
+      "name": "Sports Complex & Arena",
+      "category": "sports",
+      "description": "Indoor basketball courts, Olympic swimming pool, fitness gym, and squash courts",
+      "x": 260,
+      "y": 280,
+      "z": 0,
+      "aliases": ["sports complex", "gym", "sports", "stadium", "pool", "swimming pool", "fitness"]
+    },
+    {
+      "id": "medical_center",
+      "name": "Campus Health & Medical Clinic",
+      "category": "facility",
+      "description": "24/7 emergency first aid, doctor consultation, and pharmacy services",
+      "x": 260,
+      "y": 170,
+      "z": 0,
+      "aliases": ["medical", "clinic", "health center", "doctor", "hospital", "pharmacy", "infirmary"]
+    },
+    {
+      "id": "research_park",
+      "name": "Advanced Research Park",
+      "category": "academic",
+      "description": "Specialized cleanrooms, quantum optics labs, and corporate sponsor testbeds",
+      "x": 230,
+      "y": 380,
+      "z": 0,
+      "aliases": ["research park", "research", "advanced labs", "phd center", "rd lab"]
+    },
+    {
+      "id": "boys_hostel",
+      "name": "North Residence Hall (Boys)",
+      "category": "residential",
+      "description": "Undergraduate and graduate male dormitories with courtyard and recreation room",
+      "x": 20,
+      "y": 390,
+      "z": 0,
+      "aliases": ["boys hostel", "north hostel", "boys dorm", "residence north", "hostel 1"]
+    },
+    {
+      "id": "girls_hostel",
+      "name": "South Residence Hall (Girls)",
+      "category": "residential",
+      "description": "Undergraduate and graduate female dormitories with secure access and study hall",
+      "x": 340,
+      "y": 140,
+      "z": 0,
+      "aliases": ["girls hostel", "south hostel", "girls dorm", "residence south", "hostel 2"]
+    },
+    {
+      "id": "parking_a",
+      "name": "North Visitor Parking A",
+      "category": "parking",
+      "description": "Electric vehicle fast charging, visitor car parking, and bike rental station",
+      "x": -60,
+      "y": 50,
+      "z": 0,
+      "aliases": ["parking a", "visitor parking", "north parking", "ev parking", "car park a"]
+    },
+    {
+      "id": "parking_b",
+      "name": "South Staff Parking B",
+      "category": "parking",
+      "description": "Permit-only staff parking lot with covered motorcycle parking",
+      "x": 310,
+      "y": 40,
+      "z": 0,
+      "aliases": ["parking b", "staff parking", "south parking", "car park b"]
+    },
+    {
+      "id": "gate_2",
+      "name": "South Gate 2 (Metro Link)",
+      "category": "entrance",
+      "description": "Secondary pedestrian gate with direct covered walkway to city metro station",
+      "x": 350,
+      "y": -30,
+      "z": 0,
+      "aliases": ["gate 2", "south gate", "metro gate", "metro entrance", "security gate 2"]
+    },
+    {
+      "id": "bank_atm",
+      "name": "Campus Bank & 24/7 ATM",
+      "category": "facility",
+      "description": "Branch banking services, multiple ATM machines, and foreign currency exchange",
+      "x": 50,
+      "y": -30,
+      "z": 0,
+      "aliases": ["atm", "bank", "campus bank", "cash machine", "finance office"]
+    }
+  ],
+  "edges": [
+    { "source": "gate_1", "target": "parking_a", "distance": 78, "accessible": true },
+    { "source": "gate_1", "target": "admin_block", "distance": 72, "accessible": true },
+    { "source": "gate_1", "target": "bank_atm", "distance": 58, "accessible": true },
+    { "source": "bank_atm", "target": "admin_block", "distance": 91, "accessible": true },
+    { "source": "admin_block", "target": "coffee_kiosk", "distance": 50, "accessible": true },
+    { "source": "coffee_kiosk", "target": "cs_lab", "distance": 58, "accessible": true },
+    { "source": "admin_block", "target": "ee_dept", "distance": 160, "accessible": true },
+    { "source": "admin_block", "target": "innovation_center", "distance": 130, "accessible": true },
+    { "source": "innovation_center", "target": "student_center", "distance": 91, "accessible": true },
+    { "source": "innovation_center", "target": "central_library", "distance": 81, "accessible": true },
+    { "source": "cs_lab", "target": "central_library", "distance": 91, "accessible": true },
+    { "source": "cs_lab", "target": "mech_block", "distance": 82, "accessible": true },
+    { "source": "mech_block", "target": "ee_dept", "distance": 61, "accessible": true },
+    { "source": "mech_block", "target": "main_canteen", "distance": 92, "accessible": true },
+    { "source": "central_library", "target": "main_canteen", "distance": 73, "accessible": true },
+    { "source": "central_library", "target": "auditorium", "distance": 92, "accessible": true },
+    { "source": "student_center", "target": "auditorium", "distance": 108, "accessible": true },
+    { "source": "student_center", "target": "boys_hostel", "distance": 110, "accessible": true },
+    { "source": "auditorium", "target": "research_park", "distance": 125, "accessible": true },
+    { "source": "auditorium", "target": "sports_complex", "distance": 146, "accessible": true },
+    { "source": "main_canteen", "target": "sports_complex", "distance": 114, "accessible": true },
+    { "source": "main_canteen", "target": "medical_center", "distance": 98, "accessible": true },
+    { "source": "sports_complex", "target": "research_park", "distance": 104, "accessible": true },
+    { "source": "sports_complex", "target": "medical_center", "distance": 110, "accessible": true },
+    { "source": "medical_center", "target": "girls_hostel", "distance": 85, "accessible": true },
+    { "source": "medical_center", "target": "ee_dept", "distance": 125, "accessible": true },
+    { "source": "ee_dept", "target": "parking_b", "distance": 112, "accessible": true },
+    { "source": "girls_hostel", "target": "parking_b", "distance": 104, "accessible": true },
+    { "source": "parking_b", "target": "gate_2", "distance": 81, "accessible": true },
+    { "source": "bank_atm", "target": "gate_2", "distance": 300, "accessible": true }
+  ]
+}
