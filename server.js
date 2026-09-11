@@ -1217,11 +1217,13 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
       const userEmail = (user.email || '').toLowerCase().trim();
       const rawUserName = (user.name || '').toLowerCase().trim();
       const userName = rawUserName.replace(/\s*\(student\)\s*/gi, '').trim();
+      const userPid = user.project_id ? Number(user.project_id) : (user.team_id ? Number(user.team_id) : null);
+      const isDirectProjectMatch = userPid && userPid === Number(project.id);
+      const isTeamCodeMatch = user.team_code && (user.team_code === project.project_code);
       
       const isLead = project.team_lead && (
-        project.team_lead.toLowerCase().includes(userName) ||
-        userName.includes(project.team_lead.toLowerCase()) ||
-        project.team_lead.toLowerCase().includes(userEmail)
+        (userName && (project.team_lead.toLowerCase().includes(userName) || userName.includes(project.team_lead.toLowerCase()))) ||
+        (userEmail && project.team_lead.toLowerCase().includes(userEmail))
       );
       
       const membersStr = typeof project.team_members === 'string'
@@ -1231,8 +1233,10 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
       const isMember = (userEmail && membersStr.includes(userEmail)) || (userName && membersStr.includes(userName));
       
       // Also check student table
-      db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR LOWER(name) LIKE ?', [user.id || -1, userEmail, `%${userName}%`], (err2, student) => {
+      db.get('SELECT * FROM students WHERE user_id = ? OR (email IS NOT NULL AND LOWER(email) = ?) OR (name IS NOT NULL AND LOWER(name) LIKE ?)', [user.id || -1, userEmail, userName ? `%${userName}%` : '___NONE___'], (err2, student) => {
         const isAssigned = student && (
+          (student.project_id && Number(student.project_id) === Number(project.id)) ||
+          (student.team_id && Number(student.team_id) === Number(project.id)) ||
           student.assigned_project === project.project_code ||
           student.project_title === project.title ||
           (student.assigned_project && project.title && project.title.toLowerCase().includes(student.assigned_project.toLowerCase())) ||
@@ -1240,7 +1244,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         );
         
         // Strict ownership check: Only members of this team can edit
-        if (!isLead && !isMember && !isAssigned) {
+        if (!isDirectProjectMatch && !isTeamCodeMatch && !isLead && !isMember && !isAssigned) {
           return res.status(403).json({ error: 'Access denied: You can only edit your own team\'s assigned project.' });
         }
 
