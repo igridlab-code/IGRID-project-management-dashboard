@@ -333,6 +333,18 @@
     <main class="main-viewport">
       <!-- 1. BOARD (KANBAN) VIEW -->
       <div class="view-panel active" id="view-board">
+        <!-- Board Toolbar Sub-strip with Show Completed Toggle -->
+        <div class="board-sub-toolbar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+          <div style="font-size: 13px; color: var(--text-dim); display: flex; align-items: center; gap: 6px;">
+            <span>⚡</span>
+            <span>Active Innovation Pipeline & Project Sprints</span>
+          </div>
+          <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); cursor: pointer; user-select: none; background: var(--bg-card); padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border-color); transition: all 0.2s ease;">
+            <input type="checkbox" id="toggle-show-completed-board" style="cursor: pointer; accent-color: var(--primary);">
+            <span>Show Completed Projects (<strong id="board-completed-toggle-count" style="color: var(--primary);">0</strong>)</span>
+          </label>
+        </div>
+
         <div class="kanban-container" id="kanban-board">
           <div class="kanban-col" data-status="in_queue">
             <div class="col-header">
@@ -370,7 +382,7 @@
             <div class="col-cards-wrapper" id="cards-testing" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'testing')"></div>
           </div>
 
-          <div class="kanban-col" data-status="completed">
+          <div class="kanban-col" data-status="completed" id="kanban-col-completed">
             <div class="col-header">
               <div class="col-title-group">
                 <span class="col-badge green-badge"></span>
@@ -453,17 +465,47 @@
             </div>
           </div>
 
-          <!-- Showcase Header -->
+          <!-- Active Showcase Header -->
           <div class="exec-section-header">
             <div>
-              <h2>🌟 Project Showcase & Visual Progress Cards</h2>
-              <p>Comprehensive overview of prototype photos, student team leads, completion percentages, media links, and hardware action items.</p>
+              <h2>🌟 Active Project Showcase & Visual Progress Cards</h2>
+              <p>Comprehensive overview of active prototype photos, student team leads, completion percentages, media links, and hardware action items.</p>
             </div>
           </div>
 
-          <!-- Showcase Cards Grid -->
+          <!-- Active Showcase Cards Grid -->
           <div class="exec-showcase-grid" id="exec-showcase-grid-root">
             <!-- Rendered dynamically -->
+          </div>
+
+          <!-- Completed & Permanently Archived Projects Showcase Section -->
+          <div class="exec-completed-section" id="exec-completed-section" style="margin-top: 40px; border-top: 1px solid var(--border-color); padding-top: 28px;">
+            <div class="exec-section-header" style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 style="display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 800; color: var(--text-main); margin: 0;">
+                  <span>🏆</span> Completed & Permanently Archived Projects
+                  <span class="badge" id="exec-completed-count-badge" style="background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); font-size: 11px; font-weight: 700;">0 Completed</span>
+                </h2>
+                <p style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">
+                  Permanent showcase repository of all completed innovations across all program batches. Past batch data remains preserved forever.
+                </p>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <!-- Batch Filter for Completed Projects -->
+                <div class="completed-batch-pills" id="exec-completed-batch-pills" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                  <button class="batch-pill active" data-completed-batch="all" style="font-size: 11px; padding: 4px 12px;">All Batches</button>
+                  <button class="batch-pill" data-completed-batch="1" style="font-size: 11px; padding: 4px 12px;">Batch 1</button>
+                  <button class="batch-pill" data-completed-batch="2" style="font-size: 11px; padding: 4px 12px;">Batch 2</button>
+                  <button class="batch-pill" data-completed-batch="3" style="font-size: 11px; padding: 4px 12px;">Batch 3</button>
+                  <button class="batch-pill" data-completed-batch="4" style="font-size: 11px; padding: 4px 12px;">Batch 4</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Completed Showcase Cards Grid -->
+            <div class="exec-showcase-grid" id="exec-completed-grid-root">
+              <!-- Rendered dynamically -->
+            </div>
           </div>
         </div>
       </div>

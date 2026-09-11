@@ -69,7 +69,8 @@ function initDb() {
       { name: 'batch', type: 'INTEGER DEFAULT 1' },
       { name: 'team_number', type: 'INTEGER' },
       { name: 'is_active', type: 'INTEGER DEFAULT 1' },
-      { name: 'is_visible', type: 'INTEGER DEFAULT 1' }
+      { name: 'is_visible', type: 'INTEGER DEFAULT 1' },
+      { name: 'completed_at', type: 'DATETIME' }
     ];
 
     newColumns.forEach(col => {
@@ -82,6 +83,7 @@ function initDb() {
     db.run(`UPDATE projects SET is_active = 1 WHERE is_active IS NULL`);
     db.run(`UPDATE projects SET is_visible = COALESCE(is_active, 1) WHERE is_visible IS NULL`);
     db.run(`UPDATE projects SET team_logo_url = team_lead_photo WHERE team_logo_url IS NULL`);
+    db.run(`UPDATE projects SET completed_at = COALESCE(updated_at, CURRENT_TIMESTAMP) WHERE status = 'completed' AND completed_at IS NULL`);
 
     // Students Directory
     db.run(`

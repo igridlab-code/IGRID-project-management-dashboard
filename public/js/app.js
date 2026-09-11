@@ -45,7 +45,9 @@ const state = {
   togglingProjects: new Set(),
   currentEditingTeamMembers: [],
   batchFilter: 'all',
-  collapsedBatches: new Set()
+  collapsedBatches: new Set(),
+  showCompletedOnBoard: false,
+  completedShowcaseBatchFilter: 'all'
 };
 
 // DOM Elements
@@ -97,6 +99,12 @@ const DOM = {
   execApprovedBudget: document.getElementById('exec-approved-budget'),
   execPendingBomCount: document.getElementById('exec-pending-bom-count'),
   execStudentCount: document.getElementById('exec-student-count'),
+  execCompletedSection: document.getElementById('exec-completed-section'),
+  execCompletedCountBadge: document.getElementById('exec-completed-count-badge'),
+  execCompletedGridRoot: document.getElementById('exec-completed-grid-root'),
+  execCompletedBatchPills: document.getElementById('exec-completed-batch-pills'),
+  toggleShowCompletedBoard: document.getElementById('toggle-show-completed-board'),
+  boardCompletedToggleCount: document.getElementById('board-completed-toggle-count'),
 
   // Kanban Columns
   cardsInQueue: document.getElementById('cards-in_queue'),
@@ -1228,6 +1236,29 @@ function initEventListeners() {
 
   // Batch View listeners
   initBatchViewListeners();
+
+  // Toggle show completed projects on Kanban Board
+  const toggleCompletedBoardEl = document.getElementById('toggle-show-completed-board');
+  if (toggleCompletedBoardEl) {
+    toggleCompletedBoardEl.addEventListener('change', (e) => {
+      state.showCompletedOnBoard = e.target.checked;
+      renderKanban();
+    });
+  }
+
+  // Management Showcase Completed Batch Filter Pills
+  const execCompletedBatchPillsRoot = document.getElementById('exec-completed-batch-pills');
+  if (execCompletedBatchPillsRoot) {
+    execCompletedBatchPillsRoot.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-completed-batch]');
+      if (!btn) return;
+      const batchVal = btn.getAttribute('data-completed-batch') || 'all';
+      state.completedShowcaseBatchFilter = batchVal;
+      execCompletedBatchPillsRoot.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderExecutiveShowcase();
+    });
+  }
 }
 
 function resolveCurrentRoute() {
@@ -1388,7 +1419,7 @@ function renderAllViews() {
   updateStatsSummary();
 }
 
-// 1. RENDER EXECUTIVE MANAGEMENT SHOWCASE (NEW COMPONENT)
+// 1. RENDER EXECUTIVE MANAGEMENT SHOWCASE (ACTIVE & COMPLETED SECTIONS)
 function renderExecutiveShowcase() {
   if (!DOM.execShowcaseGridRoot) return;
 
@@ -1404,118 +1435,252 @@ function renderExecutiveShowcase() {
   if (DOM.execPendingBomCount) DOM.execPendingBomCount.textContent = `${pendingBOMs.length} Items`;
   if (DOM.execStudentCount) DOM.execStudentCount.textContent = `${state.students.length} Engineers`;
 
-  if (state.projects.length === 0) {
-    DOM.execShowcaseGridRoot.innerHTML = '<div style="padding:20px; color:var(--text-dim);">No innovation projects found for the current filters.</div>';
-    return;
+  // Split Active vs Completed Projects
+  const activeProjects = state.projects.filter(p => p.status !== 'completed' && (p.progress || 0) < 100);
+  const allCompletedProjects = state.projects.filter(p => p.status === 'completed' || (p.progress || 0) >= 100);
+
+  // 1A. Render Active Projects Grid
+  if (activeProjects.length === 0) {
+    DOM.execShowcaseGridRoot.innerHTML = '<div style="grid-column: 1 / -1; padding:24px; text-align:center; color:var(--text-dim); background:var(--bg-card); border-radius:8px; border:1px dashed var(--border-color);">No active innovation projects found for the current filters. All active deliverables may be completed or archived.</div>';
+  } else {
+    let html = '';
+    activeProjects.forEach(p => {
+      const priorityBadge = p.priority === 'High' ? 'badge-high' : (p.priority === 'Normal' ? 'badge-normal' : 'badge-low');
+      const defaultHero = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80';
+      const heroImg = p.image_url || defaultHero;
+
+      // Team Logo & Photo
+      const leadPhoto = p.team_logo_url || p.team_lead_photo || (p.team_name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_name)}&background=6366f1&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'Team')}&background=6366f1&color=fff`);
+
+      // Team Member Avatars
+      const members = Array.isArray(p.team_members) ? p.team_members : [];
+      let memberAvatarsHTML = members.slice(0, 3).map(m => {
+        const mName = typeof m === 'object' && m ? (m.name || 'Student') : String(m);
+        const mRole = typeof m === 'object' && m ? (m.role || 'Member') : 'Member';
+        const mPhoto = (typeof m === 'object' && m && m.photo) ? m.photo : `https://ui-avatars.com/api/?name=${encodeURIComponent(mName)}&background=8b5cf6&color=fff`;
+        return `<img src="${mPhoto}" class="avatar-badge" title="${escapeHTML(mName)} (${mRole})" alt="${escapeHTML(mName)}">`;
+      }).join('');
+
+      // Check if project has pending BOM
+      const hasPendingBOM = p.bom_status === 'Submitted';
+
+      // Media Links
+      const mediaLinks = [];
+      if (p.github_repo) mediaLinks.push(`<a href="${p.github_repo}" target="_blank" class="btn-media btn-media-github" title="View Code">🐙 GitHub</a>`);
+      if (p.youtube_url) mediaLinks.push(`<a href="${p.youtube_url}" target="_blank" class="btn-media btn-media-youtube" title="Watch Demo Video">🎥 Video Demo</a>`);
+      if (p.linkedin_url) mediaLinks.push(`<a href="${p.linkedin_url}" target="_blank" class="btn-media btn-media-linkedin" title="LinkedIn Showcase">💼 LinkedIn</a>`);
+      if (p.doc_url) mediaLinks.push(`<a href="${p.doc_url}" target="_blank" class="btn-media btn-media-doc" title="Datasheet & Docs">📄 Docs</a>`);
+
+      const isHidden = (p.is_visible === 0 || p.is_visible === false || p.is_active === 0 || p.is_active === false);
+      const hiddenBadge = (isUserAdmin() && isHidden)
+        ? '<span class="badge badge-hidden" title="Hidden from students and public viewers">👁️‍🗨️ Hidden</span>'
+        : '';
+
+      html += `
+        <div class="exec-card ${isHidden ? 'project-card-hidden' : ''}">
+          <!-- Hero Photo with Badges -->
+          <div class="exec-card-hero">
+            <img src="${heroImg}" alt="${escapeHTML(p.title)}" loading="lazy">
+            <div class="exec-card-overlay">
+              <div class="exec-card-top-badges">
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span class="card-id-code">${p.project_code}</span>
+                  ${hiddenBadge}
+                  ${isUserAdmin() ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active) : ''}
+                </div>
+                <div class="exec-progress-radial">
+                  <span class="pulse-indicator"></span>
+                  <span class="exec-progress-num">${p.progress || 0}%</span>
+                </div>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                <span class="badge badge-blue">${p.domain}</span>
+                <span class="badge ${priorityBadge}">${p.priority} Priority</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card Body -->
+          <div class="exec-card-body">
+            <h3 class="exec-card-title">${escapeHTML(p.title)}</h3>
+            <p class="exec-card-desc">${escapeHTML(p.description || '')}</p>
+
+            <!-- Team Lead & Logo Row -->
+            <div class="exec-card-lead-row">
+              <div class="exec-lead-info">
+                <img src="${leadPhoto}" alt="Team Logo" title="Team Logo: ${escapeHTML(p.team_name || p.team_lead || 'Team')}" class="exec-lead-avatar">
+                <div>
+                  <div class="exec-lead-name">${escapeHTML(p.team_lead || 'Student Lead')}</div>
+                  <div class="exec-lead-role">${escapeHTML(p.team_name || 'Innovation Group')}</div>
+                </div>
+              </div>
+              <div class="avatar-group">
+                ${memberAvatarsHTML}
+              </div>
+            </div>
+
+            <!-- Immediate Action / Procurement Alert (Internal Notes - Hidden from Viewers) -->
+            ${(!isUserViewer() && p.immediate_action) ? `
+            <div class="exec-action-alert">
+              <div class="exec-action-alert-text">
+                <strong>${hasPendingBOM ? '⚠️ BOM Requisition Pending:' : '⚡ Next Action Item:'}</strong>
+                <div>${escapeHTML(p.immediate_action || 'Ongoing prototype development')}</div>
+              </div>
+              ${(hasPendingBOM && isUserAdmin()) ? `<button class="btn btn-sm btn-primary" onclick="switchView('bom')">Review BOM</button>` : ''}
+            </div>
+            ` : ''}
+
+            <!-- Media & Social Links -->
+            ${mediaLinks.length > 0 ? `
+              <div class="exec-media-links">
+                ${mediaLinks.join('')}
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- Footer -->
+          <div class="exec-card-footer">
+            <span style="font-size:12px; color:var(--text-dim);">Due: <strong>${formatDate(p.due_date)}</strong></span>
+            <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
+              <span>🔍 Spotlight View</span>
+            </button>
+          </div>
+        </div>
+      `;
+    });
+    DOM.execShowcaseGridRoot.innerHTML = html;
   }
 
-  let html = '';
-  state.projects.forEach(p => {
-    const priorityBadge = p.priority === 'High' ? 'badge-high' : (p.priority === 'Normal' ? 'badge-normal' : 'badge-low');
-    const defaultHero = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80';
-    const heroImg = p.image_url || defaultHero;
+  // 1B. Render Completed & Permanently Archived Projects Grid
+  const completedRoot = document.getElementById('exec-completed-grid-root');
+  const completedBadge = document.getElementById('exec-completed-count-badge');
+  if (completedBadge) {
+    completedBadge.textContent = `${allCompletedProjects.length} Completed`;
+  }
 
-    // Team Logo & Photo
-    const leadPhoto = p.team_logo_url || p.team_lead_photo || (p.team_name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_name)}&background=6366f1&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'Team')}&background=6366f1&color=fff`);
+  if (completedRoot) {
+    let filteredCompleted = allCompletedProjects;
+    if (state.completedShowcaseBatchFilter && state.completedShowcaseBatchFilter !== 'all') {
+      const bNum = parseInt(state.completedShowcaseBatchFilter, 10);
+      filteredCompleted = allCompletedProjects.filter(p => p.batch === bNum);
+    }
 
-    // Team Member Avatars
-    const members = Array.isArray(p.team_members) ? p.team_members : [];
-    let memberAvatarsHTML = members.slice(0, 3).map(m => {
-      const mName = typeof m === 'object' && m ? (m.name || 'Student') : String(m);
-      const mRole = typeof m === 'object' && m ? (m.role || 'Member') : 'Member';
-      const mPhoto = (typeof m === 'object' && m && m.photo) ? m.photo : `https://ui-avatars.com/api/?name=${encodeURIComponent(mName)}&background=8b5cf6&color=fff`;
-      return `<img src="${mPhoto}" class="avatar-badge" title="${escapeHTML(mName)} (${mRole})" alt="${escapeHTML(mName)}">`;
-    }).join('');
+    // Sort by completion date descending (most recently completed first)
+    filteredCompleted.sort((a, b) => {
+      const dateA = new Date(a.completed_at || a.due_date || 0).getTime();
+      const dateB = new Date(b.completed_at || b.due_date || 0).getTime();
+      return dateB - dateA;
+    });
 
-    // Check if project has pending BOM
-    const hasPendingBOM = p.bom_status === 'Submitted';
+    if (filteredCompleted.length === 0) {
+      completedRoot.innerHTML = `<div style="grid-column: 1 / -1; padding: 28px; text-align: center; color: var(--text-dim); background: var(--bg-card); border-radius: 8px; border: 1px dashed var(--border-color);">
+        <span style="font-size: 24px; display: block; margin-bottom: 8px;">🏆</span>
+        No completed projects found for ${state.completedShowcaseBatchFilter === 'all' ? 'any batch' : `Batch ${state.completedShowcaseBatchFilter}`}.
+      </div>`;
+    } else {
+      let compHtml = '';
+      filteredCompleted.forEach(p => {
+        const defaultHero = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80';
+        const heroImg = p.image_url || defaultHero;
+        const leadPhoto = p.team_logo_url || p.team_lead_photo || (p.team_name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_name)}&background=6366f1&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'Team')}&background=6366f1&color=fff`);
 
-    // Media Links
-    const mediaLinks = [];
-    if (p.github_repo) mediaLinks.push(`<a href="${p.github_repo}" target="_blank" class="btn-media btn-media-github" title="View Code">🐙 GitHub</a>`);
-    if (p.youtube_url) mediaLinks.push(`<a href="${p.youtube_url}" target="_blank" class="btn-media btn-media-youtube" title="Watch Demo Video">🎥 Video Demo</a>`);
-    if (p.linkedin_url) mediaLinks.push(`<a href="${p.linkedin_url}" target="_blank" class="btn-media btn-media-linkedin" title="LinkedIn Showcase">💼 LinkedIn</a>`);
-    if (p.doc_url) mediaLinks.push(`<a href="${p.doc_url}" target="_blank" class="btn-media btn-media-doc" title="Datasheet & Docs">📄 Docs</a>`);
+        const members = Array.isArray(p.team_members) ? p.team_members : [];
+        let memberAvatarsHTML = members.slice(0, 3).map(m => {
+          const mName = typeof m === 'object' && m ? (m.name || 'Student') : String(m);
+          const mRole = typeof m === 'object' && m ? (m.role || 'Member') : 'Member';
+          const mPhoto = (typeof m === 'object' && m && m.photo) ? m.photo : `https://ui-avatars.com/api/?name=${encodeURIComponent(mName)}&background=8b5cf6&color=fff`;
+          return `<img src="${mPhoto}" class="avatar-badge" title="${escapeHTML(mName)} (${mRole})" alt="${escapeHTML(mName)}">`;
+        }).join('');
 
-    const isHidden = (p.is_visible === 0 || p.is_visible === false || p.is_active === 0 || p.is_active === false);
-    const hiddenBadge = (isUserAdmin() && isHidden)
-      ? '<span class="badge badge-hidden" title="Hidden from students and public viewers">👁️‍🗨️ Hidden</span>'
-      : '';
+        const mediaLinks = [];
+        if (p.github_repo) mediaLinks.push(`<a href="${p.github_repo}" target="_blank" class="btn-media btn-media-github" title="View Code">🐙 GitHub</a>`);
+        if (p.youtube_url) mediaLinks.push(`<a href="${p.youtube_url}" target="_blank" class="btn-media btn-media-youtube" title="Watch Demo Video">🎥 Video Demo</a>`);
+        if (p.linkedin_url) mediaLinks.push(`<a href="${p.linkedin_url}" target="_blank" class="btn-media btn-media-linkedin" title="LinkedIn Showcase">💼 LinkedIn</a>`);
+        if (p.doc_url) mediaLinks.push(`<a href="${p.doc_url}" target="_blank" class="btn-media btn-media-doc" title="Datasheet & Docs">📄 Docs</a>`);
 
-    html += `
-      <div class="exec-card ${isHidden ? 'project-card-hidden' : ''}">
-        <!-- Hero Photo with Badges -->
-        <div class="exec-card-hero">
-          <img src="${heroImg}" alt="${escapeHTML(p.title)}" loading="lazy">
-          <div class="exec-card-overlay">
-            <div class="exec-card-top-badges">
-              <div style="display:flex; align-items:center; gap:6px;">
-                <span class="card-id-code">${p.project_code}</span>
-                ${hiddenBadge}
-                ${isUserAdmin() ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active) : ''}
-              </div>
-              <div class="exec-progress-radial">
-                <span class="pulse-indicator"></span>
-                <span class="exec-progress-num">${p.progress || 0}%</span>
+        const isHidden = (p.is_visible === 0 || p.is_visible === false || p.is_active === 0 || p.is_active === false);
+        const hiddenBadge = (isUserAdmin() && isHidden)
+          ? '<span class="badge badge-hidden" title="Hidden from students and public viewers">👁️‍🗨️ Hidden</span>'
+          : '';
+
+        const completedDateStr = p.completed_at ? formatDate(p.completed_at) : (p.due_date ? formatDate(p.due_date) : 'Completed');
+
+        compHtml += `
+          <div class="exec-card ${isHidden ? 'project-card-hidden' : ''}" style="border-top: 3px solid #10b981;">
+            <!-- Hero Photo with Badges -->
+            <div class="exec-card-hero">
+              <img src="${heroImg}" alt="${escapeHTML(p.title)}" loading="lazy">
+              <div class="exec-card-overlay">
+                <div class="exec-card-top-badges">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="card-id-code">${p.project_code}</span>
+                    ${hiddenBadge}
+                    ${isUserAdmin() ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active) : ''}
+                  </div>
+                  <div class="exec-progress-radial" style="border-color: #10b981; color: #34d399;">
+                    <span style="font-size:12px;">🏆</span>
+                    <span class="exec-progress-num">100%</span>
+                  </div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                  <span class="badge badge-blue">${p.domain}</span>
+                  <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">Batch ${p.batch || 1}</span>
+                </div>
               </div>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-              <span class="badge badge-blue">${p.domain}</span>
-              <span class="badge ${priorityBadge}">${p.priority} Priority</span>
+
+            <!-- Card Body -->
+            <div class="exec-card-body">
+              <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+                <span class="badge" style="background:rgba(16,185,129,0.15); color:#34d399; font-size:10px; font-weight:700; border:1px solid rgba(16,185,129,0.3);">
+                  🏆 DEPLOYED & COMPLETED
+                </span>
+                <span style="font-size:11px; color:var(--text-dim); margin-left:auto;">${completedDateStr}</span>
+              </div>
+              <h3 class="exec-card-title">${escapeHTML(p.title)}</h3>
+              <p class="exec-card-desc">${escapeHTML(p.description || '')}</p>
+
+              <!-- Team Lead & Logo Row -->
+              <div class="exec-card-lead-row">
+                <div class="exec-lead-info">
+                  <img src="${leadPhoto}" alt="Team Logo" title="Team Logo: ${escapeHTML(p.team_name || p.team_lead || 'Team')}" class="exec-lead-avatar">
+                  <div>
+                    <div class="exec-lead-name">${escapeHTML(p.team_lead || 'Student Lead')}</div>
+                    <div class="exec-lead-role">${escapeHTML(p.team_name || 'Innovation Group')}</div>
+                  </div>
+                </div>
+                <div class="avatar-group">
+                  ${memberAvatarsHTML}
+                </div>
+              </div>
+
+              <!-- Deliverables & Key Highlights -->
+              <div style="background: rgba(16, 22, 38, 0.7); padding: 10px; border-radius: 6px; font-size: 12px; border-left: 3px solid #10b981; margin: 10px 0;">
+                <strong style="color: #34d399; font-size: 11px;">Deliverable Highlights:</strong>
+                <p style="color: #cbd5e1; margin-top: 2px; font-size: 11px; line-height: 1.4;">${escapeHTML(p.deliverables || p.immediate_action || 'Full prototype deployed and operational.')}</p>
+              </div>
+
+              <!-- Media & Social Links -->
+              ${mediaLinks.length > 0 ? `
+                <div class="exec-media-links">
+                  ${mediaLinks.join('')}
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Footer -->
+            <div class="exec-card-footer">
+              <span style="font-size:11px; color:var(--text-dim);">Archive Status: <strong style="color:#34d399;">Permanent</strong></span>
+              <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
+                <span>🔍 Spotlight View</span>
+              </button>
             </div>
           </div>
-        </div>
-
-        <!-- Card Body -->
-        <div class="exec-card-body">
-          <h3 class="exec-card-title">${escapeHTML(p.title)}</h3>
-          <p class="exec-card-desc">${escapeHTML(p.description || '')}</p>
-
-          <!-- Team Lead & Logo Row -->
-          <div class="exec-card-lead-row">
-            <div class="exec-lead-info">
-              <img src="${leadPhoto}" alt="Team Logo" title="Team Logo: ${escapeHTML(p.team_name || p.team_lead || 'Team')}" class="exec-lead-avatar">
-              <div>
-                <div class="exec-lead-name">${escapeHTML(p.team_lead || 'Student Lead')}</div>
-                <div class="exec-lead-role">${escapeHTML(p.team_name || 'Innovation Group')}</div>
-              </div>
-            </div>
-            <div class="avatar-group">
-              ${memberAvatarsHTML}
-            </div>
-          </div>
-
-          <!-- Immediate Action / Procurement Alert (Internal Notes - Hidden from Viewers) -->
-          ${(!isUserViewer() && p.immediate_action) ? `
-          <div class="exec-action-alert">
-            <div class="exec-action-alert-text">
-              <strong>${hasPendingBOM ? '⚠️ BOM Requisition Pending:' : '⚡ Next Action Item:'}</strong>
-              <div>${escapeHTML(p.immediate_action || 'Ongoing prototype development')}</div>
-            </div>
-            ${(hasPendingBOM && isUserAdmin()) ? `<button class="btn btn-sm btn-primary" onclick="switchView('bom')">Review BOM</button>` : ''}
-          </div>
-          ` : ''}
-
-          <!-- Media & Social Links -->
-          ${mediaLinks.length > 0 ? `
-            <div class="exec-media-links">
-              ${mediaLinks.join('')}
-            </div>
-          ` : ''}
-        </div>
-
-        <!-- Footer -->
-        <div class="exec-card-footer">
-          <span style="font-size:12px; color:var(--text-dim);">Due: <strong>${formatDate(p.due_date)}</strong></span>
-          <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
-            <span>🔍 Spotlight View</span>
-          </button>
-        </div>
-      </div>
-    `;
-  });
-
-  DOM.execShowcaseGridRoot.innerHTML = html;
+        `;
+      });
+      completedRoot.innerHTML = compHtml;
+    }
+  }
 }
 
 // 2. SPOTLIGHT PRESENTATION VIEW
@@ -1666,6 +1831,12 @@ function renderKanban() {
   DOM.countTesting.textContent = cols.testing.length;
   DOM.countCompleted.textContent = cols.completed.length;
 
+  // Sync Board Completed Projects Toggle Toolbar
+  const boardToggleCount = document.getElementById('board-completed-toggle-count');
+  if (boardToggleCount) boardToggleCount.textContent = cols.completed.length;
+  const boardToggleCheckbox = document.getElementById('toggle-show-completed-board');
+  if (boardToggleCheckbox) boardToggleCheckbox.checked = state.showCompletedOnBoard;
+
   if (state.projects.length === 0) {
     const activeTagName = state.filterTag || 'the selected criteria';
     const resetBtn = state.filterTag ? `<div style="margin-top:10px;"><button class="btn btn-secondary" onclick="resetTagFilter()" style="font-size:11px; padding:4px 10px; cursor:pointer;">Reset Filter (#all)</button></div>` : '';
@@ -1677,7 +1848,22 @@ function renderKanban() {
     DOM.cardsInQueue.innerHTML = cols.in_queue.length ? cols.in_queue.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
     DOM.cardsInProgress.innerHTML = cols.in_progress.length ? cols.in_progress.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
     DOM.cardsTesting.innerHTML = cols.testing.length ? cols.testing.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
-    DOM.cardsCompleted.innerHTML = cols.completed.length ? cols.completed.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
+    
+    // Render Completed Column (Default: Archived Placeholder Banner to keep Active WIP board clean)
+    if (!state.showCompletedOnBoard) {
+      DOM.cardsCompleted.innerHTML = cols.completed.length ? `
+        <div class="archived-completed-board-placeholder" style="padding: 24px 14px; text-align: center; background: rgba(16, 185, 129, 0.04); border: 1px dashed rgba(16, 185, 129, 0.25); border-radius: 8px; margin: 6px 0;">
+          <div style="font-size: 22px; margin-bottom: 6px;">📦</div>
+          <div style="font-size: 12px; font-weight: 700; color: var(--text-main); margin-bottom: 4px;">${cols.completed.length} Completed Projects Archived</div>
+          <p style="font-size: 11px; color: var(--text-dim); margin-bottom: 12px; line-height: 1.4;">Active WIP board is kept clean. Completed innovations are safely preserved in Management Showcase & Showcase Archive.</p>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBoardCompletedVisibility(true)" style="font-size: 11px; padding: 4px 10px; cursor: pointer;">
+            👁️ Show on Board
+          </button>
+        </div>
+      ` : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
+    } else {
+      DOM.cardsCompleted.innerHTML = cols.completed.length ? cols.completed.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
+    }
   }
 
   document.querySelectorAll('.kanban-card').forEach(card => {
@@ -1707,6 +1893,13 @@ function renderKanban() {
     });
   });
 }
+
+window.toggleBoardCompletedVisibility = function(val) {
+  state.showCompletedOnBoard = (typeof val === 'boolean') ? val : !state.showCompletedOnBoard;
+  const toggleEl = document.getElementById('toggle-show-completed-board');
+  if (toggleEl) toggleEl.checked = state.showCompletedOnBoard;
+  renderKanban();
+};
 
 function createCardHTML(p) {
   const priorityClass = p.priority === 'High' ? 'badge-high' : (p.priority === 'Normal' ? 'badge-normal' : 'badge-low');

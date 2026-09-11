@@ -770,8 +770,44 @@ app.post('/api/domains', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
+// ----------------------------------------------------
+// AUTOMATIC OVERDUE PROJECT ARCHIVING HELPER
+// ----------------------------------------------------
+function autoArchiveOverdueProjects() {
+  const today = new Date().toISOString().split('T')[0];
+  const updateSql = `
+    UPDATE projects
+    SET status = 'completed',
+        completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE (due_date IS NOT NULL AND due_date != '' AND due_date < ?)
+      AND status != 'completed'
+  `;
+  db.run(updateSql, [today], function(err) {
+    if (err) {
+      console.warn('[Auto-Archive Notice]', err.message);
+    } else if (this.changes > 0) {
+      console.log(`[Auto-Archive] Successfully marked ${this.changes} overdue project(s) as Completed & Permanently Archived.`);
+    }
+  });
+
+  // Ensure all completed projects have a completed_at timestamp
+  db.run(`
+    UPDATE projects
+    SET completed_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
+    WHERE status = 'completed' AND completed_at IS NULL
+  `);
+}
+
+// Initial run on startup + periodic check every 30 minutes
+setTimeout(autoArchiveOverdueProjects, 1000);
+setInterval(autoArchiveOverdueProjects, 30 * 60 * 1000);
+
 // GET ALL PROJECTS (PUBLIC SHOWCASE & AUTHENTICATED)
 app.get('/api/projects', optionalAuth, (req, res) => {
+  // Run quick auto-archive check
+  autoArchiveOverdueProjects();
+
   const { domain, status, tag, search, sort, priority } = req.query;
   let sql = 'SELECT * FROM projects WHERE 1=1';
   const params = [];
@@ -1238,6 +1274,11 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         deliverables = COALESCE(?, deliverables),
         is_active = COALESCE(?, is_active, 1),
         is_visible = COALESCE(?, is_visible, 1),
+        completed_at = CASE 
+          WHEN (COALESCE(?, status) = 'completed' OR COALESCE(?, progress) >= 100) 
+          THEN COALESCE(completed_at, CURRENT_TIMESTAMP) 
+          ELSE completed_at 
+        END,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
@@ -1255,6 +1296,8 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         deliverables,
         activeStateNum,
         activeStateNum,
+        status,
+        progressNum,
         id
       ],
       function(err4) {
@@ -1321,11 +1364,12 @@ const handleProjectStageUpdate = (req, res) => {
     UPDATE projects SET
       status = ?,
       progress = ?,
+      completed_at = CASE WHEN (? = 'completed') THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE completed_at END,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `;
 
-  db.run(sql, [status, newProgress, id], function(err) {
+  db.run(sql, [status, newProgress, status, id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     if (this.changes === 0) return res.status(404).json({ error: 'Project not found' });
 
