@@ -2469,7 +2469,10 @@ function renderStudents() {
           </td>
           <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
             <button class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" style="margin-right: 6px;">👁️ View Profile</button>
-            ${(isAdmin || isOwner) ? `<button class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})" style="margin-right: 6px;">✏️ Edit</button>` : ''}
+            ${matchedProj && (isAdmin || isOwner || isUserMemberOfProject(matchedProj)) ? `
+              <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p=>p.id===${matchedProj.id}) || ${JSON.stringify(matchedProj).replace(/"/g, '&quot;')})" style="background:var(--primary, #f59e0b); color:#000000; font-weight:700; border:none; margin-right: 6px;" title="Edit Team Project Details">✏️ Edit Project</button>
+            ` : ''}
+            ${(isAdmin || isOwner) ? `<button class="btn btn-sm btn-secondary" onclick="openStudentEditModal(${s.id})" style="margin-right: 6px;">👤 Edit Profile</button>` : ''}
             ${isAdmin ? `<button class="btn btn-sm btn-danger btn-student-delete" onclick="event.stopPropagation(); confirmDeleteStudent(${s.id}, '${escapeHTML((s.name || '').replace(/'/g, "\\'"))}')" title="Delete Student Record" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-weight:600;">🗑️ Delete</button>` : ''}
           </td>
         </tr>
@@ -2742,15 +2745,22 @@ function renderStudents() {
 
           <!-- Bottom Action Footer in Expanded View -->
           <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:10px; border-top:1px solid var(--border-color); flex-wrap:wrap; gap:8px;">
-            ${matchedProject ? `
-              <button type="button" class="btn btn-sm btn-primary" onclick="openProjectDetail(${matchedProject.id})">
-                📅 Open Project Details & Discussions
-              </button>
-            ` : `
-              <button type="button" class="btn btn-sm btn-primary" onclick="openStudentViewModal(${s.id})">
-                👁️ View Complete Student Profile
-              </button>
-            `}
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              ${matchedProject ? `
+                <button type="button" class="btn btn-sm btn-primary" onclick="openProjectDetail(${matchedProject.id})">
+                  📅 Open Project Details & Discussions
+                </button>
+              ` : `
+                <button type="button" class="btn btn-sm btn-primary" onclick="openStudentViewModal(${s.id})">
+                  👁️ View Complete Student Profile
+                </button>
+              `}
+              ${matchedProject && (isAdmin || isOwner || isUserMemberOfProject(matchedProject)) ? `
+                <button type="button" class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p=>p.id===${matchedProject.id}) || ${JSON.stringify(matchedProject).replace(/"/g, '&quot;')})" style="background:var(--primary, #f59e0b); color:#000000; font-weight:700; border:none; padding:5px 10px; font-size:12px; display:inline-flex; align-items:center; gap:4px;" title="Edit Your Team Project Details">
+                  ✏️ Edit Project
+                </button>
+              ` : ''}
+            </div>
             <button type="button" class="btn btn-sm btn-secondary" onclick="toggleStudentCardExpand(${s.id})">
               ▲ Collapse
             </button>
@@ -2858,10 +2868,40 @@ function openStudentViewModal(studentId) {
     }
   }
 
+  const isOwner = (s.email && s.email.toLowerCase() === currentEmail) || (s.name && s.name.toLowerCase() === currentName);
+  const canEditProject = matchedProject && (isAdmin || isOwner || isUserMemberOfProject(matchedProject));
+
+  const btnViewProj = document.getElementById('btn-student-view-project');
+  if (btnViewProj) {
+    if (matchedProject) {
+      btnViewProj.style.display = 'inline-block';
+      btnViewProj.onclick = () => {
+        closeModal(document.getElementById('student-view-modal'));
+        openProjectDetail(matchedProject.id);
+      };
+    } else {
+      btnViewProj.style.display = 'none';
+    }
+  }
+
+  const btnEditProjFromView = document.getElementById('btn-student-edit-project-from-view');
+  if (btnEditProjFromView) {
+    if (canEditProject) {
+      btnEditProjFromView.style.display = 'inline-block';
+      btnEditProjFromView.onclick = () => {
+        closeModal(document.getElementById('student-view-modal'));
+        openProjectModalForEdit(state.projects.find(p => p.id === matchedProject.id) || matchedProject);
+      };
+    } else {
+      btnEditProjFromView.style.display = 'none';
+    }
+  }
+
   const btnEditFromView = document.getElementById('btn-admin-edit-from-view');
   if (btnEditFromView) {
-    if (isUserAdmin()) {
+    if (isAdmin || isOwner) {
       btnEditFromView.style.display = 'inline-block';
+      btnEditFromView.innerHTML = '✏️ Edit Profile';
       btnEditFromView.onclick = () => {
         closeModal(document.getElementById('student-view-modal'));
         openStudentEditModal(s.id);
@@ -2873,7 +2913,7 @@ function openStudentViewModal(studentId) {
 
   const btnDeleteFromView = document.getElementById('btn-admin-delete-from-view');
   if (btnDeleteFromView) {
-    if (isUserAdmin()) {
+    if (isAdmin) {
       btnDeleteFromView.style.display = 'inline-block';
       btnDeleteFromView.onclick = () => {
         confirmDeleteStudent(s.id, s.name);
