@@ -3831,7 +3831,7 @@ function initEditFormLinkProtection() {
 function renderTeamMembersChips() {
   const container = document.getElementById('form-team-members-chips');
   if (!container) return;
-  const isAdmin = isUserAdmin();
+  const canRemove = isUserAdmin() || isUserStudent();
 
   if (!state.currentEditingTeamMembers || state.currentEditingTeamMembers.length === 0) {
     container.innerHTML = '<span style="font-size:12px; color:var(--text-dim); font-style:italic;">No team members added yet.</span>';
@@ -3841,7 +3841,7 @@ function renderTeamMembersChips() {
   container.innerHTML = state.currentEditingTeamMembers.map((name, idx) => `
     <span class="card-tag-pill" style="display:inline-flex; align-items:center; gap:6px; background:rgba(99,102,241,0.18); border:1px solid rgba(99,102,241,0.35); color:#c7d2fe; padding:4px 10px; border-radius:16px; font-size:12px; font-weight:600;">
       <span>👤 ${escapeHTML(name)}</span>
-      ${isAdmin ? `<button type="button" onclick="event.stopPropagation(); removeTeamMemberChip(${idx})" style="background:none; border:none; color:#f87171; cursor:pointer; font-weight:700; font-size:14px; line-height:1; padding:0 2px; margin-left:4px;" title="Remove ${escapeHTML(name)}">&times;</button>` : ''}
+      ${canRemove ? `<button type="button" onclick="event.stopPropagation(); removeTeamMemberChip(${idx})" style="background:none; border:none; color:#f87171; cursor:pointer; font-weight:700; font-size:14px; line-height:1; padding:0 2px; margin-left:4px;" title="Remove ${escapeHTML(name)}">&times;</button>` : ''}
     </span>
   `).join('');
 }
