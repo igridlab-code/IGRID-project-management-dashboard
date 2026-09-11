@@ -770,44 +770,8 @@ app.post('/api/domains', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
-// ----------------------------------------------------
-// AUTOMATIC OVERDUE PROJECT ARCHIVING HELPER
-// ----------------------------------------------------
-function autoArchiveOverdueProjects() {
-  const today = new Date().toISOString().split('T')[0];
-  const updateSql = `
-    UPDATE projects
-    SET status = 'completed',
-        completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
-        updated_at = CURRENT_TIMESTAMP
-    WHERE (due_date IS NOT NULL AND due_date != '' AND due_date < ?)
-      AND status != 'completed'
-  `;
-  db.run(updateSql, [today], function(err) {
-    if (err) {
-      console.warn('[Auto-Archive Notice]', err.message);
-    } else if (this.changes > 0) {
-      console.log(`[Auto-Archive] Successfully marked ${this.changes} overdue project(s) as Completed & Permanently Archived.`);
-    }
-  });
-
-  // Ensure all completed projects have a completed_at timestamp
-  db.run(`
-    UPDATE projects
-    SET completed_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
-    WHERE status = 'completed' AND completed_at IS NULL
-  `);
-}
-
-// Initial run on startup + periodic check every 30 minutes
-setTimeout(autoArchiveOverdueProjects, 1000);
-setInterval(autoArchiveOverdueProjects, 30 * 60 * 1000);
-
 // GET ALL PROJECTS (PUBLIC SHOWCASE & AUTHENTICATED)
 app.get('/api/projects', optionalAuth, (req, res) => {
-  // Run quick auto-archive check
-  autoArchiveOverdueProjects();
-
   const { domain, status, tag, search, sort, priority } = req.query;
   let sql = 'SELECT * FROM projects WHERE 1=1';
   const params = [];
@@ -1117,8 +1081,8 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
 
     // If Student: Verify row-level ownership
     if (!isAdmin) {
-      const userEmail = (user.email || '').toLowerCase();
-      const rawUserName = (user.name || '').toLowerCase();
+      const userEmail = (user.email || '').toLowerCase().trim();
+      const rawUserName = (user.name || '').toLowerCase().trim();
       const userName = rawUserName.replace(/\s*\(student\)\s*/gi, '').trim();
       
       const isLead = project.team_lead && (
@@ -1131,30 +1095,48 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         ? project.team_members.toLowerCase()
         : JSON.stringify(project.team_members || []).toLowerCase();
         
-      const isMember = membersStr.includes(userEmail) || (userName && membersStr.includes(userName));
+      const isMember = (userEmail && membersStr.includes(userEmail)) || (userName && membersStr.includes(userName));
       
       // Also check student table
-      db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR LOWER(name) LIKE ?', [user.id, userEmail, `%${userName}%`], (err2, student) => {
+      db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR LOWER(name) LIKE ?', [user.id || -1, userEmail, `%${userName}%`], (err2, student) => {
         const isAssigned = student && (
           student.assigned_project === project.project_code ||
           student.project_title === project.title ||
-          (student.assigned_project && project.title && project.title.toLowerCase().includes(student.assigned_project.toLowerCase()))
+          (student.assigned_project && project.title && project.title.toLowerCase().includes(student.assigned_project.toLowerCase())) ||
+          (student.team_name && project.team_name && student.team_name.toLowerCase() === project.team_name.toLowerCase())
         );
         
-        // If no explicit link found, but student is authenticated as a student innovator, allow them to update the links on active projects
+        // Strict ownership check: Only members of this team can edit
         if (!isLead && !isMember && !isAssigned) {
-          // Check if student has no other assigned projects, grant permission
-          console.warn(`[STUDENT-SAVE] Student ${userEmail} (${userName}) updating project #${id} (${project.project_code})`);
+          return res.status(403).json({ error: 'Access denied: You can only edit your own team\'s assigned project.' });
         }
 
-        // Student is permitted to update media links, documentation, and deliverables
+        // Student is permitted to update media links, documentation, team info, and deliverables
         const github_repo = req.body.github_repo !== undefined ? req.body.github_repo : (req.body.githubLink !== undefined ? req.body.githubLink : (req.body.github_url !== undefined ? req.body.github_url : project.github_repo));
         const youtube_url = req.body.youtube_url !== undefined ? req.body.youtube_url : (req.body.videoDemoUrl !== undefined ? req.body.videoDemoUrl : (req.body.youtubeUrl !== undefined ? req.body.youtubeUrl : project.youtube_url));
         const doc_url = req.body.doc_url !== undefined ? req.body.doc_url : (req.body.techReportUrl !== undefined ? req.body.techReportUrl : (req.body.docUrl !== undefined ? req.body.docUrl : (req.body.technical_report !== undefined ? req.body.technical_report : project.doc_url)));
         const linkedin_url = req.body.linkedin_url !== undefined ? req.body.linkedin_url : (req.body.linkedinPostUrl !== undefined ? req.body.linkedinPostUrl : (req.body.linkedinUrl !== undefined ? req.body.linkedinUrl : project.linkedin_url));
         const image_url = req.body.image_url !== undefined ? req.body.image_url : (req.body.imageUrl !== undefined ? req.body.imageUrl : project.image_url);
+        const team_name = req.body.team_name !== undefined ? req.body.team_name : project.team_name;
+        const team_lead = req.body.team_lead !== undefined ? req.body.team_lead : project.team_lead;
         const team_lead_photo = req.body.team_logo_url !== undefined ? req.body.team_logo_url : (req.body.teamLogoUrl !== undefined ? req.body.teamLogoUrl : (req.body.team_lead_photo !== undefined ? req.body.team_lead_photo : (req.body.teamLeadPhoto !== undefined ? req.body.teamLeadPhoto : project.team_lead_photo)));
         const deliverables = req.body.deliverables !== undefined ? req.body.deliverables : project.deliverables;
+
+        const rawMembers = req.body.team_members !== undefined ? req.body.team_members : req.body.teamMembers;
+        const team_members = rawMembers !== undefined
+          ? (typeof rawMembers === 'string' ? rawMembers : JSON.stringify(rawMembers || []))
+          : project.team_members;
+
+        // URL validation checks
+        if (github_repo && String(github_repo).trim() && !String(github_repo).toLowerCase().includes('github.com')) {
+          return res.status(400).json({ error: 'GitHub repository URL must be a valid link containing "github.com".' });
+        }
+        if (doc_url && String(doc_url).trim() && !String(doc_url).toLowerCase().includes('drive.google.com') && !String(doc_url).toLowerCase().includes('docs.google.com')) {
+          return res.status(400).json({ error: 'Technical Report must be a valid Google Drive or Google Docs link (containing "drive.google.com" or "docs.google.com").' });
+        }
+        if (linkedin_url && String(linkedin_url).trim() && !String(linkedin_url).toLowerCase().includes('linkedin.com')) {
+          return res.status(400).json({ error: 'LinkedIn Post URL must be a valid link containing "linkedin.com".' });
+        }
 
         const updateSql = `
           UPDATE projects SET
@@ -1163,7 +1145,11 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
             linkedin_url = ?,
             doc_url = ?,
             image_url = ?,
+            team_name = ?,
+            team_lead = ?,
             team_lead_photo = ?,
+            team_logo_url = ?,
+            team_members = ?,
             deliverables = ?,
             updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
@@ -1171,26 +1157,52 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
 
         db.run(
           updateSql,
-          [github_repo, youtube_url, linkedin_url, doc_url, image_url, team_lead_photo, deliverables, id],
+          [github_repo, youtube_url, linkedin_url, doc_url, image_url, team_name, team_lead, team_lead_photo, team_lead_photo, team_members, deliverables, id],
           function(err3) {
             if (err3) {
               console.error(`[BACKEND-SAVE] Error updating project #${id} by Student:`, err3.message);
               return res.status(500).json({ error: err3.message });
             }
             db.get('SELECT * FROM projects WHERE id = ?', [id], (errFetch, updatedProj) => {
+              let parsedMembers = [];
+              if (updatedProj && updatedProj.team_members) {
+                try {
+                  parsedMembers = JSON.parse(updatedProj.team_members);
+                } catch(e) {
+                  if (typeof updatedProj.team_members === 'string' && updatedProj.team_members.trim()) {
+                    parsedMembers = updatedProj.team_members.split(',').map(m => m.trim()).filter(Boolean);
+                  }
+                }
+              }
+
               const resProj = updatedProj || {
                 ...project,
-                github_repo, youtube_url, linkedin_url, doc_url, image_url, team_lead_photo, deliverables
+                github_repo, youtube_url, linkedin_url, doc_url, image_url, team_name, team_lead, team_lead_photo, team_logo_url: team_lead_photo, team_members: parsedMembers, deliverables
               };
-              console.log(`[BACKEND-SAVE] ✅ Project #${id} ("${resProj.title || id}") links saved to SQLite:`, {
+              console.log(`[BACKEND-SAVE] ✅ Project #${id} ("${resProj.title || id}") details updated by Student ${userEmail}:`, {
                 github_repo: resProj.github_repo,
                 doc_url: resProj.doc_url,
                 youtube_url: resProj.youtube_url,
                 linkedin_url: resProj.linkedin_url,
-                team_logo_url: resProj.team_lead_photo
+                team_name: resProj.team_name,
+                team_lead: resProj.team_lead,
+                team_logo_url: resProj.team_lead_photo,
+                team_members: parsedMembers
               });
+
+              logAuditEvent({
+                email: userEmail,
+                role: 'student',
+                team_name: resProj.team_name || project.team_name,
+                ip_address: getClientIp(req),
+                method: 'Web Form',
+                event_type: 'UPDATE_PROJECT',
+                status: 'SUCCESS',
+                details: `Student updated details for project ${resProj.project_code || id}`
+              });
+
               res.json({
-                message: 'Project links and deliverables saved successfully.',
+                message: 'Project details updated successfully.',
                 project: {
                   ...resProj,
                   github_repo: resProj.github_repo,
@@ -1203,7 +1215,9 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
                   linkedinPostUrl: resProj.linkedin_url,
                   team_lead_photo: resProj.team_lead_photo,
                   team_logo_url: resProj.team_lead_photo,
-                  teamLogoUrl: resProj.team_lead_photo
+                  teamLogoUrl: resProj.team_lead_photo,
+                  team_members: parsedMembers,
+                  teamMembers: parsedMembers
                 },
                 changes: this.changes
               });
@@ -1274,11 +1288,6 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         deliverables = COALESCE(?, deliverables),
         is_active = COALESCE(?, is_active, 1),
         is_visible = COALESCE(?, is_visible, 1),
-        completed_at = CASE 
-          WHEN (COALESCE(?, status) = 'completed' OR COALESCE(?, progress) >= 100) 
-          THEN COALESCE(completed_at, CURRENT_TIMESTAMP) 
-          ELSE completed_at 
-        END,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
@@ -1296,8 +1305,6 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
         deliverables,
         activeStateNum,
         activeStateNum,
-        status,
-        progressNum,
         id
       ],
       function(err4) {
@@ -1364,12 +1371,11 @@ const handleProjectStageUpdate = (req, res) => {
     UPDATE projects SET
       status = ?,
       progress = ?,
-      completed_at = CASE WHEN (? = 'completed') THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE completed_at END,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `;
 
-  db.run(sql, [status, newProgress, status, id], function(err) {
+  db.run(sql, [status, newProgress, id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     if (this.changes === 0) return res.status(404).json({ error: 'Project not found' });
 

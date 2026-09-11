@@ -45,9 +45,7 @@ const state = {
   togglingProjects: new Set(),
   currentEditingTeamMembers: [],
   batchFilter: 'all',
-  collapsedBatches: new Set(),
-  showCompletedOnBoard: false,
-  completedShowcaseBatchFilter: 'all'
+  collapsedBatches: new Set()
 };
 
 // DOM Elements
@@ -99,12 +97,6 @@ const DOM = {
   execApprovedBudget: document.getElementById('exec-approved-budget'),
   execPendingBomCount: document.getElementById('exec-pending-bom-count'),
   execStudentCount: document.getElementById('exec-student-count'),
-  execCompletedSection: document.getElementById('exec-completed-section'),
-  execCompletedCountBadge: document.getElementById('exec-completed-count-badge'),
-  execCompletedGridRoot: document.getElementById('exec-completed-grid-root'),
-  execCompletedBatchPills: document.getElementById('exec-completed-batch-pills'),
-  toggleShowCompletedBoard: document.getElementById('toggle-show-completed-board'),
-  boardCompletedToggleCount: document.getElementById('board-completed-toggle-count'),
 
   // Kanban Columns
   cardsInQueue: document.getElementById('cards-in_queue'),
@@ -228,6 +220,90 @@ function isUserViewer() {
 
 function isUserPublic() {
   return !state.currentUser || isUserViewer();
+}
+
+function isUserMemberOfProject(project) {
+  if (!project) return false;
+  if (isUserAdmin()) return true;
+  if (!isUserStudent()) return false;
+  
+  const user = state.currentUser;
+  if (!user) return false;
+
+  const rawUserName = (user.name || '').toLowerCase().trim();
+  const userName = rawUserName.replace(/\s*\(student\)\s*/gi, '').trim();
+  const userEmail = (user.email || '').toLowerCase().trim();
+
+  // 1. Check if user is Team Lead
+  if (project.team_lead) {
+    const leadStr = project.team_lead.toLowerCase();
+    if ((userName && (leadStr.includes(userName) || userName.includes(leadStr))) ||
+        (userEmail && leadStr.includes(userEmail))) {
+      return true;
+    }
+  }
+
+  // 2. Check team_members field
+  if (project.team_members) {
+    let membersList = [];
+    if (Array.isArray(project.team_members)) {
+      membersList = project.team_members;
+    } else if (typeof project.team_members === 'string') {
+      try {
+        const parsed = JSON.parse(project.team_members);
+        if (Array.isArray(parsed)) membersList = parsed;
+        else membersList = [project.team_members];
+      } catch (e) {
+        membersList = project.team_members.split(',').map(m => m.trim());
+      }
+    }
+    
+    for (const m of membersList) {
+      if (typeof m === 'object' && m !== null) {
+        const mName = (m.name || '').toLowerCase().replace(/\s*\(student\)\s*/gi, '').trim();
+        const mEmail = (m.email || '').toLowerCase().trim();
+        if ((userName && mName && (mName.includes(userName) || userName.includes(mName))) ||
+            (userEmail && mEmail && mEmail === userEmail)) {
+          return true;
+        }
+      } else if (typeof m === 'string') {
+        const mLower = m.toLowerCase().trim();
+        if ((userName && (mLower.includes(userName) || userName.includes(mLower))) ||
+            (userEmail && mLower.includes(userEmail))) {
+          return true;
+        }
+      }
+    }
+  }
+
+  // 3. Check student profile in state.students or user.assigned_project
+  if (user.assigned_project && (user.assigned_project === project.project_code || user.assigned_project === project.title)) {
+    return true;
+  }
+  if (user.project_title && (user.project_title === project.title || user.project_title === project.project_code)) {
+    return true;
+  }
+
+  if (state.students && Array.isArray(state.students)) {
+    const stRecord = state.students.find(s => 
+      (s.user_id && s.user_id === user.id) || 
+      (s.email && s.email.toLowerCase().trim() === userEmail) ||
+      (userName && s.name && s.name.toLowerCase().trim().includes(userName))
+    );
+    if (stRecord) {
+      if (stRecord.assigned_project && (stRecord.assigned_project === project.project_code || stRecord.assigned_project.toLowerCase() === (project.title || '').toLowerCase())) {
+        return true;
+      }
+      if (stRecord.project_title && (stRecord.project_title === project.title || stRecord.project_title.toLowerCase() === (project.project_code || '').toLowerCase())) {
+        return true;
+      }
+      if (stRecord.team_name && project.team_name && stRecord.team_name.toLowerCase().trim() === project.team_name.toLowerCase().trim()) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 async function checkSessionOrRedirect() {
@@ -1236,29 +1312,6 @@ function initEventListeners() {
 
   // Batch View listeners
   initBatchViewListeners();
-
-  // Toggle show completed projects on Kanban Board
-  const toggleCompletedBoardEl = document.getElementById('toggle-show-completed-board');
-  if (toggleCompletedBoardEl) {
-    toggleCompletedBoardEl.addEventListener('change', (e) => {
-      state.showCompletedOnBoard = e.target.checked;
-      renderKanban();
-    });
-  }
-
-  // Management Showcase Completed Batch Filter Pills
-  const execCompletedBatchPillsRoot = document.getElementById('exec-completed-batch-pills');
-  if (execCompletedBatchPillsRoot) {
-    execCompletedBatchPillsRoot.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-completed-batch]');
-      if (!btn) return;
-      const batchVal = btn.getAttribute('data-completed-batch') || 'all';
-      state.completedShowcaseBatchFilter = batchVal;
-      execCompletedBatchPillsRoot.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderExecutiveShowcase();
-    });
-  }
 }
 
 function resolveCurrentRoute() {
@@ -1419,7 +1472,7 @@ function renderAllViews() {
   updateStatsSummary();
 }
 
-// 1. RENDER EXECUTIVE MANAGEMENT SHOWCASE (ACTIVE & COMPLETED SECTIONS)
+// 1. RENDER EXECUTIVE MANAGEMENT SHOWCASE (NEW COMPONENT)
 function renderExecutiveShowcase() {
   if (!DOM.execShowcaseGridRoot) return;
 
@@ -1435,252 +1488,118 @@ function renderExecutiveShowcase() {
   if (DOM.execPendingBomCount) DOM.execPendingBomCount.textContent = `${pendingBOMs.length} Items`;
   if (DOM.execStudentCount) DOM.execStudentCount.textContent = `${state.students.length} Engineers`;
 
-  // Split Active vs Completed Projects
-  const activeProjects = state.projects.filter(p => p.status !== 'completed' && (p.progress || 0) < 100);
-  const allCompletedProjects = state.projects.filter(p => p.status === 'completed' || (p.progress || 0) >= 100);
+  if (state.projects.length === 0) {
+    DOM.execShowcaseGridRoot.innerHTML = '<div style="padding:20px; color:var(--text-dim);">No innovation projects found for the current filters.</div>';
+    return;
+  }
 
-  // 1A. Render Active Projects Grid
-  if (activeProjects.length === 0) {
-    DOM.execShowcaseGridRoot.innerHTML = '<div style="grid-column: 1 / -1; padding:24px; text-align:center; color:var(--text-dim); background:var(--bg-card); border-radius:8px; border:1px dashed var(--border-color);">No active innovation projects found for the current filters. All active deliverables may be completed or archived.</div>';
-  } else {
-    let html = '';
-    activeProjects.forEach(p => {
-      const priorityBadge = p.priority === 'High' ? 'badge-high' : (p.priority === 'Normal' ? 'badge-normal' : 'badge-low');
-      const defaultHero = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80';
-      const heroImg = p.image_url || defaultHero;
+  let html = '';
+  state.projects.forEach(p => {
+    const priorityBadge = p.priority === 'High' ? 'badge-high' : (p.priority === 'Normal' ? 'badge-normal' : 'badge-low');
+    const defaultHero = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80';
+    const heroImg = p.image_url || defaultHero;
 
-      // Team Logo & Photo
-      const leadPhoto = p.team_logo_url || p.team_lead_photo || (p.team_name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_name)}&background=6366f1&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'Team')}&background=6366f1&color=fff`);
+    // Team Logo & Photo
+    const leadPhoto = p.team_logo_url || p.team_lead_photo || (p.team_name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_name)}&background=6366f1&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'Team')}&background=6366f1&color=fff`);
 
-      // Team Member Avatars
-      const members = Array.isArray(p.team_members) ? p.team_members : [];
-      let memberAvatarsHTML = members.slice(0, 3).map(m => {
-        const mName = typeof m === 'object' && m ? (m.name || 'Student') : String(m);
-        const mRole = typeof m === 'object' && m ? (m.role || 'Member') : 'Member';
-        const mPhoto = (typeof m === 'object' && m && m.photo) ? m.photo : `https://ui-avatars.com/api/?name=${encodeURIComponent(mName)}&background=8b5cf6&color=fff`;
-        return `<img src="${mPhoto}" class="avatar-badge" title="${escapeHTML(mName)} (${mRole})" alt="${escapeHTML(mName)}">`;
-      }).join('');
+    // Team Member Avatars
+    const members = Array.isArray(p.team_members) ? p.team_members : [];
+    let memberAvatarsHTML = members.slice(0, 3).map(m => {
+      const mName = typeof m === 'object' && m ? (m.name || 'Student') : String(m);
+      const mRole = typeof m === 'object' && m ? (m.role || 'Member') : 'Member';
+      const mPhoto = (typeof m === 'object' && m && m.photo) ? m.photo : `https://ui-avatars.com/api/?name=${encodeURIComponent(mName)}&background=8b5cf6&color=fff`;
+      return `<img src="${mPhoto}" class="avatar-badge" title="${escapeHTML(mName)} (${mRole})" alt="${escapeHTML(mName)}">`;
+    }).join('');
 
-      // Check if project has pending BOM
-      const hasPendingBOM = p.bom_status === 'Submitted';
+    // Check if project has pending BOM
+    const hasPendingBOM = p.bom_status === 'Submitted';
 
-      // Media Links
-      const mediaLinks = [];
-      if (p.github_repo) mediaLinks.push(`<a href="${p.github_repo}" target="_blank" class="btn-media btn-media-github" title="View Code">🐙 GitHub</a>`);
-      if (p.youtube_url) mediaLinks.push(`<a href="${p.youtube_url}" target="_blank" class="btn-media btn-media-youtube" title="Watch Demo Video">🎥 Video Demo</a>`);
-      if (p.linkedin_url) mediaLinks.push(`<a href="${p.linkedin_url}" target="_blank" class="btn-media btn-media-linkedin" title="LinkedIn Showcase">💼 LinkedIn</a>`);
-      if (p.doc_url) mediaLinks.push(`<a href="${p.doc_url}" target="_blank" class="btn-media btn-media-doc" title="Datasheet & Docs">📄 Docs</a>`);
+    // Media Links
+    const mediaLinks = [];
+    if (p.github_repo) mediaLinks.push(`<a href="${p.github_repo}" target="_blank" class="btn-media btn-media-github" title="View Code">🐙 GitHub</a>`);
+    if (p.youtube_url) mediaLinks.push(`<a href="${p.youtube_url}" target="_blank" class="btn-media btn-media-youtube" title="Watch Demo Video">🎥 Video Demo</a>`);
+    if (p.linkedin_url) mediaLinks.push(`<a href="${p.linkedin_url}" target="_blank" class="btn-media btn-media-linkedin" title="LinkedIn Showcase">💼 LinkedIn</a>`);
+    if (p.doc_url) mediaLinks.push(`<a href="${p.doc_url}" target="_blank" class="btn-media btn-media-doc" title="Datasheet & Docs">📄 Docs</a>`);
 
-      const isHidden = (p.is_visible === 0 || p.is_visible === false || p.is_active === 0 || p.is_active === false);
-      const hiddenBadge = (isUserAdmin() && isHidden)
-        ? '<span class="badge badge-hidden" title="Hidden from students and public viewers">👁️‍🗨️ Hidden</span>'
-        : '';
+    const isHidden = (p.is_visible === 0 || p.is_visible === false || p.is_active === 0 || p.is_active === false);
+    const hiddenBadge = (isUserAdmin() && isHidden)
+      ? '<span class="badge badge-hidden" title="Hidden from students and public viewers">👁️‍🗨️ Hidden</span>'
+      : '';
 
-      html += `
-        <div class="exec-card ${isHidden ? 'project-card-hidden' : ''}">
-          <!-- Hero Photo with Badges -->
-          <div class="exec-card-hero">
-            <img src="${heroImg}" alt="${escapeHTML(p.title)}" loading="lazy">
-            <div class="exec-card-overlay">
-              <div class="exec-card-top-badges">
-                <div style="display:flex; align-items:center; gap:6px;">
-                  <span class="card-id-code">${p.project_code}</span>
-                  ${hiddenBadge}
-                  ${isUserAdmin() ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active) : ''}
-                </div>
-                <div class="exec-progress-radial">
-                  <span class="pulse-indicator"></span>
-                  <span class="exec-progress-num">${p.progress || 0}%</span>
-                </div>
+    html += `
+      <div class="exec-card ${isHidden ? 'project-card-hidden' : ''}">
+        <!-- Hero Photo with Badges -->
+        <div class="exec-card-hero">
+          <img src="${heroImg}" alt="${escapeHTML(p.title)}" loading="lazy">
+          <div class="exec-card-overlay">
+            <div class="exec-card-top-badges">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span class="card-id-code">${p.project_code}</span>
+                ${hiddenBadge}
+                ${isUserAdmin() ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active) : ''}
               </div>
-              <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-                <span class="badge badge-blue">${p.domain}</span>
-                <span class="badge ${priorityBadge}">${p.priority} Priority</span>
+              <div class="exec-progress-radial">
+                <span class="pulse-indicator"></span>
+                <span class="exec-progress-num">${p.progress || 0}%</span>
               </div>
             </div>
-          </div>
-
-          <!-- Card Body -->
-          <div class="exec-card-body">
-            <h3 class="exec-card-title">${escapeHTML(p.title)}</h3>
-            <p class="exec-card-desc">${escapeHTML(p.description || '')}</p>
-
-            <!-- Team Lead & Logo Row -->
-            <div class="exec-card-lead-row">
-              <div class="exec-lead-info">
-                <img src="${leadPhoto}" alt="Team Logo" title="Team Logo: ${escapeHTML(p.team_name || p.team_lead || 'Team')}" class="exec-lead-avatar">
-                <div>
-                  <div class="exec-lead-name">${escapeHTML(p.team_lead || 'Student Lead')}</div>
-                  <div class="exec-lead-role">${escapeHTML(p.team_name || 'Innovation Group')}</div>
-                </div>
-              </div>
-              <div class="avatar-group">
-                ${memberAvatarsHTML}
-              </div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+              <span class="badge badge-blue">${p.domain}</span>
+              <span class="badge ${priorityBadge}">${p.priority} Priority</span>
             </div>
-
-            <!-- Immediate Action / Procurement Alert (Internal Notes - Hidden from Viewers) -->
-            ${(!isUserViewer() && p.immediate_action) ? `
-            <div class="exec-action-alert">
-              <div class="exec-action-alert-text">
-                <strong>${hasPendingBOM ? '⚠️ BOM Requisition Pending:' : '⚡ Next Action Item:'}</strong>
-                <div>${escapeHTML(p.immediate_action || 'Ongoing prototype development')}</div>
-              </div>
-              ${(hasPendingBOM && isUserAdmin()) ? `<button class="btn btn-sm btn-primary" onclick="switchView('bom')">Review BOM</button>` : ''}
-            </div>
-            ` : ''}
-
-            <!-- Media & Social Links -->
-            ${mediaLinks.length > 0 ? `
-              <div class="exec-media-links">
-                ${mediaLinks.join('')}
-              </div>
-            ` : ''}
-          </div>
-
-          <!-- Footer -->
-          <div class="exec-card-footer">
-            <span style="font-size:12px; color:var(--text-dim);">Due: <strong>${formatDate(p.due_date)}</strong></span>
-            <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
-              <span>🔍 Spotlight View</span>
-            </button>
           </div>
         </div>
-      `;
-    });
-    DOM.execShowcaseGridRoot.innerHTML = html;
-  }
 
-  // 1B. Render Completed & Permanently Archived Projects Grid
-  const completedRoot = document.getElementById('exec-completed-grid-root');
-  const completedBadge = document.getElementById('exec-completed-count-badge');
-  if (completedBadge) {
-    completedBadge.textContent = `${allCompletedProjects.length} Completed`;
-  }
+        <!-- Card Body -->
+        <div class="exec-card-body">
+          <h3 class="exec-card-title">${escapeHTML(p.title)}</h3>
+          <p class="exec-card-desc">${escapeHTML(p.description || '')}</p>
 
-  if (completedRoot) {
-    let filteredCompleted = allCompletedProjects;
-    if (state.completedShowcaseBatchFilter && state.completedShowcaseBatchFilter !== 'all') {
-      const bNum = parseInt(state.completedShowcaseBatchFilter, 10);
-      filteredCompleted = allCompletedProjects.filter(p => p.batch === bNum);
-    }
-
-    // Sort by completion date descending (most recently completed first)
-    filteredCompleted.sort((a, b) => {
-      const dateA = new Date(a.completed_at || a.due_date || 0).getTime();
-      const dateB = new Date(b.completed_at || b.due_date || 0).getTime();
-      return dateB - dateA;
-    });
-
-    if (filteredCompleted.length === 0) {
-      completedRoot.innerHTML = `<div style="grid-column: 1 / -1; padding: 28px; text-align: center; color: var(--text-dim); background: var(--bg-card); border-radius: 8px; border: 1px dashed var(--border-color);">
-        <span style="font-size: 24px; display: block; margin-bottom: 8px;">🏆</span>
-        No completed projects found for ${state.completedShowcaseBatchFilter === 'all' ? 'any batch' : `Batch ${state.completedShowcaseBatchFilter}`}.
-      </div>`;
-    } else {
-      let compHtml = '';
-      filteredCompleted.forEach(p => {
-        const defaultHero = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80';
-        const heroImg = p.image_url || defaultHero;
-        const leadPhoto = p.team_logo_url || p.team_lead_photo || (p.team_name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_name)}&background=6366f1&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team_lead || 'Team')}&background=6366f1&color=fff`);
-
-        const members = Array.isArray(p.team_members) ? p.team_members : [];
-        let memberAvatarsHTML = members.slice(0, 3).map(m => {
-          const mName = typeof m === 'object' && m ? (m.name || 'Student') : String(m);
-          const mRole = typeof m === 'object' && m ? (m.role || 'Member') : 'Member';
-          const mPhoto = (typeof m === 'object' && m && m.photo) ? m.photo : `https://ui-avatars.com/api/?name=${encodeURIComponent(mName)}&background=8b5cf6&color=fff`;
-          return `<img src="${mPhoto}" class="avatar-badge" title="${escapeHTML(mName)} (${mRole})" alt="${escapeHTML(mName)}">`;
-        }).join('');
-
-        const mediaLinks = [];
-        if (p.github_repo) mediaLinks.push(`<a href="${p.github_repo}" target="_blank" class="btn-media btn-media-github" title="View Code">🐙 GitHub</a>`);
-        if (p.youtube_url) mediaLinks.push(`<a href="${p.youtube_url}" target="_blank" class="btn-media btn-media-youtube" title="Watch Demo Video">🎥 Video Demo</a>`);
-        if (p.linkedin_url) mediaLinks.push(`<a href="${p.linkedin_url}" target="_blank" class="btn-media btn-media-linkedin" title="LinkedIn Showcase">💼 LinkedIn</a>`);
-        if (p.doc_url) mediaLinks.push(`<a href="${p.doc_url}" target="_blank" class="btn-media btn-media-doc" title="Datasheet & Docs">📄 Docs</a>`);
-
-        const isHidden = (p.is_visible === 0 || p.is_visible === false || p.is_active === 0 || p.is_active === false);
-        const hiddenBadge = (isUserAdmin() && isHidden)
-          ? '<span class="badge badge-hidden" title="Hidden from students and public viewers">👁️‍🗨️ Hidden</span>'
-          : '';
-
-        const completedDateStr = p.completed_at ? formatDate(p.completed_at) : (p.due_date ? formatDate(p.due_date) : 'Completed');
-
-        compHtml += `
-          <div class="exec-card ${isHidden ? 'project-card-hidden' : ''}" style="border-top: 3px solid #10b981;">
-            <!-- Hero Photo with Badges -->
-            <div class="exec-card-hero">
-              <img src="${heroImg}" alt="${escapeHTML(p.title)}" loading="lazy">
-              <div class="exec-card-overlay">
-                <div class="exec-card-top-badges">
-                  <div style="display:flex; align-items:center; gap:6px;">
-                    <span class="card-id-code">${p.project_code}</span>
-                    ${hiddenBadge}
-                    ${isUserAdmin() ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active) : ''}
-                  </div>
-                  <div class="exec-progress-radial" style="border-color: #10b981; color: #34d399;">
-                    <span style="font-size:12px;">🏆</span>
-                    <span class="exec-progress-num">100%</span>
-                  </div>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-                  <span class="badge badge-blue">${p.domain}</span>
-                  <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">Batch ${p.batch || 1}</span>
-                </div>
+          <!-- Team Lead & Logo Row -->
+          <div class="exec-card-lead-row">
+            <div class="exec-lead-info">
+              <img src="${leadPhoto}" alt="Team Logo" title="Team Logo: ${escapeHTML(p.team_name || p.team_lead || 'Team')}" class="exec-lead-avatar">
+              <div>
+                <div class="exec-lead-name">${escapeHTML(p.team_lead || 'Student Lead')}</div>
+                <div class="exec-lead-role">${escapeHTML(p.team_name || 'Innovation Group')}</div>
               </div>
             </div>
-
-            <!-- Card Body -->
-            <div class="exec-card-body">
-              <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
-                <span class="badge" style="background:rgba(16,185,129,0.15); color:#34d399; font-size:10px; font-weight:700; border:1px solid rgba(16,185,129,0.3);">
-                  🏆 DEPLOYED & COMPLETED
-                </span>
-                <span style="font-size:11px; color:var(--text-dim); margin-left:auto;">${completedDateStr}</span>
-              </div>
-              <h3 class="exec-card-title">${escapeHTML(p.title)}</h3>
-              <p class="exec-card-desc">${escapeHTML(p.description || '')}</p>
-
-              <!-- Team Lead & Logo Row -->
-              <div class="exec-card-lead-row">
-                <div class="exec-lead-info">
-                  <img src="${leadPhoto}" alt="Team Logo" title="Team Logo: ${escapeHTML(p.team_name || p.team_lead || 'Team')}" class="exec-lead-avatar">
-                  <div>
-                    <div class="exec-lead-name">${escapeHTML(p.team_lead || 'Student Lead')}</div>
-                    <div class="exec-lead-role">${escapeHTML(p.team_name || 'Innovation Group')}</div>
-                  </div>
-                </div>
-                <div class="avatar-group">
-                  ${memberAvatarsHTML}
-                </div>
-              </div>
-
-              <!-- Deliverables & Key Highlights -->
-              <div style="background: rgba(16, 22, 38, 0.7); padding: 10px; border-radius: 6px; font-size: 12px; border-left: 3px solid #10b981; margin: 10px 0;">
-                <strong style="color: #34d399; font-size: 11px;">Deliverable Highlights:</strong>
-                <p style="color: #cbd5e1; margin-top: 2px; font-size: 11px; line-height: 1.4;">${escapeHTML(p.deliverables || p.immediate_action || 'Full prototype deployed and operational.')}</p>
-              </div>
-
-              <!-- Media & Social Links -->
-              ${mediaLinks.length > 0 ? `
-                <div class="exec-media-links">
-                  ${mediaLinks.join('')}
-                </div>
-              ` : ''}
-            </div>
-
-            <!-- Footer -->
-            <div class="exec-card-footer">
-              <span style="font-size:11px; color:var(--text-dim);">Archive Status: <strong style="color:#34d399;">Permanent</strong></span>
-              <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
-                <span>🔍 Spotlight View</span>
-              </button>
+            <div class="avatar-group">
+              ${memberAvatarsHTML}
             </div>
           </div>
-        `;
-      });
-      completedRoot.innerHTML = compHtml;
-    }
-  }
+
+          <!-- Immediate Action / Procurement Alert (Internal Notes - Hidden from Viewers) -->
+          ${(!isUserViewer() && p.immediate_action) ? `
+          <div class="exec-action-alert">
+            <div class="exec-action-alert-text">
+              <strong>${hasPendingBOM ? '⚠️ BOM Requisition Pending:' : '⚡ Next Action Item:'}</strong>
+              <div>${escapeHTML(p.immediate_action || 'Ongoing prototype development')}</div>
+            </div>
+            ${(hasPendingBOM && isUserAdmin()) ? `<button class="btn btn-sm btn-primary" onclick="switchView('bom')">Review BOM</button>` : ''}
+          </div>
+          ` : ''}
+
+          <!-- Media & Social Links -->
+          ${mediaLinks.length > 0 ? `
+            <div class="exec-media-links">
+              ${mediaLinks.join('')}
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Footer -->
+        <div class="exec-card-footer">
+          <span style="font-size:12px; color:var(--text-dim);">Due: <strong>${formatDate(p.due_date)}</strong></span>
+          <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
+            <span>🔍 Spotlight View</span>
+          </button>
+        </div>
+      </div>
+    `;
+  });
+
+  DOM.execShowcaseGridRoot.innerHTML = html;
 }
 
 // 2. SPOTLIGHT PRESENTATION VIEW
@@ -1831,12 +1750,6 @@ function renderKanban() {
   DOM.countTesting.textContent = cols.testing.length;
   DOM.countCompleted.textContent = cols.completed.length;
 
-  // Sync Board Completed Projects Toggle Toolbar
-  const boardToggleCount = document.getElementById('board-completed-toggle-count');
-  if (boardToggleCount) boardToggleCount.textContent = cols.completed.length;
-  const boardToggleCheckbox = document.getElementById('toggle-show-completed-board');
-  if (boardToggleCheckbox) boardToggleCheckbox.checked = state.showCompletedOnBoard;
-
   if (state.projects.length === 0) {
     const activeTagName = state.filterTag || 'the selected criteria';
     const resetBtn = state.filterTag ? `<div style="margin-top:10px;"><button class="btn btn-secondary" onclick="resetTagFilter()" style="font-size:11px; padding:4px 10px; cursor:pointer;">Reset Filter (#all)</button></div>` : '';
@@ -1848,22 +1761,7 @@ function renderKanban() {
     DOM.cardsInQueue.innerHTML = cols.in_queue.length ? cols.in_queue.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
     DOM.cardsInProgress.innerHTML = cols.in_progress.length ? cols.in_progress.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
     DOM.cardsTesting.innerHTML = cols.testing.length ? cols.testing.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
-    
-    // Render Completed Column (Default: Archived Placeholder Banner to keep Active WIP board clean)
-    if (!state.showCompletedOnBoard) {
-      DOM.cardsCompleted.innerHTML = cols.completed.length ? `
-        <div class="archived-completed-board-placeholder" style="padding: 24px 14px; text-align: center; background: rgba(16, 185, 129, 0.04); border: 1px dashed rgba(16, 185, 129, 0.25); border-radius: 8px; margin: 6px 0;">
-          <div style="font-size: 22px; margin-bottom: 6px;">📦</div>
-          <div style="font-size: 12px; font-weight: 700; color: var(--text-main); margin-bottom: 4px;">${cols.completed.length} Completed Projects Archived</div>
-          <p style="font-size: 11px; color: var(--text-dim); margin-bottom: 12px; line-height: 1.4;">Active WIP board is kept clean. Completed innovations are safely preserved in Management Showcase & Showcase Archive.</p>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBoardCompletedVisibility(true)" style="font-size: 11px; padding: 4px 10px; cursor: pointer;">
-            👁️ Show on Board
-          </button>
-        </div>
-      ` : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
-    } else {
-      DOM.cardsCompleted.innerHTML = cols.completed.length ? cols.completed.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
-    }
+    DOM.cardsCompleted.innerHTML = cols.completed.length ? cols.completed.map(createCardHTML).join('') : '<div class="empty-column-state" style="padding:24px 12px; text-align:center; color:var(--text-dim); font-size:11px; opacity:0.5;">No items</div>';
   }
 
   document.querySelectorAll('.kanban-card').forEach(card => {
@@ -1893,13 +1791,6 @@ function renderKanban() {
     });
   });
 }
-
-window.toggleBoardCompletedVisibility = function(val) {
-  state.showCompletedOnBoard = (typeof val === 'boolean') ? val : !state.showCompletedOnBoard;
-  const toggleEl = document.getElementById('toggle-show-completed-board');
-  if (toggleEl) toggleEl.checked = state.showCompletedOnBoard;
-  renderKanban();
-};
 
 function createCardHTML(p) {
   const priorityClass = p.priority === 'High' ? 'badge-high' : (p.priority === 'Normal' ? 'badge-normal' : 'badge-low');
@@ -1932,6 +1823,7 @@ function createCardHTML(p) {
 
   const isAdmin = isUserAdmin();
   const isViewer = isUserViewer();
+  const canEdit = isAdmin || isUserMemberOfProject(p);
   const isHidden = (p.is_visible === 0 || p.is_visible === false || p.is_active === 0 || p.is_active === false);
   const hiddenClass = isHidden ? 'project-card-hidden' : '';
   const hiddenBadge = (isAdmin && isHidden)
@@ -1976,13 +1868,20 @@ function createCardHTML(p) {
         </div>
       </div>
 
-      <div class="card-footer">
+      <div class="card-footer" style="display: flex; justify-content: space-between; align-items: center;">
         <div class="avatar-group">
           ${avatarsHTML}
         </div>
-        <div class="card-counters">
-          <span class="counter-item" title="Comments">💬 ${p.comments_count || 0}</span>
-          <span class="counter-item" title="BOM/Attachments">📎 ${p.attachments_count || 0}</span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          ${canEdit ? `
+            <button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(proj => proj.id === ${p.id}) || ${JSON.stringify(p).replace(/"/g, '&quot;')})" style="padding: 2px 7px; font-size: 11px; height: 24px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px; font-weight: 600;" title="Edit Project Details">
+              ✏️ Edit
+            </button>
+          ` : ''}
+          <div class="card-counters">
+            <span class="counter-item" title="Comments">💬 ${p.comments_count || 0}</span>
+            <span class="counter-item" title="BOM/Attachments">📎 ${p.attachments_count || 0}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -3678,13 +3577,14 @@ async function openProjectDetail(projectId) {
       if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'inline-flex';
       if (addTaskBtn) addTaskBtn.style.display = 'inline-flex';
     } else if (isStudent) {
+      const isMember = isUserMemberOfProject(project);
       if (DOM.btnEditCurrentProject) {
-        DOM.btnEditCurrentProject.style.display = 'inline-flex';
-        DOM.btnEditCurrentProject.innerHTML = '✏️ Edit Links & Deliverables';
+        DOM.btnEditCurrentProject.style.display = isMember ? 'inline-flex' : 'none';
+        DOM.btnEditCurrentProject.innerHTML = '✏️ Edit Project Details';
       }
       if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'none';
-      if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'inline-flex';
-      if (addTaskBtn) addTaskBtn.style.display = 'none';
+      if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = isMember ? 'inline-flex' : 'none';
+      if (addTaskBtn) addTaskBtn.style.display = isMember ? 'inline-flex' : 'none';
     }
 
     openModal(DOM.detailModal);
@@ -4006,6 +3906,27 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   const studentHintEl = document.getElementById('student-edit-hint');
   if (studentHintEl) studentHintEl.style.display = 'none';
 
+  // Show all admin fields and restore required attributes
+  document.querySelectorAll('.admin-only-form-field').forEach(el => el.style.display = '');
+  ['form-code', 'form-title', 'form-domain', 'form-priority', 'form-status', 'form-start-date', 'form-due-date', 'form-action-item'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.required = true;
+      el.disabled = false;
+    }
+  });
+
+  const descEl = document.getElementById('form-description');
+  if (descEl) descEl.disabled = false;
+  const tagsEl = document.getElementById('form-tags');
+  if (tagsEl) tagsEl.disabled = false;
+  const progressEl = document.getElementById('form-progress');
+  if (progressEl) progressEl.disabled = false;
+  const teamNameEl = document.getElementById('form-team-name');
+  if (teamNameEl) teamNameEl.disabled = false;
+  const teamLeadEl = document.getElementById('form-team-lead');
+  if (teamLeadEl) teamLeadEl.disabled = false;
+
   DOM.modalProjectTitle.textContent = '🚀 Create Innovation Project / Task';
   DOM.projectForm.reset();
   document.getElementById('form-project-id').value = '';
@@ -4031,6 +3952,12 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   const dueDateInput = document.getElementById('form-due-date');
   if (dueDateInput) dueDateInput.value = nextMonth.toISOString().split('T')[0];
 
+  const saveBtn = document.getElementById('save-project-btn');
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '💾 Save Project Details';
+  }
+
   ['preview-image-url', 'preview-github', 'preview-youtube', 'preview-doc-url', 'preview-linkedin'].forEach(id => {
     updateLinkPreviewIcon(id, '');
   });
@@ -4048,53 +3975,49 @@ function openProjectModalForEdit(project, focusField = null) {
   const isAdmin = isUserAdmin();
   const isStudent = isUserStudent();
 
+  if (isStudent && !isAdmin) {
+    if (!isUserMemberOfProject(project)) {
+      showToast('Access denied: You can only edit your own team\'s assigned project.', 'error');
+      return;
+    }
+  }
+
   if (DOM.detailModal && DOM.detailModal.classList.contains('active')) {
     closeModal(DOM.detailModal);
   }
 
+  // Toggle admin-only form fields
+  document.querySelectorAll('.admin-only-form-field').forEach(el => {
+    el.style.display = isAdmin ? '' : 'none';
+  });
+
+  // Toggle required flags so student submission won't trigger browser validation errors on hidden fields
+  ['form-code', 'form-title', 'form-domain', 'form-priority', 'form-status', 'form-start-date', 'form-due-date', 'form-action-item'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.required = isAdmin;
+  });
+
   const studentHintEl = document.getElementById('student-edit-hint');
   if (studentHintEl) {
     studentHintEl.style.display = (isStudent && !isAdmin) ? 'flex' : 'none';
-  }
-
-  if (isStudent) {
-    const rawUserName = (state.currentUser && state.currentUser.name || '').toLowerCase();
-    const userName = rawUserName.replace(/\s*\(student\)\s*/gi, '').trim();
-    const userEmail = (state.currentUser && state.currentUser.email || '').toLowerCase();
-    
-    const isLead = project.team_lead && (
-      project.team_lead.toLowerCase().includes(userName) ||
-      userName.includes(project.team_lead.toLowerCase()) ||
-      project.team_lead.toLowerCase().includes(userEmail)
-    );
-    
-    const membersStr = typeof project.team_members === 'string'
-      ? project.team_members.toLowerCase()
-      : JSON.stringify(project.team_members || []).toLowerCase();
-      
-    const isMember = membersStr.includes(userEmail) || (userName && membersStr.includes(userName));
-    const studentRecord = state.students && state.students.find(s => s.user_id === state.currentUser?.id || (s.email && s.email.toLowerCase() === userEmail));
-    const isAssigned = studentRecord && (
-      studentRecord.assigned_project === project.project_code ||
-      studentRecord.project_title === project.title ||
-      (studentRecord.assigned_project && project.title && project.title.toLowerCase().includes(studentRecord.assigned_project.toLowerCase()))
-    );
-
-    if (!isLead && !isMember && !isAssigned) {
-      console.warn(`[Student Edit Access] Permitting student (${userEmail}) to update links for project ${project.project_code}`);
+    if (isStudent && !isAdmin) {
+      studentHintEl.innerHTML = `
+        <span style="font-size:16px;">🎓</span>
+        <div><strong>Team Edit Access:</strong> You are editing your team project (<strong>${escapeHTML(project.project_code || '')}</strong>). You can update your Hero Image, GitHub Repo, Technical Report (Drive), Video Demo, LinkedIn, Team Name, Team Lead, Team Logo, Team Members, and Deliverables.</div>
+      `;
     }
   }
 
   if (DOM.modalProjectTitle) {
     DOM.modalProjectTitle.textContent = isAdmin
       ? `👑 Admin Edit Project Details: ${project.project_code || ''}`
-      : `🎓 Student Edit Links & Deliverables: ${project.project_code || ''}`;
+      : `✏️ Edit Project Details: ${project.project_code || ''} - ${project.title || ''}`;
   }
 
   const saveBtn = document.getElementById('save-project-btn');
   if (saveBtn) {
     saveBtn.disabled = false;
-    saveBtn.innerHTML = isAdmin ? '💾 Save Project Details' : '💾 Save Links & Deliverables';
+    saveBtn.innerHTML = '💾 Save Project Details';
   }
 
   document.getElementById('form-project-id').value = project.id || '';
@@ -4182,35 +4105,53 @@ function openProjectModalForEdit(project, focusField = null) {
     actionEl.disabled = !isAdmin;
   }
 
-  // Student editable fields (Media, links, deliverables)
+  // Team editable fields (accessible by both Admin and Team Members)
   const ghVal = project.github_repo || project.githubLink || project.github_url || '';
   const ytVal = project.youtube_url || project.videoDemoUrl || project.youtubeUrl || '';
   const docVal = project.doc_url || project.techReportUrl || project.technical_report || project.docUrl || '';
   const liVal = project.linkedin_url || project.linkedinPostUrl || project.linkedin || '';
   const imgVal = project.image_url || project.imageUrl || '';
   
-  document.getElementById('form-github').value = ghVal;
-  document.getElementById('form-youtube').value = ytVal;
-  document.getElementById('form-doc-url').value = docVal;
-  document.getElementById('form-linkedin').value = liVal;
-  document.getElementById('form-image-url').value = imgVal;
+  const ghInput = document.getElementById('form-github');
+  if (ghInput) { ghInput.value = ghVal; ghInput.disabled = false; }
+
+  const ytInput = document.getElementById('form-youtube');
+  if (ytInput) { ytInput.value = ytVal; ytInput.disabled = false; }
+
+  const docInput = document.getElementById('form-doc-url');
+  if (docInput) { docInput.value = docVal; docInput.disabled = false; }
+
+  const liInput = document.getElementById('form-linkedin');
+  if (liInput) { liInput.value = liVal; liInput.disabled = false; }
+
+  const imgInput = document.getElementById('form-image-url');
+  if (imgInput) { imgInput.value = imgVal; imgInput.disabled = false; }
   
   const teamNameEl = document.getElementById('form-team-name');
   if (teamNameEl) {
     teamNameEl.value = project.team_name || '';
-    teamNameEl.disabled = !isAdmin;
+    teamNameEl.disabled = false;
   }
 
   const teamLeadEl = document.getElementById('form-team-lead');
   if (teamLeadEl) {
     teamLeadEl.value = project.team_lead || '';
-    teamLeadEl.disabled = !isAdmin;
+    teamLeadEl.disabled = false;
   }
 
-  document.getElementById('form-team-lead-photo').value = project.team_logo_url || project.team_lead_photo || project.teamLeadPhoto || project.teamLogoUrl || '';
-  document.getElementById('form-deliverables').value = project.deliverables || '';
+  const teamLogoEl = document.getElementById('form-team-lead-photo');
+  if (teamLogoEl) {
+    teamLogoEl.value = project.team_logo_url || project.team_lead_photo || project.teamLeadPhoto || project.teamLogoUrl || '';
+    teamLogoEl.disabled = false;
+  }
 
-  // Pre-fill Team Members
+  const delivEl = document.getElementById('form-deliverables');
+  if (delivEl) {
+    delivEl.value = project.deliverables || '';
+    delivEl.disabled = false;
+  }
+
+  // Pre-fill Team Members (editable by both Admin and Team Members)
   let membersList = [];
   if (Array.isArray(project.team_members)) {
     membersList = project.team_members.map(m => typeof m === 'object' && m ? (m.name || m.email || JSON.stringify(m)) : String(m)).filter(Boolean);
@@ -4233,10 +4174,10 @@ function openProjectModalForEdit(project, focusField = null) {
   const tmInput = document.getElementById('form-team-members-input');
   if (tmInput) {
     tmInput.value = '';
-    tmInput.disabled = !isAdmin;
+    tmInput.disabled = false;
   }
   const tmAddBtn = document.getElementById('btn-add-team-member');
-  if (tmAddBtn) tmAddBtn.disabled = !isAdmin;
+  if (tmAddBtn) tmAddBtn.disabled = false;
 
   updateLinkPreviewIcon('preview-image-url', imgVal);
   updateLinkPreviewIcon('preview-github', ghVal);
@@ -4329,6 +4270,29 @@ async function handleProjectFormSubmit(e) {
     const imgVal = normalizeUrl(document.getElementById('form-image-url') ? document.getElementById('form-image-url').value : '');
     const leadPhotoVal = normalizeUrl(document.getElementById('form-team-lead-photo') ? document.getElementById('form-team-lead-photo').value : '');
     const deliverablesVal = (document.getElementById('form-deliverables') ? document.getElementById('form-deliverables').value : (existingProject ? existingProject.deliverables : '')).trim();
+
+    // Client-side URL format validations
+    if (ghVal && !ghVal.toLowerCase().includes('github.com')) {
+      console.warn('[PROJECT-SAVE] Validation failed: Invalid GitHub URL');
+      showToast('GitHub Repository URL must be a valid link containing "github.com".', 'error');
+      const ghInput = document.getElementById('form-github');
+      if (ghInput) ghInput.focus();
+      return;
+    }
+    if (docVal && !docVal.toLowerCase().includes('drive.google.com') && !docVal.toLowerCase().includes('docs.google.com')) {
+      console.warn('[PROJECT-SAVE] Validation failed: Invalid Google Drive/Docs URL');
+      showToast('Technical Report must be a valid Google Drive or Google Docs link (containing "drive.google.com" or "docs.google.com").', 'error');
+      const docInput = document.getElementById('form-doc-url');
+      if (docInput) docInput.focus();
+      return;
+    }
+    if (liVal && !liVal.toLowerCase().includes('linkedin.com')) {
+      console.warn('[PROJECT-SAVE] Validation failed: Invalid LinkedIn URL');
+      showToast('LinkedIn Post URL must be a valid link containing "linkedin.com".', 'error');
+      const liInput = document.getElementById('form-linkedin');
+      if (liInput) liInput.focus();
+      return;
+    }
 
     // Flush any pending typed team member
     const pendingMemberInput = document.getElementById('form-team-members-input') ? document.getElementById('form-team-members-input').value.trim() : '';
