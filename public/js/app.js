@@ -2105,6 +2105,55 @@ function isUserAdmin() {
 }
 
 // 9. RENDER STUDENTS & INNOVATOR TEAMS DIRECTORY
+function getStudentMatchedProject(s) {
+  if (!s || !Array.isArray(state.projects) || state.projects.length === 0) return null;
+  const assigned = (s.assigned_project || '').trim().toLowerCase();
+  const title = (s.project_title || '').trim().toLowerCase();
+  
+  // 1. Direct project_code exact match
+  let matched = state.projects.find(p => p.project_code && assigned && p.project_code.toLowerCase() === assigned);
+  if (matched) return matched;
+
+  // 2. Direct title exact match
+  matched = state.projects.find(p => p.title && title && p.title.toLowerCase() === title);
+  if (matched) return matched;
+
+  // 3. Substring match on code or title
+  matched = state.projects.find(p => {
+    const code = (p.project_code || '').toLowerCase();
+    const pTitle = (p.title || '').toLowerCase();
+    if (code && assigned && (code.includes(assigned) || assigned.includes(code))) return true;
+    if (pTitle && title && (pTitle.includes(title) || title.includes(pTitle))) return true;
+    if (pTitle && assigned && (pTitle.includes(assigned) || assigned.includes(pTitle))) return true;
+    if (code && title && (code.includes(title) || title.includes(code))) return true;
+    return false;
+  });
+  if (matched) return matched;
+
+  // 4. Team member / team lead name match
+  const sName = (s.name || '').trim().toLowerCase();
+  matched = state.projects.find(p => {
+    if (p.team_lead && p.team_lead.toLowerCase() === sName) return true;
+    if (Array.isArray(p.team_members)) {
+      return p.team_members.some(m => {
+        const mName = typeof m === 'object' && m ? (m.name || '') : String(m);
+        return mName.toLowerCase().trim() === sName;
+      });
+    }
+    return false;
+  });
+
+  return matched || null;
+}
+
+function getStudentProgress(s) {
+  const p = getStudentMatchedProject(s);
+  if (p && p.progress !== undefined && p.progress !== null) {
+    return Number(p.progress) || 0;
+  }
+  return Number(s.progress) || 0;
+}
+
 function toggleStudentCardExpand(studentId) {
   const card = document.getElementById(`student-team-card-${studentId}`);
   const btn = document.getElementById(`btn-expand-${studentId}`);
@@ -2175,7 +2224,7 @@ function renderStudents() {
     if (selectedSort === 'name_asc') return (a.name || '').localeCompare(b.name || '');
     if (selectedSort === 'name_desc') return (b.name || '').localeCompare(a.name || '');
     if (selectedSort === 'roll_asc') return (a.roll_no || '').localeCompare(b.roll_no || '');
-    if (selectedSort === 'progress_desc') return (b.progress || 0) - (a.progress || 0);
+    if (selectedSort === 'progress_desc') return getStudentProgress(b) - getStudentProgress(a);
     return 0;
   });
 
@@ -2207,9 +2256,10 @@ function renderStudents() {
       const photo = s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=${(s.avatar_color || '6366f1').replace('#','')}&color=fff`;
       const statusText = s.status || 'Active';
       const statusBadge = statusText === 'Active' ? 'badge-success' : 'badge-normal';
-      const projName = s.assigned_project || s.project_title || 'Unassigned';
+      const matchedProj = getStudentMatchedProject(s);
+      const projName = matchedProj ? matchedProj.title : (s.assigned_project || s.project_title || 'Unassigned');
       const guideName = s.guide || 'Not assigned';
-      const prog = s.progress || 0;
+      const prog = getStudentProgress(s);
       const isOwner = (s.email && s.email.toLowerCase() === currentEmail) || (s.name && s.name.toLowerCase() === currentName);
 
       tableHtml += `
@@ -2269,16 +2319,11 @@ function renderStudents() {
     const photo = s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=${(s.avatar_color || '6366f1').replace('#','')}&color=fff`;
     const statusText = s.status || 'Active';
     const statusBadge = statusText === 'Active' ? 'badge-success' : 'badge-normal';
-    const prog = s.progress || 0;
     const isOwner = (s.email && s.email.toLowerCase() === currentEmail) || (s.name && s.name.toLowerCase() === currentName);
 
     // Cross-reference with Project Database
-    const matchedProject = state.projects.find(p => 
-      (p.project_code && s.assigned_project && p.project_code.toLowerCase() === s.assigned_project.toLowerCase()) ||
-      (p.title && s.project_title && p.title.toLowerCase() === s.project_title.toLowerCase()) ||
-      (s.assigned_project && p.project_code && p.project_code.toLowerCase().includes(s.assigned_project.toLowerCase())) ||
-      (s.assigned_project && p.title && p.title.toLowerCase().includes(s.assigned_project.toLowerCase()))
-    );
+    const matchedProject = getStudentMatchedProject(s);
+    const prog = getStudentProgress(s);
 
     const projectTitle = matchedProject ? matchedProject.title : (s.project_title || s.assigned_project || 'IGRID Innovation Project');
     const projectCode = matchedProject ? matchedProject.project_code : (s.assigned_project || 'IGRID-PROJ');
@@ -2588,8 +2633,20 @@ function openStudentViewModal(studentId) {
     }
   }
 
+  const matchedProject = getStudentMatchedProject(s);
+  const prog = getStudentProgress(s);
+
   const teamEl = document.getElementById('view-student-team');
-  if (teamEl) teamEl.textContent = s.assigned_project || s.project_title || 'No team/project assigned yet.';
+  if (teamEl) {
+    if (matchedProject) {
+      teamEl.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <span><strong>${escapeHTML(matchedProject.project_code)}</strong>: ${escapeHTML(matchedProject.title)}</span>
+        <span class="badge badge-primary" style="font-size:12px;">${prog}% Progress</span>
+      </div>`;
+    } else {
+      teamEl.textContent = s.assigned_project || s.project_title || 'No team/project assigned yet.';
+    }
+  }
 
   const guideEl = document.getElementById('view-student-guide');
   if (guideEl) guideEl.textContent = s.guide || 'Not assigned';

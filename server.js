@@ -1518,7 +1518,19 @@ app.get('/api/students', optionalAuth, (req, res) => {
   if (userRole === 'viewer') {
     return res.status(403).json({ error: 'Access denied: Public Showcase Viewers cannot access Team Management data.' });
   }
-  db.all('SELECT * FROM students ORDER BY name ASC', [], (err, rows) => {
+  const query = `
+    SELECT s.*, 
+           COALESCE(p.progress, s.progress, 0) AS progress,
+           COALESCE(p.title, s.project_title, s.assigned_project) AS project_title,
+           COALESCE(p.project_code, s.assigned_project) AS assigned_project
+    FROM students s
+    LEFT JOIN projects p ON (
+      (s.assigned_project IS NOT NULL AND (p.project_code = s.assigned_project OR p.title = s.assigned_project))
+      OR (s.project_title IS NOT NULL AND (p.project_code = s.project_title OR p.title = s.project_title))
+    )
+    ORDER BY s.name ASC
+  `;
+  db.all(query, [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -1584,7 +1596,19 @@ app.get('/api/students/:id', optionalAuth, (req, res) => {
     return res.status(403).json({ error: 'Access denied: Public Showcase Viewers cannot access Team Management data.' });
   }
   const reqStudentId = Number(req.params.id);
-  db.get('SELECT * FROM students WHERE id = ?', [reqStudentId], (err, student) => {
+  const query = `
+    SELECT s.*, 
+           COALESCE(p.progress, s.progress, 0) AS progress,
+           COALESCE(p.title, s.project_title, s.assigned_project) AS project_title,
+           COALESCE(p.project_code, s.assigned_project) AS assigned_project
+    FROM students s
+    LEFT JOIN projects p ON (
+      (s.assigned_project IS NOT NULL AND (p.project_code = s.assigned_project OR p.title = s.assigned_project))
+      OR (s.project_title IS NOT NULL AND (p.project_code = s.project_title OR p.title = s.project_title))
+    )
+    WHERE s.id = ?
+  `;
+  db.get(query, [reqStudentId], (err, student) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!student) return res.status(404).json({ error: 'Student not found.' });
     res.json(student);
