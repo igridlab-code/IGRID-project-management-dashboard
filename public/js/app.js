@@ -1142,9 +1142,29 @@ function initEventListeners() {
   }
 
   // Project Modal Actions
-  if (DOM.openAddTaskModal) DOM.openAddTaskModal.addEventListener('click', () => openProjectModalForCreate());
-  if (DOM.closeProjectModal) DOM.closeProjectModal.addEventListener('click', () => closeModal(DOM.projectModal));
-  if (DOM.cancelProjectBtn) DOM.cancelProjectBtn.addEventListener('click', () => closeModal(DOM.projectModal));
+  if (DOM.openAddTaskModal) DOM.openAddTaskModal.addEventListener('click', () => {
+    state.openedFromDetailModal = false;
+    state.detailModalProjectId = null;
+    openProjectModalForCreate();
+  });
+  if (DOM.closeProjectModal) DOM.closeProjectModal.addEventListener('click', () => {
+    closeModal(DOM.projectModal);
+    if (state.openedFromDetailModal && state.detailModalProjectId) {
+      const pid = state.detailModalProjectId;
+      state.openedFromDetailModal = false;
+      state.detailModalProjectId = null;
+      openProjectDetail(pid);
+    }
+  });
+  if (DOM.cancelProjectBtn) DOM.cancelProjectBtn.addEventListener('click', () => {
+    closeModal(DOM.projectModal);
+    if (state.openedFromDetailModal && state.detailModalProjectId) {
+      const pid = state.detailModalProjectId;
+      state.openedFromDetailModal = false;
+      state.detailModalProjectId = null;
+      openProjectDetail(pid);
+    }
+  });
   if (DOM.projectForm) DOM.projectForm.addEventListener('submit', handleProjectFormSubmit);
   
   const saveProjBtn = document.getElementById('save-project-btn');
@@ -1159,6 +1179,8 @@ function initEventListeners() {
   // Column quick add buttons
   document.querySelectorAll('.col-more-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      state.openedFromDetailModal = false;
+      state.detailModalProjectId = null;
       const colStatus = btn.getAttribute('data-status');
       openProjectModalForCreate(colStatus);
     });
@@ -1170,6 +1192,8 @@ function initEventListeners() {
   DOM.btnEditCurrentProject.addEventListener('click', () => {
     const project = state.projects.find(p => p.id === state.activeProjectId);
     if (project) {
+      state.openedFromDetailModal = true;
+      state.detailModalProjectId = project.id;
       closeModal(DOM.detailModal);
       openProjectModalForEdit(project);
     }
@@ -3504,12 +3528,12 @@ async function openProjectDetail(projectId) {
     const isAdmin = isUserAdmin();
     const isStudent = isUserStudent();
     const isPublic = isUserPublic();
-    const canEditLinks = isAdmin || isStudent;
+    const canEditLinks = isAdmin || (isStudent && isUserMemberOfProject(project));
 
     if (gh) {
       mediaList.push(`<a href="${gh}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-github" title="${escapeHTML(gh)}">🐙 GitHub Repo</a>`);
     } else if (canEditLinks) {
-      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-github')" title="Add your GitHub repository link">➕ Add GitHub Repo</button>`);
+      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); state.openedFromDetailModal = true; state.detailModalProjectId = ${project.id}; closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-github')" title="Add your GitHub repository link">➕ Add GitHub Repo</button>`);
     } else {
       mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.5; cursor: default;" title="No GitHub repository link added">🐙 No GitHub Link</span>`);
     }
@@ -3517,7 +3541,7 @@ async function openProjectDetail(projectId) {
     if (doc) {
       mediaList.push(`<a href="${doc}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-doc" title="${escapeHTML(doc)}">📄 View Technical Report</a>`);
     } else if (canEditLinks) {
-      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-doc-url')" title="Add your Technical Report Google Drive / Doc link">📄 Add Technical Report</button>`);
+      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); state.openedFromDetailModal = true; state.detailModalProjectId = ${project.id}; closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-doc-url')" title="Add your Technical Report Google Drive / Doc link">📄 Add Technical Report</button>`);
     } else {
       mediaList.push(`<span class="btn-media btn-media-disabled" style="opacity: 0.5; cursor: default;" title="No technical report link added yet">📄 No report uploaded yet</span>`);
     }
@@ -3525,13 +3549,13 @@ async function openProjectDetail(projectId) {
     if (yt) {
       mediaList.push(`<a href="${yt}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-youtube" title="${escapeHTML(yt)}">🎥 Video Demo</a>`);
     } else if (canEditLinks) {
-      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-youtube')" title="Add YouTube demo video link">🎥 Add Video Demo</button>`);
+      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); state.openedFromDetailModal = true; state.detailModalProjectId = ${project.id}; closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-youtube')" title="Add YouTube demo video link">🎥 Add Video Demo</button>`);
     }
 
     if (li) {
       mediaList.push(`<a href="${li}" target="_blank" rel="noopener noreferrer" class="btn-media btn-media-linkedin" title="${escapeHTML(li)}">💼 LinkedIn Post</a>`);
     } else if (canEditLinks) {
-      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-linkedin')" title="Add LinkedIn showcase post link">💼 Add LinkedIn Post</button>`);
+      mediaList.push(`<button type="button" class="btn-media btn-media-add" onclick="event.stopPropagation(); state.openedFromDetailModal = true; state.detailModalProjectId = ${project.id}; closeModal(DOM.detailModal); openProjectModalForEdit(state.projects.find(p=>p.id===${project.id}), 'form-linkedin')" title="Add LinkedIn showcase post link">💼 Add LinkedIn Post</button>`);
     }
     mediaBar.innerHTML = mediaList.join('');
 
@@ -3541,6 +3565,8 @@ async function openProjectDetail(projectId) {
         manageLinksBtn.style.display = 'inline-flex';
         manageLinksBtn.onclick = (e) => {
           e.stopPropagation();
+          state.openedFromDetailModal = true;
+          state.detailModalProjectId = project.id;
           closeModal(DOM.detailModal);
           openProjectModalForEdit(project);
         };
@@ -3634,7 +3660,7 @@ async function openProjectDetail(projectId) {
     } else if (isAdmin) {
       if (DOM.btnEditCurrentProject) {
         DOM.btnEditCurrentProject.style.display = 'inline-flex';
-        DOM.btnEditCurrentProject.innerHTML = '✏️ Edit Project Details';
+        DOM.btnEditCurrentProject.innerHTML = '✏️ Edit';
       }
       if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'inline-flex';
       if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = 'inline-flex';
@@ -3643,7 +3669,7 @@ async function openProjectDetail(projectId) {
       const isMember = isUserMemberOfProject(project);
       if (DOM.btnEditCurrentProject) {
         DOM.btnEditCurrentProject.style.display = isMember ? 'inline-flex' : 'none';
-        DOM.btnEditCurrentProject.innerHTML = '✏️ Edit Project Details';
+        DOM.btnEditCurrentProject.innerHTML = '✏️ Edit';
       }
       if (DOM.btnDeleteProject) DOM.btnDeleteProject.style.display = 'none';
       if (DOM.btnQuickAddBom) DOM.btnQuickAddBom.style.display = isMember ? 'inline-flex' : 'none';
@@ -4110,6 +4136,8 @@ function openProjectModalForEdit(project, focusField = null) {
   }
 
   if (DOM.detailModal && DOM.detailModal.classList.contains('active')) {
+    state.openedFromDetailModal = true;
+    state.detailModalProjectId = project.id;
     closeModal(DOM.detailModal);
   }
 
@@ -4522,9 +4550,11 @@ async function handleProjectFormSubmit(e) {
       renderAllViews();
       updateStatsSummary();
 
-      // If this project is currently opened in Detail Modal or is active
-      const detailModalActive = DOM.detailModal && DOM.detailModal.classList.contains('active');
-      if (id && (String(state.activeProjectId) === String(id) || detailModalActive)) {
+      // If this project was opened from Detail Modal or is active
+      const wasFromDetail = state.openedFromDetailModal || (DOM.detailModal && DOM.detailModal.classList.contains('active'));
+      state.openedFromDetailModal = false;
+      state.detailModalProjectId = null;
+      if (id && (wasFromDetail || String(state.activeProjectId) === String(id))) {
         await openProjectDetail(id);
       }
 
