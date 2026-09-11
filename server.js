@@ -376,15 +376,27 @@ app.post('/api/auth/login', (req, res) => {
     const userRole = user.role || (cleanEmail === ADMIN_EMAIL ? 'admin' : 'student');
 
     // Find student record if any
-    db.get('SELECT id, team_name, assigned_project, project_title FROM students WHERE user_id = ? OR email = ?', [user.id, cleanEmail], (err2, student) => {
+    db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR LOWER(name) = ?', [user.id, cleanEmail, (user.name || '').toLowerCase().trim()], (err2, student) => {
       const studentId = student ? student.id : null;
+      const assignedProject = student ? student.assigned_project : null;
+      const projectTitle = student ? student.project_title : null;
+      const teamName = student ? (student.team_name || assignedProject || projectTitle) : null;
+      const batch = student ? student.batch : null;
+
+      if (student && student.id && (!student.user_id || student.user_id !== user.id)) {
+        db.run('UPDATE students SET user_id = ? WHERE id = ?', [user.id, student.id], () => {});
+      }
 
       const token = jwt.sign({
         id: user.id,
         email: user.email,
         name: user.name || user.email.split('@')[0],
         role: userRole,
-        student_id: studentId
+        student_id: studentId,
+        assigned_project: assignedProject,
+        project_title: projectTitle,
+        team_name: teamName,
+        batch: batch
       }, JWT_SECRET, { expiresIn: '7d' });
 
       logAuditEvent({
@@ -405,7 +417,15 @@ app.post('/api/auth/login', (req, res) => {
           email: user.email,
           name: user.name || user.email.split('@')[0],
           role: userRole,
-          student_id: studentId
+          student_id: studentId,
+          assigned_project: assignedProject,
+          project_title: projectTitle,
+          team_name: teamName,
+          batch: batch,
+          roll_no: student ? student.roll_no : null,
+          phone: student ? student.phone : null,
+          department: student ? student.department : null,
+          year: student ? student.year : null
         }
       });
     });
@@ -705,7 +725,36 @@ app.post('/api/auth/reset-password', (req, res) => {
 
 // 6. GET CURRENT SESSION
 app.get('/api/auth/session', requireAuth, (req, res) => {
-  res.json({ user: req.user });
+  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
+  const cleanEmail = (req.user && req.user.email) ? req.user.email.toLowerCase().trim() : '';
+  const userName = (req.user && req.user.name) ? req.user.name.toLowerCase().trim() : '';
+
+  if (userRole === 'admin' || userRole === 'viewer') {
+    return res.json({ user: req.user });
+  }
+
+  db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR LOWER(name) = ?', [req.user.id || -1, cleanEmail, userName], (err, student) => {
+    if (student) {
+      if (req.user.id && (!student.user_id || student.user_id !== req.user.id)) {
+        db.run('UPDATE students SET user_id = ? WHERE id = ?', [req.user.id, student.id], () => {});
+      }
+      return res.json({
+        user: {
+          ...req.user,
+          student_id: student.id,
+          assigned_project: student.assigned_project,
+          project_title: student.project_title,
+          team_name: student.team_name,
+          batch: student.batch,
+          roll_no: student.roll_no,
+          phone: student.phone,
+          department: student.department,
+          year: student.year
+        }
+      });
+    }
+    res.json({ user: req.user });
+  });
 });
 
 // ----------------------------------------------------

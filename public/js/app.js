@@ -233,17 +233,34 @@ function isUserMemberOfProject(project) {
   const rawUserName = (user.name || '').toLowerCase().trim();
   const userName = rawUserName.replace(/\s*\(student\)\s*/gi, '').trim();
   const userEmail = (user.email || '').toLowerCase().trim();
+  const pCode = (project.project_code || '').toLowerCase().trim();
+  const pTitle = (project.title || '').toLowerCase().trim();
+  const pTeam = (project.team_name || '').toLowerCase().trim();
 
-  // 1. Check if user is Team Lead
-  if (project.team_lead) {
-    const leadStr = project.team_lead.toLowerCase();
-    if ((userName && (leadStr.includes(userName) || userName.includes(leadStr))) ||
-        (userEmail && leadStr.includes(userEmail))) {
-      return true;
-    }
+  // 1. Direct match on user object's assigned_project / team / title
+  if (user.assigned_project) {
+    const uAssigned = String(user.assigned_project).toLowerCase().trim();
+    if (uAssigned === pCode || pCode.includes(uAssigned) || uAssigned.includes(pCode)) return true;
+    if (uAssigned === pTitle || pTitle.includes(uAssigned) || uAssigned.includes(pTitle)) return true;
+  }
+  if (user.project_title) {
+    const uTitle = String(user.project_title).toLowerCase().trim();
+    if (uTitle === pTitle || pTitle.includes(uTitle) || uTitle.includes(pTitle)) return true;
+    if (uTitle === pCode || pCode.includes(uTitle) || uTitle.includes(pCode)) return true;
+  }
+  if (user.team_name && pTeam) {
+    const uTeam = String(user.team_name).toLowerCase().trim();
+    if (uTeam === pTeam || pTeam.includes(uTeam) || uTeam.includes(pTeam)) return true;
   }
 
-  // 2. Check team_members field
+  // 2. Check Team Lead name / email
+  if (project.team_lead) {
+    const leadStr = String(project.team_lead).toLowerCase().trim();
+    if (userName && (leadStr === userName || leadStr.includes(userName) || userName.includes(leadStr))) return true;
+    if (userEmail && (leadStr === userEmail || leadStr.includes(userEmail) || userEmail.includes(leadStr))) return true;
+  }
+
+  // 3. Check Team Members roster (JSON / Array / String)
   if (project.team_members) {
     let membersList = [];
     if (Array.isArray(project.team_members)) {
@@ -260,46 +277,33 @@ function isUserMemberOfProject(project) {
     
     for (const m of membersList) {
       if (typeof m === 'object' && m !== null) {
-        const mName = (m.name || '').toLowerCase().replace(/\s*\(student\)\s*/gi, '').trim();
-        const mEmail = (m.email || '').toLowerCase().trim();
-        if ((userName && mName && (mName.includes(userName) || userName.includes(mName))) ||
-            (userEmail && mEmail && mEmail === userEmail)) {
-          return true;
-        }
+        const mName = String(m.name || '').toLowerCase().replace(/\s*\(student\)\s*/gi, '').trim();
+        const mEmail = String(m.email || '').toLowerCase().trim();
+        if (userName && mName && (mName === userName || mName.includes(userName) || userName.includes(mName))) return true;
+        if (userEmail && mEmail && (mEmail === userEmail || mEmail.includes(userEmail) || userEmail.includes(mEmail))) return true;
       } else if (typeof m === 'string') {
-        const mLower = m.toLowerCase().trim();
-        if ((userName && (mLower.includes(userName) || userName.includes(mLower))) ||
-            (userEmail && mLower.includes(userEmail))) {
-          return true;
-        }
+        const mLower = String(m).toLowerCase().replace(/\s*\(student\)\s*/gi, '').trim();
+        if (userName && mLower && (mLower === userName || mLower.includes(userName) || userName.includes(mLower))) return true;
+        if (userEmail && mLower && (mLower === userEmail || mLower.includes(userEmail) || userEmail.includes(mLower))) return true;
       }
     }
   }
 
-  // 3. Check student profile in state.students or user.assigned_project
-  if (user.assigned_project && (user.assigned_project === project.project_code || user.assigned_project === project.title)) {
-    return true;
-  }
-  if (user.project_title && (user.project_title === project.title || user.project_title === project.project_code)) {
-    return true;
-  }
-
+  // 4. Cross-reference with state.students
   if (state.students && Array.isArray(state.students)) {
     const stRecord = state.students.find(s => 
-      (s.user_id && s.user_id === user.id) || 
-      (s.email && s.email.toLowerCase().trim() === userEmail) ||
-      (userName && s.name && s.name.toLowerCase().trim().includes(userName))
+      (s.user_id && user.id && Number(s.user_id) === Number(user.id)) || 
+      (s.email && userEmail && s.email.toLowerCase().trim() === userEmail) ||
+      (userName && s.name && (s.name.toLowerCase().trim() === userName || s.name.toLowerCase().trim().includes(userName) || userName.includes(s.name.toLowerCase().trim())))
     );
     if (stRecord) {
-      if (stRecord.assigned_project && (stRecord.assigned_project === project.project_code || stRecord.assigned_project.toLowerCase() === (project.title || '').toLowerCase())) {
-        return true;
-      }
-      if (stRecord.project_title && (stRecord.project_title === project.title || stRecord.project_title.toLowerCase() === (project.project_code || '').toLowerCase())) {
-        return true;
-      }
-      if (stRecord.team_name && project.team_name && stRecord.team_name.toLowerCase().trim() === project.team_name.toLowerCase().trim()) {
-        return true;
-      }
+      const stAssigned = (stRecord.assigned_project || '').toLowerCase().trim();
+      const stTitle = (stRecord.project_title || '').toLowerCase().trim();
+      const stTeam = (stRecord.team_name || '').toLowerCase().trim();
+      if (stAssigned && (stAssigned === pCode || pCode.includes(stAssigned) || stAssigned.includes(pCode))) return true;
+      if (stTitle && (stTitle === pTitle || pTitle.includes(stTitle) || stTitle.includes(pTitle))) return true;
+      if (stAssigned && (stAssigned === pTitle || pTitle.includes(stAssigned) || stAssigned.includes(pTitle))) return true;
+      if (stTeam && pTeam && (stTeam === pTeam || pTeam.includes(stTeam) || stTeam.includes(pTeam))) return true;
     }
   }
 
@@ -1589,11 +1593,18 @@ function renderExecutiveShowcase() {
         </div>
 
         <!-- Footer -->
-        <div class="exec-card-footer">
+        <div class="exec-card-footer" style="display:flex; justify-content:space-between; align-items:center;">
           <span style="font-size:12px; color:var(--text-dim);">Due: <strong>${formatDate(p.due_date)}</strong></span>
-          <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
-            <span>🔍 Spotlight View</span>
-          </button>
+          <div style="display:flex; gap:6px; align-items:center;">
+            ${(isUserAdmin() || isUserMemberOfProject(p)) ? `
+              <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(proj => proj.id === ${p.id}) || ${JSON.stringify(p).replace(/"/g, '&quot;')})" style="font-weight:600; color:#c7d2fe; border:1px solid rgba(99,102,241,0.4);" title="Edit Project Details">
+                ✏️ Edit Project
+              </button>
+            ` : ''}
+            <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
+              <span>🔍 Spotlight View</span>
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -2502,6 +2513,11 @@ function renderStudents() {
               <button type="button" class="btn btn-sm btn-secondary" onclick="openProjectDetail(${matchedProject.id})" title="Open Project Details & Gantt Schedule">
                 📅 Project
               </button>
+              ${(isAdmin || isUserMemberOfProject(matchedProject)) ? `
+                <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p => p.id === ${matchedProject.id}) || ${JSON.stringify(matchedProject).replace(/"/g, '&quot;')})" title="Edit Team Project Details" style="font-weight:600; color:#c7d2fe; border:1px solid rgba(99,102,241,0.4);">
+                  ✏️ Edit Project
+                </button>
+              ` : ''}
             ` : ''}
             ${(isAdmin || isOwner) ? `
               <button type="button" class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})" title="Edit Profile Details">
@@ -3965,7 +3981,12 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   openModal(DOM.projectModal);
 }
 
-function openProjectModalForEdit(project, focusField = null) {
+function openProjectModalForEdit(projectInput, focusField = null) {
+  if (!projectInput) return;
+  const project = (typeof projectInput === 'object' && projectInput !== null)
+    ? (state.projects.find(p => p.id === projectInput.id) || projectInput)
+    : state.projects.find(p => p.id === Number(projectInput));
+
   if (!project) return;
   if (isUserViewer() || isUserPublic()) {
     showToast('Access denied: Public Showcase Viewers have read-only permissions.', 'error');
