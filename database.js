@@ -806,6 +806,14 @@ function seedDefaultAccounts() {
   });
 }
 
+function normalizeAccountName(n) {
+  if (!n) return '';
+  return n.toLowerCase()
+    .replace(/\s*\(student\)\s*/gi, '')
+    .replace(/[^a-z0-9]/gi, '')
+    .trim();
+}
+
 function backfillStudentTeamLinks() {
   db.all('SELECT id, project_code, title, team_name, team_lead, team_members FROM projects', [], (err, projects) => {
     if (err || !Array.isArray(projects)) return;
@@ -830,44 +838,60 @@ function backfillStudentTeamLinks() {
       db.run(matchSql, [p.id, p.id, p.project_code, p.team_name, p.project_code, p.title, p.title, p.project_code, p.project_code, p.title]);
     });
 
-    // 2. Link students to auth_users by email and user_id
+    // 2. Link students to auth_users by email, user_id, roll_no, and normalized name
     db.all('SELECT id, user_id, email, name, roll_no, project_id, team_id, team_code, team_name FROM students WHERE project_id IS NOT NULL', [], (err2, students) => {
       if (err2 || !Array.isArray(students)) return;
 
-      students.forEach(st => {
-        if (st.email || st.user_id) {
-          const userSql = `
-            UPDATE auth_users SET
-              project_id = ?,
-              team_id = ?,
-              team_code = ?,
-              team_name = COALESCE(team_name, ?),
-              roll_no = COALESCE(roll_no, ?)
-            WHERE (
-              (email IS NOT NULL AND LOWER(email) = LOWER(?)) OR
-              (id = ?)
-            )
-          `;
-          db.run(userSql, [st.project_id, st.project_id, st.team_code, st.team_name, st.roll_no, st.email, st.user_id || -1]);
-        }
-      });
-    });
+      db.all('SELECT id, name, email, role, project_id, roll_no FROM auth_users', [], (err3, users) => {
+        if (err3 || !Array.isArray(users)) return;
 
-    // 3. For any team lead listed on project, link their auth_user account if email matches
-    projects.forEach(p => {
-      if (p.team_lead) {
-        db.run(`
-          UPDATE auth_users SET
-            project_id = ?,
-            team_id = ?,
-            team_code = ?,
-            team_name = COALESCE(team_name, ?)
-          WHERE (
-            LOWER(name) = LOWER(?) OR
-            LOWER(email) LIKE ?
-          ) AND (project_id IS NULL OR project_id = 0)
-        `, [p.id, p.id, p.project_code, p.team_name, p.team_lead.trim(), `%${p.team_lead.toLowerCase().replace(/\s+/g, '')}%`]);
-      }
+        users.forEach(u => {
+          if (u.role === 'admin') return;
+          const uEmail = (u.email || '').toLowerCase().trim();
+          const uNormName = normalizeAccountName(u.name);
+          const uRoll = (u.roll_no || '').trim();
+
+          let matchedSt = students.find(s => {
+            const sEmail = (s.email || '').toLowerCase().trim();
+            const sNormName = normalizeAccountName(s.name);
+            const sRoll = (s.roll_no || '').trim();
+            if (uEmail && sEmail && uEmail === sEmail) return true;
+            if (uRoll && sRoll && uRoll === sRoll) return true;
+            if (uNormName && sNormName && (uNormName.includes(sNormName) || sNormName.includes(uNormName))) return true;
+            return false;
+          });
+
+          if (matchedSt && matchedSt.project_id) {
+            db.run(`
+              UPDATE auth_users SET
+                project_id = ?,
+                team_id = ?,
+                team_code = ?,
+                team_name = COALESCE(team_name, ?),
+                roll_no = COALESCE(roll_no, ?)
+              WHERE id = ?
+            `, [matchedSt.project_id, matchedSt.project_id, matchedSt.team_code, matchedSt.team_name, matchedSt.roll_no, u.id]);
+          } else {
+            // Check project lead or team members
+            projects.forEach(p => {
+              const leadNorm = normalizeAccountName(p.team_lead);
+              const membersStr = typeof p.team_members === 'string' ? p.team_members : JSON.stringify(p.team_members || '');
+              const membersNorm = normalizeAccountName(membersStr);
+              if ((uNormName && leadNorm && (leadNorm.includes(uNormName) || uNormName.includes(leadNorm))) ||
+                  (uNormName && membersNorm && membersNorm.includes(uNormName))) {
+                db.run(`
+                  UPDATE auth_users SET
+                    project_id = ?,
+                    team_id = ?,
+                    team_code = ?,
+                    team_name = COALESCE(team_name, ?)
+                  WHERE id = ?
+                `, [p.id, p.id, p.project_code, p.team_name, u.id]);
+              }
+            });
+          }
+        });
+      });
     });
   });
 }

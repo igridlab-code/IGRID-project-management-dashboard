@@ -109,11 +109,28 @@
             <span class="profile-name" id="user-display-name">Public Visitor</span>
             <span class="profile-role" id="user-display-role">🌐 Public Showcase</span>
           </div>
+          <button class="btn btn-primary btn-sm" id="btn-my-team-project" style="display:none; background:var(--primary, #f59e0b); color:#000000; font-weight:700; border:none; padding:5px 10px; border-radius:6px; font-size:11px; align-items:center; gap:4px; margin-left:6px; cursor:pointer;" title="Quickly edit your team's assigned project details">✏️ My Team Project</button>
           <button class="btn-login" id="btn-login-nav" title="Sign In as Student or Admin" onclick="window.location.href='/login';" style="display:none; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; margin-left: 8px;">🔑 Sign In</button>
           <button class="btn-logout" id="btn-logout-nav" title="Sign Out of Session" onclick="localStorage.removeItem('igrid_session'); window.location.href='/showcase';" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; margin-left: 8px;">Logout 🚪</button>
         </div>
       </div>
     </header>
+
+    <!-- Student Quick Access Team Banner -->
+    <div id="student-team-quick-banner" style="display:none; background: linear-gradient(90deg, rgba(245,158,11,0.15), rgba(59,130,246,0.15)); border: 1px solid rgba(245,158,11,0.4); border-radius: 10px; padding: 12px 18px; margin: 12px 24px 0 24px; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.2);">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:22px;">🎓</span>
+        <div>
+          <div style="font-size:14px; font-weight:700; color:var(--text-main);">Welcome, <span id="student-banner-name">Student Innovator</span>!</div>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Assigned Team Project: <strong id="student-banner-project-code" style="color:var(--primary, #f59e0b);">IG26010009</strong> — <span id="student-banner-project-title">Camera-Based Attendance System</span></div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button type="button" class="btn btn-sm btn-primary" id="student-banner-btn-edit" style="background:var(--primary, #f59e0b); color:#000000; font-weight:700; border:none; padding:7px 15px; border-radius:6px; font-size:12px; display:inline-flex; align-items:center; gap:5px; cursor:pointer; box-shadow:0 2px 8px rgba(245,158,11,0.3);">✏️ Edit My Project Details</button>
+        <button type="button" class="btn btn-sm btn-secondary" id="student-banner-btn-view" style="padding:7px 14px; border-radius:6px; font-size:12px; cursor:pointer;">📅 View Project</button>
+        <button type="button" class="btn btn-sm btn-secondary" id="student-banner-btn-profile" style="padding:7px 14px; border-radius:6px; font-size:12px; cursor:pointer;">👤 My Profile</button>
+      </div>
+    </div>
 
     <!-- Main Header / Hero Controls -->
     <section class="page-header">

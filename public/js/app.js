@@ -450,8 +450,96 @@ function updateUserNavbarUI() {
       if (openAddProjectBtn) openAddProjectBtn.style.display = 'inline-block';
       if (openAddTaskModal) openAddTaskModal.style.display = 'inline-block';
     }
+
+    // Student Quick Access Banner & Navbar Button
+    const isStudent = isUserStudent();
+    const myTeamBtn = document.getElementById('btn-my-team-project');
+    const studentBanner = document.getElementById('student-team-quick-banner');
+    const bannerName = document.getElementById('student-banner-name');
+    const bannerProjCode = document.getElementById('student-banner-project-code');
+    const bannerProjTitle = document.getElementById('student-banner-project-title');
+    const bannerBtnEdit = document.getElementById('student-banner-btn-edit');
+    const bannerBtnView = document.getElementById('student-banner-btn-view');
+    const bannerBtnProfile = document.getElementById('student-banner-btn-profile');
+
+    if (isStudent && state.currentUser) {
+      let matchedProj = null;
+      if (state.projects && state.projects.length > 0) {
+        matchedProj = state.projects.find(p => isUserMemberOfProject(p));
+      }
+      
+      let stRecord = null;
+      if (state.students && state.students.length > 0) {
+        const uEmail = (state.currentUser.email || '').toLowerCase().trim();
+        const uName = (state.currentUser.name || '').toLowerCase().trim();
+        stRecord = state.students.find(s => 
+          (s.email && s.email.toLowerCase().trim() === uEmail) ||
+          (uName && s.name && s.name.toLowerCase().trim() === uName)
+        );
+      }
+
+      if (myTeamBtn) {
+        myTeamBtn.style.display = 'inline-flex';
+        myTeamBtn.onclick = () => {
+          const p = matchedProj || state.projects.find(proj => isUserMemberOfProject(proj));
+          if (p) {
+            openProjectModalForEdit(p);
+          } else {
+            showToast('Loading your team project...', 'info');
+            fetchProjects().then(() => {
+              const freshP = state.projects.find(proj => isUserMemberOfProject(proj));
+              if (freshP) openProjectModalForEdit(freshP);
+              else showToast('No assigned project found for your account.', 'warning');
+            });
+          }
+        };
+      }
+
+      if (studentBanner) {
+        studentBanner.style.display = 'flex';
+        if (bannerName) bannerName.textContent = displayName;
+        if (matchedProj) {
+          if (bannerProjCode) bannerProjCode.textContent = matchedProj.project_code || 'Assigned Project';
+          if (bannerProjTitle) bannerProjTitle.textContent = matchedProj.title || '';
+        } else if (state.currentUser.team_code) {
+          if (bannerProjCode) bannerProjCode.textContent = state.currentUser.team_code;
+          if (bannerProjTitle) bannerProjTitle.textContent = state.currentUser.team_name || 'Team Project';
+        } else {
+          if (bannerProjCode) bannerProjCode.textContent = 'Team Project';
+          if (bannerProjTitle) bannerProjTitle.textContent = 'Assigned to your Student Account';
+        }
+
+        if (bannerBtnEdit) {
+          bannerBtnEdit.onclick = () => {
+            const p = matchedProj || state.projects.find(proj => isUserMemberOfProject(proj));
+            if (p) openProjectModalForEdit(p);
+            else showToast('Loading project...', 'info');
+          };
+        }
+        if (bannerBtnView) {
+          bannerBtnView.onclick = () => {
+            const p = matchedProj || state.projects.find(proj => isUserMemberOfProject(proj));
+            if (p) openProjectDetail(p.id);
+            else showToast('Loading project...', 'info');
+          };
+        }
+        if (bannerBtnProfile) {
+          bannerBtnProfile.onclick = () => {
+            if (stRecord) openStudentViewModal(stRecord.id);
+            else showToast('Opening profile...', 'info');
+          };
+        }
+      }
+    } else {
+      if (myTeamBtn) myTeamBtn.style.display = 'none';
+      if (studentBanner) studentBanner.style.display = 'none';
+    }
   } else {
     // GUEST PUBLIC SHOWCASE (READ-ONLY) - default to Showcase and Board only
+    const myTeamBtn = document.getElementById('btn-my-team-project');
+    const studentBanner = document.getElementById('student-team-quick-banner');
+    if (myTeamBtn) myTeamBtn.style.display = 'none';
+    if (studentBanner) studentBanner.style.display = 'none';
     if (DOM.viewTabs) {
       DOM.viewTabs.forEach(tab => {
         const view = tab.getAttribute('data-view');
@@ -1508,6 +1596,7 @@ function renderAllViews() {
     populateBomProjectSelect();
   }
   updateStatsSummary();
+  updateUserNavbarUI();
 }
 
 // 1. RENDER EXECUTIVE MANAGEMENT SHOWCASE (NEW COMPONENT)
