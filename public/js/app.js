@@ -4103,50 +4103,12 @@ function renderTeamMembersChips() {
 }
 
 function checkProjectFormDirty() {
-  const isAdmin = isUserAdmin();
   const saveBtn = document.getElementById('save-project-btn');
   if (!saveBtn) return;
-  if (isAdmin) {
-    saveBtn.disabled = false;
-    saveBtn.style.opacity = '1';
-    return;
-  }
-  if (!state.initialEditingProjectValues) {
-    saveBtn.disabled = false;
-    saveBtn.style.opacity = '1';
-    return;
-  }
-
-  const currentValues = {
-    github: (document.getElementById('form-github')?.value || '').trim(),
-    youtube: (document.getElementById('form-youtube')?.value || '').trim(),
-    doc: (document.getElementById('form-doc-url')?.value || '').trim(),
-    linkedin: (document.getElementById('form-linkedin')?.value || '').trim(),
-    image: (document.getElementById('form-image-url')?.value || '').trim(),
-    team_name: (document.getElementById('form-team-name')?.value || '').trim(),
-    team_lead: (document.getElementById('form-team-lead')?.value || '').trim(),
-    team_logo: (document.getElementById('form-team-lead-photo')?.value || '').trim(),
-    deliverables: (document.getElementById('form-deliverables')?.value || '').trim(),
-    team_members: JSON.stringify(state.currentEditingTeamMembers || [])
-  };
-
-  const initial = state.initialEditingProjectValues;
-  const isDirty = (
-    currentValues.github !== initial.github ||
-    currentValues.youtube !== initial.youtube ||
-    currentValues.doc !== initial.doc ||
-    currentValues.linkedin !== initial.linkedin ||
-    currentValues.image !== initial.image ||
-    currentValues.team_name !== initial.team_name ||
-    currentValues.team_lead !== initial.team_lead ||
-    currentValues.team_logo !== initial.team_logo ||
-    currentValues.deliverables !== initial.deliverables ||
-    currentValues.team_members !== initial.team_members
-  );
-
-  saveBtn.disabled = !isDirty;
-  saveBtn.style.opacity = isDirty ? '1' : '0.5';
-  saveBtn.title = isDirty ? 'Save updated project details' : 'No changes detected to save';
+  saveBtn.disabled = false;
+  saveBtn.style.opacity = '1';
+  saveBtn.style.cursor = 'pointer';
+  saveBtn.title = 'Save updated project details';
 }
 
 function addTeamMemberChip(rawName) {
@@ -4715,11 +4677,11 @@ async function handleProjectFormSubmit(e) {
       renderAllViews();
       updateStatsSummary();
 
-      // If this project was opened from Detail Modal or is active
-      const wasFromDetail = state.openedFromDetailModal || (DOM.detailModal && DOM.detailModal.classList.contains('active'));
+      // If this project was opened from Detail Modal, refresh and reopen it; otherwise close cleanly
+      const wasFromDetail = state.openedFromDetailModal;
       state.openedFromDetailModal = false;
       state.detailModalProjectId = null;
-      if (id && (wasFromDetail || String(state.activeProjectId) === String(id))) {
+      if (id && wasFromDetail) {
         await openProjectDetail(id);
       }
 
