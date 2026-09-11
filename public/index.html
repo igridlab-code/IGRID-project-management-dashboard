@@ -157,6 +157,14 @@
           </svg>
         </button>
 
+        <button class="btn btn-warning" id="btn-student-edit-my-project" style="display: none; background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; font-weight: 700; border: none; padding: 8px 16px; border-radius: 8px; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4); cursor: pointer;" title="Edit your team's project media, repo, and deliverables">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+          <span>✏️ Edit My Project</span>
+        </button>
+
         <button class="btn btn-primary" id="open-add-task-modal">
           <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -166,6 +174,29 @@
         </button>
       </div>
     </section>
+
+    <!-- Student Innovator Team Quick Access Banner -->
+    <div id="student-team-quick-banner" style="display: none; background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 14px; padding: 14px 20px; margin: 0 24px 18px 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); backdrop-filter: blur(12px); justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(245, 158, 11, 0.2); display: flex; align-items: center; justify-content: center; font-size: 22px; border: 1px solid rgba(245, 158, 11, 0.4); flex-shrink: 0;">
+          🎓
+        </div>
+        <div>
+          <div style="font-size: 14px; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span>Student Innovator: <strong id="student-banner-name">Student</strong></span>
+            <span id="student-banner-badge" style="background: #f59e0b; color: #000; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px; text-transform: uppercase;">Team Editor Access</span>
+          </div>
+          <div style="font-size: 12px; color: #94a3b8; margin-top: 3px;" id="student-banner-team-text">
+            Assigned Project: <strong id="student-banner-project-title" style="color: #60a5fa;">Camera-Based Attendance System</strong>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <button type="button" id="btn-banner-edit-project" class="btn btn-warning" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; font-weight: 800; font-size: 13px; border: none; padding: 9px 18px; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4); display: inline-flex; align-items: center; gap: 6px;">
+          <span>✏️ Edit My Project Details</span>
+        </button>
+      </div>
+    </div>
 
     <!-- Toolbar: View Switchers & Filters -->
     <div class="view-toolbar">

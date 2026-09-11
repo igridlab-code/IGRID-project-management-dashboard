@@ -450,8 +450,40 @@ function updateUserNavbarUI() {
       if (openAddProjectBtn) openAddProjectBtn.style.display = 'inline-block';
       if (openAddTaskModal) openAddTaskModal.style.display = 'inline-block';
     }
+
+    // Student Innovator Edit Button & Welcome Quick Access Banner
+    const studentEditBtn = document.getElementById('btn-student-edit-my-project');
+    const studentBanner = document.getElementById('student-team-quick-banner');
+    const isStudent = isUserStudent();
+
+    if (isStudent && !isAdmin) {
+      if (studentEditBtn) {
+        studentEditBtn.style.display = 'inline-flex';
+        studentEditBtn.onclick = () => openStudentOwnProjectEditModal();
+      }
+      if (studentBanner) {
+        studentBanner.style.display = 'flex';
+        const bannerName = document.getElementById('student-banner-name');
+        const bannerTitle = document.getElementById('student-banner-project-title');
+        const bannerBtn = document.getElementById('btn-banner-edit-project');
+        if (bannerName) bannerName.textContent = displayName;
+        const myProj = getStudentOwnProject();
+        if (bannerTitle) {
+          bannerTitle.textContent = myProj ? `${myProj.title} (${myProj.project_code || 'IG'})` : (state.currentUser.project_title || 'Assigned Innovation Team');
+        }
+        if (bannerBtn) bannerBtn.onclick = () => openStudentOwnProjectEditModal();
+      }
+    } else {
+      if (studentEditBtn) studentEditBtn.style.display = 'none';
+      if (studentBanner) studentBanner.style.display = 'none';
+    }
   } else {
     // GUEST PUBLIC SHOWCASE (READ-ONLY) - default to Showcase and Board only
+    const studentEditBtn = document.getElementById('btn-student-edit-my-project');
+    const studentBanner = document.getElementById('student-team-quick-banner');
+    if (studentEditBtn) studentEditBtn.style.display = 'none';
+    if (studentBanner) studentBanner.style.display = 'none';
+
     if (DOM.viewTabs) {
       DOM.viewTabs.forEach(tab => {
         const view = tab.getAttribute('data-view');
@@ -476,6 +508,33 @@ function updateUserNavbarUI() {
     if (openAddStudentBtn) openAddStudentBtn.style.display = 'none';
     if (openAddProjectBtn) openAddProjectBtn.style.display = 'none';
     if (openAddTaskModal) openAddTaskModal.style.display = 'none';
+  }
+}
+
+function getStudentOwnProject() {
+  if (!state.currentUser) return null;
+  const user = state.currentUser;
+  const targetId = user.project_id ? Number(user.project_id) : (user.team_id ? Number(user.team_id) : (user.teamId ? Number(user.teamId) : null));
+  if (targetId && state.projects && state.projects.length > 0) {
+    const p = state.projects.find(proj => Number(proj.id) === targetId);
+    if (p) return p;
+  }
+  if (user.team_code && state.projects && state.projects.length > 0) {
+    const p = state.projects.find(proj => proj.project_code === user.team_code);
+    if (p) return p;
+  }
+  if (state.projects && state.projects.length > 0) {
+    return state.projects.find(proj => isUserMemberOfProject(proj)) || null;
+  }
+  return null;
+}
+
+function openStudentOwnProjectEditModal() {
+  const ownProj = getStudentOwnProject();
+  if (ownProj) {
+    openProjectModalForEdit(ownProj);
+  } else {
+    showToast('Your student account is not linked to a specific team project yet. Please select your team or contact administrator.', 'info');
   }
 }
 
@@ -618,6 +677,7 @@ async function loadAllData() {
     ]);
     renderAllViews();
     updateStatsSummary();
+    updateUserNavbarUI();
   } catch (err) {
     console.error('Error loading data:', err);
     showToast('Failed to load lab data from server', 'error');
@@ -1605,9 +1665,16 @@ function renderExecutiveShowcase() {
         <!-- Footer -->
         <div class="exec-card-footer">
           <span style="font-size:12px; color:var(--text-dim);">Due: <strong>${formatDate(p.due_date)}</strong></span>
-          <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
-            <span>🔍 Spotlight View</span>
-          </button>
+          <div style="display:flex; align-items:center; gap:6px;">
+            ${(isUserAdmin() || isUserMemberOfProject(p)) ? `
+              <button type="button" class="btn btn-sm btn-warning" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(proj => proj.id === ${p.id}) || ${JSON.stringify(p).replace(/"/g, '&quot;')})" style="background:#f59e0b; color:#000; font-weight:700; border:none; padding:5px 12px; border-radius:6px; box-shadow:0 2px 6px rgba(245,158,11,0.3); display:inline-flex; align-items:center; gap:4px; cursor:pointer;" title="Edit Project Details (Media, Repo, Deliverables)">
+                <span>✏️ Edit Details</span>
+              </button>
+            ` : ''}
+            <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
+              <span>🔍 Spotlight View</span>
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -1733,6 +1800,11 @@ async function openSpotlightPresentation(projectId) {
               <div><strong>Due Date:</strong> ${formatDate(project.due_date)}</div>
               <div><strong>BOM Status:</strong> ${project.bom_status}</div>
             </div>
+            ${(isUserAdmin() || isUserMemberOfProject(project)) ? `
+              <button type="button" class="btn btn-warning" onclick="closeModal(DOM.spotlightModal); openProjectModalForEdit(state.projects.find(p => p.id === ${project.id}) || ${JSON.stringify(project).replace(/"/g, '&quot;')})" style="margin-top:10px; width:100%; font-weight:700; background:linear-gradient(135deg, #f59e0b, #d97706); color:#000; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 3px 10px rgba(245,158,11,0.35);">
+                <span>✏️ Edit Project Details</span>
+              </button>
+            ` : ''}
           </div>
         </div>
       </div>
@@ -2401,6 +2473,7 @@ function renderStudents() {
           </td>
           <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
             <button class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" style="margin-right: 6px;">👁️ View Profile</button>
+            ${matchedProject && (isAdmin || isUserMemberOfProject(matchedProject)) ? `<button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p => p.id === ${matchedProject.id}) || ${JSON.stringify(matchedProject).replace(/"/g, '&quot;')})" style="margin-right: 6px; background:#f59e0b; color:#000; font-weight:700; border:none; padding:4px 8px; border-radius:6px;" title="Edit Team Project Details">✏️ Edit Team</button>` : ''}
             ${(isAdmin || isOwner) ? `<button class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})" style="margin-right: 6px;">✏️ Edit</button>` : ''}
             ${isAdmin ? `<button class="btn btn-sm btn-danger btn-student-delete" onclick="event.stopPropagation(); confirmDeleteStudent(${s.id}, '${escapeHTML((s.name || '').replace(/'/g, "\\'"))}')" title="Delete Student Record" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-weight:600;">🗑️ Delete</button>` : ''}
           </td>
@@ -2516,6 +2589,11 @@ function renderStudents() {
               <button type="button" class="btn btn-sm btn-secondary" onclick="openProjectDetail(${matchedProject.id})" title="Open Project Details & Gantt Schedule">
                 📅 Project
               </button>
+              ${(isAdmin || isUserMemberOfProject(matchedProject)) ? `
+                <button type="button" class="btn btn-sm btn-warning" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p => p.id === ${matchedProject.id}) || ${JSON.stringify(matchedProject).replace(/"/g, '&quot;')})" style="background:#f59e0b; color:#000; font-weight:700; border:none; padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:3px; box-shadow:0 2px 6px rgba(245,158,11,0.3);" title="Edit Team Project Details (Media, GitHub, Docs, Deliverables)">
+                  ✏️ Edit Team
+                </button>
+              ` : ''}
             ` : ''}
             ${(isAdmin || isOwner) ? `
               <button type="button" class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})" title="Edit Profile Details">
