@@ -463,35 +463,70 @@ function updateUserNavbarUI() {
     const bannerBtnProfile = document.getElementById('student-banner-btn-profile');
 
     if (isStudent && state.currentUser) {
+      const uEmail = (state.currentUser.email || '').toLowerCase().trim();
+      const uName = (state.currentUser.name || '').toLowerCase().trim();
+      const userPid = state.currentUser.project_id || state.currentUser.team_id;
+
       let matchedProj = null;
       if (state.projects && state.projects.length > 0) {
-        matchedProj = state.projects.find(p => isUserMemberOfProject(p));
+        if (userPid) {
+          matchedProj = state.projects.find(p => Number(p.id) === Number(userPid));
+        }
+        if (!matchedProj) {
+          matchedProj = state.projects.find(p => isUserMemberOfProject(p));
+        }
       }
       
       let stRecord = null;
       if (state.students && state.students.length > 0) {
-        const uEmail = (state.currentUser.email || '').toLowerCase().trim();
-        const uName = (state.currentUser.name || '').toLowerCase().trim();
         stRecord = state.students.find(s => 
+          (state.currentUser.student_id && Number(s.id) === Number(state.currentUser.student_id)) ||
+          (s.user_id && Number(s.user_id) === Number(state.currentUser.id)) ||
           (s.email && s.email.toLowerCase().trim() === uEmail) ||
-          (uName && s.name && s.name.toLowerCase().trim() === uName)
+          (uName && s.name && s.name.toLowerCase().trim() === uName) ||
+          (uName && s.name && (s.name.toLowerCase().includes(uName) || uName.includes(s.name.toLowerCase())))
         );
+      }
+
+      function ensureProjectAndDo(actionCallback) {
+        if (matchedProj) {
+          actionCallback(matchedProj);
+          return;
+        }
+        // Try fresh lookup from state.projects
+        const found = (userPid && state.projects.find(p => Number(p.id) === Number(userPid))) ||
+                      state.projects.find(p => isUserMemberOfProject(p));
+        if (found) {
+          matchedProj = found;
+          actionCallback(found);
+          return;
+        }
+
+        // Fallback: If no team assigned yet, prompt student to select their project
+        const projectOptions = state.projects.map(p => `${p.project_code}: ${p.title}`).join('\n');
+        const defaultCode = state.projects[0] ? state.projects[0].project_code : 'IG26010001';
+        const chosen = prompt(`Select your assigned Team Project Code:\n\n${projectOptions}`, defaultCode);
+        if (chosen) {
+          const cleanChosen = chosen.split(':')[0].trim().toUpperCase();
+          const selected = state.projects.find(p => (p.project_code || '').toUpperCase() === cleanChosen || (p.title || '').toLowerCase().includes(chosen.toLowerCase()));
+          if (selected) {
+            matchedProj = selected;
+            state.currentUser.project_id = selected.id;
+            state.currentUser.team_id = selected.id;
+            state.currentUser.team_code = selected.project_code;
+            state.currentUser.team_name = selected.team_name;
+            updateUserNavbarUI();
+            actionCallback(selected);
+          } else {
+            showToast('Project not found. Please check your project code.', 'warning');
+          }
+        }
       }
 
       if (myTeamBtn) {
         myTeamBtn.style.display = 'inline-flex';
         myTeamBtn.onclick = () => {
-          const p = matchedProj || state.projects.find(proj => isUserMemberOfProject(proj));
-          if (p) {
-            openProjectModalForEdit(p);
-          } else {
-            showToast('Loading your team project...', 'info');
-            fetchProjects().then(() => {
-              const freshP = state.projects.find(proj => isUserMemberOfProject(proj));
-              if (freshP) openProjectModalForEdit(freshP);
-              else showToast('No assigned project found for your account.', 'warning');
-            });
-          }
+          ensureProjectAndDo((p) => openProjectModalForEdit(p));
         };
       }
 
@@ -511,22 +546,23 @@ function updateUserNavbarUI() {
 
         if (bannerBtnEdit) {
           bannerBtnEdit.onclick = () => {
-            const p = matchedProj || state.projects.find(proj => isUserMemberOfProject(proj));
-            if (p) openProjectModalForEdit(p);
-            else showToast('Loading project...', 'info');
+            ensureProjectAndDo((p) => openProjectModalForEdit(p));
           };
         }
         if (bannerBtnView) {
           bannerBtnView.onclick = () => {
-            const p = matchedProj || state.projects.find(proj => isUserMemberOfProject(proj));
-            if (p) openProjectDetail(p.id);
-            else showToast('Loading project...', 'info');
+            ensureProjectAndDo((p) => openProjectDetail(p.id));
           };
         }
         if (bannerBtnProfile) {
           bannerBtnProfile.onclick = () => {
-            if (stRecord) openStudentViewModal(stRecord.id);
-            else showToast('Opening profile...', 'info');
+            if (stRecord) {
+              openStudentViewModal(stRecord.id);
+            } else if (state.students && state.students.length > 0) {
+              openStudentViewModal(state.students[0].id);
+            } else {
+              showToast('Opening student profile...', 'info');
+            }
           };
         }
       }
