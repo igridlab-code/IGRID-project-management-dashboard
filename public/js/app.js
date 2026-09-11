@@ -450,40 +450,8 @@ function updateUserNavbarUI() {
       if (openAddProjectBtn) openAddProjectBtn.style.display = 'inline-block';
       if (openAddTaskModal) openAddTaskModal.style.display = 'inline-block';
     }
-
-    // Student Innovator Edit Button & Welcome Quick Access Banner
-    const studentEditBtn = document.getElementById('btn-student-edit-my-project');
-    const studentBanner = document.getElementById('student-team-quick-banner');
-    const isStudent = isUserStudent();
-
-    if (isStudent && !isAdmin) {
-      if (studentEditBtn) {
-        studentEditBtn.style.display = 'inline-flex';
-        studentEditBtn.onclick = () => openStudentOwnProjectEditModal();
-      }
-      if (studentBanner) {
-        studentBanner.style.display = 'flex';
-        const bannerName = document.getElementById('student-banner-name');
-        const bannerTitle = document.getElementById('student-banner-project-title');
-        const bannerBtn = document.getElementById('btn-banner-edit-project');
-        if (bannerName) bannerName.textContent = displayName;
-        const myProj = getStudentOwnProject();
-        if (bannerTitle) {
-          bannerTitle.textContent = myProj ? `${myProj.title} (${myProj.project_code || 'IG'})` : (state.currentUser.project_title || 'Assigned Innovation Team');
-        }
-        if (bannerBtn) bannerBtn.onclick = () => openStudentOwnProjectEditModal();
-      }
-    } else {
-      if (studentEditBtn) studentEditBtn.style.display = 'none';
-      if (studentBanner) studentBanner.style.display = 'none';
-    }
   } else {
     // GUEST PUBLIC SHOWCASE (READ-ONLY) - default to Showcase and Board only
-    const studentEditBtn = document.getElementById('btn-student-edit-my-project');
-    const studentBanner = document.getElementById('student-team-quick-banner');
-    if (studentEditBtn) studentEditBtn.style.display = 'none';
-    if (studentBanner) studentBanner.style.display = 'none';
-
     if (DOM.viewTabs) {
       DOM.viewTabs.forEach(tab => {
         const view = tab.getAttribute('data-view');
@@ -508,33 +476,6 @@ function updateUserNavbarUI() {
     if (openAddStudentBtn) openAddStudentBtn.style.display = 'none';
     if (openAddProjectBtn) openAddProjectBtn.style.display = 'none';
     if (openAddTaskModal) openAddTaskModal.style.display = 'none';
-  }
-}
-
-function getStudentOwnProject() {
-  if (!state.currentUser) return null;
-  const user = state.currentUser;
-  const targetId = user.project_id ? Number(user.project_id) : (user.team_id ? Number(user.team_id) : (user.teamId ? Number(user.teamId) : null));
-  if (targetId && state.projects && state.projects.length > 0) {
-    const p = state.projects.find(proj => Number(proj.id) === targetId);
-    if (p) return p;
-  }
-  if (user.team_code && state.projects && state.projects.length > 0) {
-    const p = state.projects.find(proj => proj.project_code === user.team_code);
-    if (p) return p;
-  }
-  if (state.projects && state.projects.length > 0) {
-    return state.projects.find(proj => isUserMemberOfProject(proj)) || null;
-  }
-  return null;
-}
-
-function openStudentOwnProjectEditModal() {
-  const ownProj = getStudentOwnProject();
-  if (ownProj) {
-    openProjectModalForEdit(ownProj);
-  } else {
-    showToast('Your student account is not linked to a specific team project yet. Please select your team or contact administrator.', 'info');
   }
 }
 
@@ -677,7 +618,6 @@ async function loadAllData() {
     ]);
     renderAllViews();
     updateStatsSummary();
-    updateUserNavbarUI();
   } catch (err) {
     console.error('Error loading data:', err);
     showToast('Failed to load lab data from server', 'error');
@@ -1595,22 +1535,30 @@ function renderExecutiveShowcase() {
     if (p.linkedin_url) mediaLinks.push(`<a href="${p.linkedin_url}" target="_blank" class="btn-media btn-media-linkedin" title="LinkedIn Showcase">💼 LinkedIn</a>`);
     if (p.doc_url) mediaLinks.push(`<a href="${p.doc_url}" target="_blank" class="btn-media btn-media-doc" title="Datasheet & Docs">📄 Docs</a>`);
 
+    const isAdmin = isUserAdmin();
+    const canEdit = isAdmin || isUserMemberOfProject(p);
+    const isMyTeam = !isAdmin && isUserMemberOfProject(p);
+    const myTeamBadge = isMyTeam
+      ? '<span class="badge" style="background:rgba(245,158,11,0.25); color:#fbbf24; border:1px solid #f59e0b; font-weight:700; font-size:11px;">⭐ Your Team</span>'
+      : '';
+
     const isHidden = (p.is_visible === 0 || p.is_visible === false || p.is_active === 0 || p.is_active === false);
-    const hiddenBadge = (isUserAdmin() && isHidden)
+    const hiddenBadge = (isAdmin && isHidden)
       ? '<span class="badge badge-hidden" title="Hidden from students and public viewers">👁️‍🗨️ Hidden</span>'
       : '';
 
     html += `
-      <div class="exec-card ${isHidden ? 'project-card-hidden' : ''}">
+      <div class="exec-card ${isHidden ? 'project-card-hidden' : ''} ${isMyTeam ? 'exec-card-my-team' : ''}" style="${isMyTeam ? 'border: 2px solid rgba(245, 158, 11, 0.6); box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);' : ''}">
         <!-- Hero Photo with Badges -->
         <div class="exec-card-hero">
           <img src="${heroImg}" alt="${escapeHTML(p.title)}" loading="lazy">
           <div class="exec-card-overlay">
             <div class="exec-card-top-badges">
-              <div style="display:flex; align-items:center; gap:6px;">
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                 <span class="card-id-code">${p.project_code}</span>
+                ${myTeamBadge}
                 ${hiddenBadge}
-                ${isUserAdmin() ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active) : ''}
+                ${isAdmin ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active) : ''}
               </div>
               <div class="exec-progress-radial">
                 <span class="pulse-indicator"></span>
@@ -1663,15 +1611,15 @@ function renderExecutiveShowcase() {
         </div>
 
         <!-- Footer -->
-        <div class="exec-card-footer">
+        <div class="exec-card-footer" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
           <span style="font-size:12px; color:var(--text-dim);">Due: <strong>${formatDate(p.due_date)}</strong></span>
           <div style="display:flex; align-items:center; gap:6px;">
-            ${(isUserAdmin() || isUserMemberOfProject(p)) ? `
-              <button type="button" class="btn btn-sm btn-warning" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(proj => proj.id === ${p.id}) || ${JSON.stringify(p).replace(/"/g, '&quot;')})" style="background:#f59e0b; color:#000; font-weight:700; border:none; padding:5px 12px; border-radius:6px; box-shadow:0 2px 6px rgba(245,158,11,0.3); display:inline-flex; align-items:center; gap:4px; cursor:pointer;" title="Edit Project Details (Media, Repo, Deliverables)">
-                <span>✏️ Edit Details</span>
+            ${canEdit ? `
+              <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(proj => proj.id === ${p.id}) || ${JSON.stringify(p).replace(/"/g, '&quot;')})" style="background:var(--primary, #f59e0b); color:#000000; font-weight:700; border:none; display:inline-flex; align-items:center; gap:4px; box-shadow:0 2px 8px rgba(245,158,11,0.3); padding:6px 12px; font-size:12px; border-radius:6px; cursor:pointer;" title="Edit Your Team Project Details (Links, Team Name, Logo, Members & Deliverables)">
+                ✏️ Edit Details
               </button>
             ` : ''}
-            <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
+            <button class="btn btn-sm btn-secondary" onclick="openSpotlightPresentation(${p.id})">
               <span>🔍 Spotlight View</span>
             </button>
           </div>
@@ -1730,6 +1678,8 @@ async function openSpotlightPresentation(projectId) {
       </tr>
     `).join('');
 
+    const canEdit = isUserAdmin() || isUserMemberOfProject(project);
+
     DOM.spotlightBodyRoot.innerHTML = `
       <div class="spotlight-hero-media">
         <img src="${heroImg}" alt="${escapeHTML(project.title)}">
@@ -1737,7 +1687,14 @@ async function openSpotlightPresentation(projectId) {
 
       <div class="spotlight-grid">
         <div class="spotlight-details">
-          <h2>${escapeHTML(project.title)}</h2>
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:8px;">
+            <h2 style="margin:0;">${escapeHTML(project.title)}</h2>
+            ${canEdit ? `
+              <button class="btn btn-sm btn-primary" onclick="closeModal(DOM.spotlightModal); openProjectModalForEdit(state.projects.find(proj => proj.id === ${project.id}) || ${JSON.stringify(project).replace(/"/g, '&quot;')});" style="background:var(--primary, #f59e0b); color:#000000; font-weight:700; border:none; padding:6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; box-shadow:0 2px 8px rgba(245,158,11,0.3); border-radius:6px; cursor:pointer;" title="Edit Your Team Project Details (Links, Team Name, Logo, Members & Deliverables)">
+                ✏️ Edit Project Details
+              </button>
+            ` : ''}
+          </div>
           <p style="font-size:13px; color:var(--text-muted); line-height:1.6;">${escapeHTML(project.description || '')}</p>
 
           ${(!isUserViewer() && project.immediate_action) ? `
@@ -1800,11 +1757,6 @@ async function openSpotlightPresentation(projectId) {
               <div><strong>Due Date:</strong> ${formatDate(project.due_date)}</div>
               <div><strong>BOM Status:</strong> ${project.bom_status}</div>
             </div>
-            ${(isUserAdmin() || isUserMemberOfProject(project)) ? `
-              <button type="button" class="btn btn-warning" onclick="closeModal(DOM.spotlightModal); openProjectModalForEdit(state.projects.find(p => p.id === ${project.id}) || ${JSON.stringify(project).replace(/"/g, '&quot;')})" style="margin-top:10px; width:100%; font-weight:700; background:linear-gradient(135deg, #f59e0b, #d97706); color:#000; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 3px 10px rgba(245,158,11,0.35);">
-                <span>✏️ Edit Project Details</span>
-              </button>
-            ` : ''}
           </div>
         </div>
       </div>
@@ -1910,6 +1862,11 @@ function createCardHTML(p) {
   const isAdmin = isUserAdmin();
   const isViewer = isUserViewer();
   const canEdit = isAdmin || isUserMemberOfProject(p);
+  const isMyTeam = !isAdmin && isUserMemberOfProject(p);
+  const myTeamBadge = isMyTeam
+    ? '<span class="badge" style="background:rgba(245,158,11,0.25); color:#fbbf24; border:1px solid #f59e0b; font-weight:700; font-size:10px;">⭐ Your Team</span>'
+    : '';
+
   const isHidden = (p.is_visible === 0 || p.is_visible === false || p.is_active === 0 || p.is_active === false);
   const hiddenClass = isHidden ? 'project-card-hidden' : '';
   const hiddenBadge = (isAdmin && isHidden)
@@ -1919,11 +1876,12 @@ function createCardHTML(p) {
   const stageLockIcon = !isAdmin ? '<span title="🔒 Stage changes are restricted to Administrator" style="font-size: 11px; opacity: 0.65; cursor: default;">🔒</span>' : '';
 
   return `
-    <div class="kanban-card ${hiddenClass}" ${draggableAttrs} data-id="${p.id}" ${!isAdmin ? 'title="Click to view details (Stage moves restricted to Admin)"' : 'title="Drag to change stage or click for details"'}>
+    <div class="kanban-card ${hiddenClass} ${isMyTeam ? 'kanban-card-my-team' : ''}" style="${isMyTeam ? 'border: 2px solid rgba(245, 158, 11, 0.6);' : ''}" ${draggableAttrs} data-id="${p.id}" ${!isAdmin ? 'title="Click to view details (Stage moves restricted to Admin)"' : 'title="Drag to change stage or click for details"'}>
       <div class="card-top-bar">
-        <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
           ${stageLockIcon}
           <span class="card-id-code">${p.project_code}</span>
+          ${myTeamBadge}
           ${isAdmin ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active) : ''}
         </div>
         <div class="card-badges-right" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
@@ -1960,8 +1918,8 @@ function createCardHTML(p) {
         </div>
         <div style="display: flex; align-items: center; gap: 6px;">
           ${canEdit ? `
-            <button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(proj => proj.id === ${p.id}) || ${JSON.stringify(p).replace(/"/g, '&quot;')})" style="padding: 2px 7px; font-size: 11px; height: 24px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px; font-weight: 600;" title="Edit Project Details">
-              ✏️ Edit
+            <button type="button" class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(proj => proj.id === ${p.id}) || ${JSON.stringify(p).replace(/"/g, '&quot;')})" style="background:var(--primary, #f59e0b); color:#000000; padding: 3px 9px; font-size: 11px; height: 26px; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; border:none; box-shadow:0 2px 6px rgba(245,158,11,0.25); cursor:pointer;" title="Edit Your Team Project Details (Links, Logo, Members & Deliverables)">
+              ✏️ Edit Details
             </button>
           ` : ''}
           <div class="card-counters">
@@ -2134,41 +2092,55 @@ function renderTable() {
   }
 
   let html = '';
+  const isAdmin = isUserAdmin();
   state.projects.forEach(p => {
+    const canEdit = isAdmin || isUserMemberOfProject(p);
+    const isMyTeam = !isAdmin && isUserMemberOfProject(p);
+
     html += `
-      <tr>
+      <tr class="${isMyTeam ? 'table-row-my-team' : ''}" style="${isMyTeam ? 'background: rgba(245, 158, 11, 0.06);' : ''}">
         <td class="table-code">
           <div style="display:flex; align-items:center; gap:6px;">
             <span>${p.project_code}</span>
-            ${renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active, { showLabel: false })}
+            ${isMyTeam ? '<span class="badge" style="background:rgba(245,158,11,0.25); color:#fbbf24; border:1px solid #f59e0b; font-size:10px;">⭐ Mine</span>' : ''}
+            ${isAdmin ? renderProjectActiveToggleHTML(p.id, p.is_visible !== undefined ? p.is_visible : p.is_active, { showLabel: false }) : ''}
           </div>
         </td>
         <td><span class="table-title" onclick="openProjectDetail(${p.id})">${escapeHTML(p.title)}</span></td>
         <td><span class="badge badge-blue">${p.domain}</span></td>
         <td>
-          <select onchange="updateProjectField(${p.id}, 'status', this.value)" style="padding:4px 8px; font-size:12px;">
-            <option value="in_queue" ${p.status === 'in_queue' ? 'selected' : ''}>In Queue</option>
-            <option value="in_progress" ${p.status === 'in_progress' ? 'selected' : ''}>On Progress</option>
-            <option value="testing" ${p.status === 'testing' ? 'selected' : ''}>Testing</option>
-            <option value="completed" ${p.status === 'completed' ? 'selected' : ''}>Completed</option>
-          </select>
+          ${isAdmin ? `
+            <select onchange="updateProjectField(${p.id}, 'status', this.value)" style="padding:4px 8px; font-size:12px;">
+              <option value="in_queue" ${p.status === 'in_queue' ? 'selected' : ''}>In Queue</option>
+              <option value="in_progress" ${p.status === 'in_progress' ? 'selected' : ''}>On Progress</option>
+              <option value="testing" ${p.status === 'testing' ? 'selected' : ''}>Testing</option>
+              <option value="completed" ${p.status === 'completed' ? 'selected' : ''}>Completed</option>
+            </select>
+          ` : `<span class="badge badge-date">${formatStatus(p.status)}</span>`}
         </td>
         <td>
-          <select onchange="updateProjectField(${p.id}, 'priority', this.value)" style="padding:4px 8px; font-size:12px;">
-            <option value="High" ${p.priority === 'High' ? 'selected' : ''}>High</option>
-            <option value="Normal" ${p.priority === 'Normal' ? 'selected' : ''}>Normal</option>
-            <option value="Low" ${p.priority === 'Low' ? 'selected' : ''}>Low</option>
-          </select>
+          ${isAdmin ? `
+            <select onchange="updateProjectField(${p.id}, 'priority', this.value)" style="padding:4px 8px; font-size:12px;">
+              <option value="High" ${p.priority === 'High' ? 'selected' : ''}>High</option>
+              <option value="Normal" ${p.priority === 'Normal' ? 'selected' : ''}>Normal</option>
+              <option value="Low" ${p.priority === 'Low' ? 'selected' : ''}>Low</option>
+            </select>
+          ` : `<span class="badge ${p.priority === 'High' ? 'badge-high' : 'badge-blue'}">${p.priority}</span>`}
         </td>
         <td><strong>${p.progress || 0}%</strong></td>
         <td>${formatDate(p.due_date)}</td>
-        <td>${p.team_lead || 'Lead'}</td>
+        <td>${escapeHTML(p.team_lead || 'Lead')}</td>
         <td><span class="badge badge-date">${p.bom_status || 'N/A'}</span></td>
         <td>
           ${p.github_repo ? `<a href="${p.github_repo}" target="_blank" class="meta-link">🐙 Repo</a>` : '<span style="color:var(--text-dim)">-</span>'}
         </td>
         <td>
-          <button class="btn btn-sm btn-secondary" onclick="openProjectDetail(${p.id})">View</button>
+          <div style="display:flex; align-items:center; gap:5px;">
+            ${canEdit ? `
+              <button class="btn btn-sm btn-primary" onclick="openProjectModalForEdit(state.projects.find(proj => proj.id === ${p.id}) || ${JSON.stringify(p).replace(/"/g, '&quot;')})" style="padding:4px 8px; font-size:11px; background:var(--primary, #f59e0b); color:#000000; font-weight:700; border:none; cursor:pointer;" title="Edit Project Details">✏️ Edit</button>
+            ` : ''}
+            <button class="btn btn-sm btn-secondary" onclick="openProjectDetail(${p.id})" style="padding:4px 8px; font-size:11px;">View</button>
+          </div>
         </td>
       </tr>
     `;
@@ -2473,7 +2445,6 @@ function renderStudents() {
           </td>
           <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
             <button class="btn btn-sm btn-secondary" onclick="openStudentViewModal(${s.id})" style="margin-right: 6px;">👁️ View Profile</button>
-            ${matchedProject && (isAdmin || isUserMemberOfProject(matchedProject)) ? `<button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p => p.id === ${matchedProject.id}) || ${JSON.stringify(matchedProject).replace(/"/g, '&quot;')})" style="margin-right: 6px; background:#f59e0b; color:#000; font-weight:700; border:none; padding:4px 8px; border-radius:6px;" title="Edit Team Project Details">✏️ Edit Team</button>` : ''}
             ${(isAdmin || isOwner) ? `<button class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})" style="margin-right: 6px;">✏️ Edit</button>` : ''}
             ${isAdmin ? `<button class="btn btn-sm btn-danger btn-student-delete" onclick="event.stopPropagation(); confirmDeleteStudent(${s.id}, '${escapeHTML((s.name || '').replace(/'/g, "\\'"))}')" title="Delete Student Record" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-weight:600;">🗑️ Delete</button>` : ''}
           </td>
@@ -2589,15 +2560,15 @@ function renderStudents() {
               <button type="button" class="btn btn-sm btn-secondary" onclick="openProjectDetail(${matchedProject.id})" title="Open Project Details & Gantt Schedule">
                 📅 Project
               </button>
-              ${(isAdmin || isUserMemberOfProject(matchedProject)) ? `
-                <button type="button" class="btn btn-sm btn-warning" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p => p.id === ${matchedProject.id}) || ${JSON.stringify(matchedProject).replace(/"/g, '&quot;')})" style="background:#f59e0b; color:#000; font-weight:700; border:none; padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:3px; box-shadow:0 2px 6px rgba(245,158,11,0.3);" title="Edit Team Project Details (Media, GitHub, Docs, Deliverables)">
-                  ✏️ Edit Team
-                </button>
-              ` : ''}
+            ` : ''}
+            ${matchedProject && (isAdmin || isOwner || isUserMemberOfProject(matchedProject)) ? `
+              <button type="button" class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p=>p.id===${matchedProject.id}) || ${JSON.stringify(matchedProject).replace(/"/g, '&quot;')})" style="background:var(--primary, #f59e0b); color:#000000; font-weight:700; border:none; padding:4px 8px; font-size:11px; display:inline-flex; align-items:center; gap:3px;" title="Edit Your Team Project Details (Links, Logo, Members & Deliverables)">
+                ✏️ Edit Project
+              </button>
             ` : ''}
             ${(isAdmin || isOwner) ? `
-              <button type="button" class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})" title="Edit Profile Details">
-                ✏️ Edit
+              <button type="button" class="btn btn-sm btn-secondary" onclick="openStudentEditModal(${s.id})" title="Edit Profile Details">
+                👤 Edit Profile
               </button>
             ` : ''}
             ${isAdmin ? `
