@@ -276,8 +276,10 @@
           </div>
 
           <div class="form-group">
-            <label>Assigned Project Title</label>
-            <input type="text" id="signup-project" placeholder="e.g. Smart Grass Cutter Robot">
+            <label>Assigned Innovation Project / Team</label>
+            <select id="signup-project" style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15)); background: rgba(0, 0, 0, 0.45); color: var(--text-main, #f8fafc); font-size: 13px; box-sizing: border-box;">
+              <option value="">-- Select Your Team Project --</option>
+            </select>
           </div>
 
           <div class="form-group">
@@ -418,6 +420,33 @@
       }
     };
 
+    // Fetch projects for student signup dropdown
+    let availableProjects = [];
+    async function loadSignupProjects() {
+      try {
+        const res = await fetch('/api/projects');
+        if (res.ok) {
+          availableProjects = await res.json();
+          const select = document.getElementById('signup-project');
+          if (select && Array.isArray(availableProjects)) {
+            select.innerHTML = '<option value="">-- Select Your Team Project --</option>' + availableProjects.map(p => `
+              <option value="${p.id}" data-code="${p.project_code || ''}" data-title="${escapeHTML(p.title || '')}">
+                ${p.project_code ? `[${p.project_code}] ` : ''}${escapeHTML(p.title || '')} (${p.domain || 'Innovation'})
+              </option>
+            `).join('');
+          }
+        }
+      } catch(e) {
+        console.warn('Could not load projects for signup select', e);
+      }
+    }
+    loadSignupProjects();
+
+    function escapeHTML(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
     formSignup.onsubmit = async (e) => {
       e.preventDefault();
       const name = document.getElementById('signup-name').value.trim();
@@ -439,7 +468,13 @@
       const phone = document.getElementById('signup-phone') ? document.getElementById('signup-phone').value.trim() : '';
       const department = document.getElementById('signup-dept') ? document.getElementById('signup-dept').value.trim() : '';
       const year = document.getElementById('signup-year') ? document.getElementById('signup-year').value.trim() : '';
-      const project_title = document.getElementById('signup-project') ? document.getElementById('signup-project').value.trim() : '';
+      
+      const projectSelect = document.getElementById('signup-project');
+      const selectedOption = projectSelect && projectSelect.selectedOptions ? projectSelect.selectedOptions[0] : null;
+      const project_id = projectSelect ? projectSelect.value : '';
+      const project_title = selectedOption ? (selectedOption.getAttribute('data-title') || selectedOption.text) : '';
+      const team_code = selectedOption ? selectedOption.getAttribute('data-code') : '';
+
       const team_members = document.getElementById('signup-team') ? document.getElementById('signup-team').value.trim() : '';
       const guide = document.getElementById('signup-guide') ? document.getElementById('signup-guide').value.trim() : '';
 
@@ -454,7 +489,9 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name, roll_no, email, phone, department, year,
-            project_title, team_members, guide, password,
+            project_id: project_id ? Number(project_id) : undefined,
+            project_title, team_code,
+            team_members, guide, password,
             role: currentSignupRole
           })
         });

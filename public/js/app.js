@@ -230,37 +230,61 @@ function isUserMemberOfProject(project) {
   const user = state.currentUser;
   if (!user) return false;
 
+  const targetId = Number(project.id);
+  const userProjectId = user.project_id ? Number(user.project_id) : (user.team_id ? Number(user.team_id) : (user.teamId ? Number(user.teamId) : null));
+
+  // 1. Direct teamId / projectId comparison (SOURCE OF TRUTH)
+  if (userProjectId && userProjectId === targetId) {
+    return true;
+  }
+
+  if (user.team_code && user.team_code === project.project_code) {
+    return true;
+  }
+
+  if (user.assigned_project && (user.assigned_project === project.project_code || user.assigned_project === project.title)) {
+    return true;
+  }
+  if (user.project_title && (user.project_title === project.title || user.project_title === project.project_code)) {
+    return true;
+  }
+
+  // 2. Check student directory record in state.students
   const rawUserName = (user.name || '').toLowerCase().trim();
   const userName = rawUserName.replace(/\s*\(student\)\s*/gi, '').trim();
   const userEmail = (user.email || '').toLowerCase().trim();
-  const pCode = (project.project_code || '').toLowerCase().trim();
-  const pTitle = (project.title || '').toLowerCase().trim();
-  const pTeam = (project.team_name || '').toLowerCase().trim();
 
-  // 1. Direct match on user object's assigned_project / team / title
-  if (user.assigned_project) {
-    const uAssigned = String(user.assigned_project).toLowerCase().trim();
-    if (uAssigned === pCode || pCode.includes(uAssigned) || uAssigned.includes(pCode)) return true;
-    if (uAssigned === pTitle || pTitle.includes(uAssigned) || uAssigned.includes(pTitle)) return true;
-  }
-  if (user.project_title) {
-    const uTitle = String(user.project_title).toLowerCase().trim();
-    if (uTitle === pTitle || pTitle.includes(uTitle) || uTitle.includes(pTitle)) return true;
-    if (uTitle === pCode || pCode.includes(uTitle) || uTitle.includes(pCode)) return true;
-  }
-  if (user.team_name && pTeam) {
-    const uTeam = String(user.team_name).toLowerCase().trim();
-    if (uTeam === pTeam || pTeam.includes(uTeam) || uTeam.includes(pTeam)) return true;
+  if (state.students && Array.isArray(state.students)) {
+    const stRecord = state.students.find(s => 
+      (s.user_id && Number(s.user_id) === Number(user.id)) || 
+      (s.email && s.email.toLowerCase().trim() === userEmail) ||
+      (user.roll_no && s.roll_no && s.roll_no === user.roll_no) ||
+      (userName && s.name && s.name.toLowerCase().trim() === userName)
+    );
+    if (stRecord) {
+      if (stRecord.project_id && Number(stRecord.project_id) === targetId) return true;
+      if (stRecord.team_id && Number(stRecord.team_id) === targetId) return true;
+      if (stRecord.assigned_project && (stRecord.assigned_project === project.project_code || stRecord.assigned_project.toLowerCase() === (project.title || '').toLowerCase())) {
+        return true;
+      }
+      if (stRecord.project_title && (stRecord.project_title === project.title || stRecord.project_title.toLowerCase() === (project.project_code || '').toLowerCase())) {
+        return true;
+      }
+      if (stRecord.team_name && project.team_name && stRecord.team_name.toLowerCase().trim() === project.team_name.toLowerCase().trim()) {
+        return true;
+      }
+    }
   }
 
-  // 2. Check Team Lead name / email
+  // 3. Team lead or team members list match
   if (project.team_lead) {
-    const leadStr = String(project.team_lead).toLowerCase().trim();
-    if (userName && (leadStr === userName || leadStr.includes(userName) || userName.includes(leadStr))) return true;
-    if (userEmail && (leadStr === userEmail || leadStr.includes(userEmail) || userEmail.includes(leadStr))) return true;
+    const leadStr = project.team_lead.toLowerCase();
+    if ((userName && (leadStr.includes(userName) || userName.includes(leadStr))) ||
+        (userEmail && leadStr.includes(userEmail))) {
+      return true;
+    }
   }
 
-  // 3. Check Team Members roster (JSON / Array / String)
   if (project.team_members) {
     let membersList = [];
     if (Array.isArray(project.team_members)) {
@@ -277,33 +301,19 @@ function isUserMemberOfProject(project) {
     
     for (const m of membersList) {
       if (typeof m === 'object' && m !== null) {
-        const mName = String(m.name || '').toLowerCase().replace(/\s*\(student\)\s*/gi, '').trim();
-        const mEmail = String(m.email || '').toLowerCase().trim();
-        if (userName && mName && (mName === userName || mName.includes(userName) || userName.includes(mName))) return true;
-        if (userEmail && mEmail && (mEmail === userEmail || mEmail.includes(userEmail) || userEmail.includes(mEmail))) return true;
+        const mName = (m.name || '').toLowerCase().replace(/\s*\(student\)\s*/gi, '').trim();
+        const mEmail = (m.email || '').toLowerCase().trim();
+        if ((userName && mName && (mName.includes(userName) || userName.includes(mName))) ||
+            (userEmail && mEmail && mEmail === userEmail)) {
+          return true;
+        }
       } else if (typeof m === 'string') {
-        const mLower = String(m).toLowerCase().replace(/\s*\(student\)\s*/gi, '').trim();
-        if (userName && mLower && (mLower === userName || mLower.includes(userName) || userName.includes(mLower))) return true;
-        if (userEmail && mLower && (mLower === userEmail || mLower.includes(userEmail) || userEmail.includes(mLower))) return true;
+        const mLower = m.toLowerCase().trim();
+        if ((userName && (mLower.includes(userName) || userName.includes(mLower))) ||
+            (userEmail && mLower.includes(userEmail))) {
+          return true;
+        }
       }
-    }
-  }
-
-  // 4. Cross-reference with state.students
-  if (state.students && Array.isArray(state.students)) {
-    const stRecord = state.students.find(s => 
-      (s.user_id && user.id && Number(s.user_id) === Number(user.id)) || 
-      (s.email && userEmail && s.email.toLowerCase().trim() === userEmail) ||
-      (userName && s.name && (s.name.toLowerCase().trim() === userName || s.name.toLowerCase().trim().includes(userName) || userName.includes(s.name.toLowerCase().trim())))
-    );
-    if (stRecord) {
-      const stAssigned = (stRecord.assigned_project || '').toLowerCase().trim();
-      const stTitle = (stRecord.project_title || '').toLowerCase().trim();
-      const stTeam = (stRecord.team_name || '').toLowerCase().trim();
-      if (stAssigned && (stAssigned === pCode || pCode.includes(stAssigned) || stAssigned.includes(pCode))) return true;
-      if (stTitle && (stTitle === pTitle || pTitle.includes(stTitle) || stTitle.includes(pTitle))) return true;
-      if (stAssigned && (stAssigned === pTitle || pTitle.includes(stAssigned) || stAssigned.includes(pTitle))) return true;
-      if (stTeam && pTeam && (stTeam === pTeam || pTeam.includes(stTeam) || stTeam.includes(pTeam))) return true;
     }
   }
 
@@ -1593,18 +1603,11 @@ function renderExecutiveShowcase() {
         </div>
 
         <!-- Footer -->
-        <div class="exec-card-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="exec-card-footer">
           <span style="font-size:12px; color:var(--text-dim);">Due: <strong>${formatDate(p.due_date)}</strong></span>
-          <div style="display:flex; gap:6px; align-items:center;">
-            ${(isUserAdmin() || isUserMemberOfProject(p)) ? `
-              <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(proj => proj.id === ${p.id}) || ${JSON.stringify(p).replace(/"/g, '&quot;')})" style="font-weight:600; color:#c7d2fe; border:1px solid rgba(99,102,241,0.4);" title="Edit Project Details">
-                ✏️ Edit Project
-              </button>
-            ` : ''}
-            <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
-              <span>🔍 Spotlight View</span>
-            </button>
-          </div>
+          <button class="btn btn-sm btn-primary" onclick="openSpotlightPresentation(${p.id})">
+            <span>🔍 Spotlight View</span>
+          </button>
         </div>
       </div>
     `;
@@ -2513,11 +2516,6 @@ function renderStudents() {
               <button type="button" class="btn btn-sm btn-secondary" onclick="openProjectDetail(${matchedProject.id})" title="Open Project Details & Gantt Schedule">
                 📅 Project
               </button>
-              ${(isAdmin || isUserMemberOfProject(matchedProject)) ? `
-                <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openProjectModalForEdit(state.projects.find(p => p.id === ${matchedProject.id}) || ${JSON.stringify(matchedProject).replace(/"/g, '&quot;')})" title="Edit Team Project Details" style="font-weight:600; color:#c7d2fe; border:1px solid rgba(99,102,241,0.4);">
-                  ✏️ Edit Project
-                </button>
-              ` : ''}
             ` : ''}
             ${(isAdmin || isOwner) ? `
               <button type="button" class="btn btn-sm btn-primary" onclick="openStudentEditModal(${s.id})" title="Edit Profile Details">
@@ -3847,7 +3845,9 @@ function initEditFormLinkProtection() {
 function renderTeamMembersChips() {
   const container = document.getElementById('form-team-members-chips');
   if (!container) return;
-  const canRemove = isUserAdmin() || isUserStudent();
+  const isAdmin = isUserAdmin();
+  const isStudent = isUserStudent();
+  const canEditMembers = isAdmin || isStudent;
 
   if (!state.currentEditingTeamMembers || state.currentEditingTeamMembers.length === 0) {
     container.innerHTML = '<span style="font-size:12px; color:var(--text-dim); font-style:italic;">No team members added yet.</span>';
@@ -3857,9 +3857,56 @@ function renderTeamMembersChips() {
   container.innerHTML = state.currentEditingTeamMembers.map((name, idx) => `
     <span class="card-tag-pill" style="display:inline-flex; align-items:center; gap:6px; background:rgba(99,102,241,0.18); border:1px solid rgba(99,102,241,0.35); color:#c7d2fe; padding:4px 10px; border-radius:16px; font-size:12px; font-weight:600;">
       <span>👤 ${escapeHTML(name)}</span>
-      ${canRemove ? `<button type="button" onclick="event.stopPropagation(); removeTeamMemberChip(${idx})" style="background:none; border:none; color:#f87171; cursor:pointer; font-weight:700; font-size:14px; line-height:1; padding:0 2px; margin-left:4px;" title="Remove ${escapeHTML(name)}">&times;</button>` : ''}
+      ${canEditMembers ? `<button type="button" onclick="event.stopPropagation(); removeTeamMemberChip(${idx})" style="background:none; border:none; color:#f87171; cursor:pointer; font-weight:700; font-size:14px; line-height:1; padding:0 2px; margin-left:4px;" title="Remove ${escapeHTML(name)}">&times;</button>` : ''}
     </span>
   `).join('');
+}
+
+function checkProjectFormDirty() {
+  const isAdmin = isUserAdmin();
+  const saveBtn = document.getElementById('save-project-btn');
+  if (!saveBtn) return;
+  if (isAdmin) {
+    saveBtn.disabled = false;
+    saveBtn.style.opacity = '1';
+    return;
+  }
+  if (!state.initialEditingProjectValues) {
+    saveBtn.disabled = false;
+    saveBtn.style.opacity = '1';
+    return;
+  }
+
+  const currentValues = {
+    github: (document.getElementById('form-github')?.value || '').trim(),
+    youtube: (document.getElementById('form-youtube')?.value || '').trim(),
+    doc: (document.getElementById('form-doc-url')?.value || '').trim(),
+    linkedin: (document.getElementById('form-linkedin')?.value || '').trim(),
+    image: (document.getElementById('form-image-url')?.value || '').trim(),
+    team_name: (document.getElementById('form-team-name')?.value || '').trim(),
+    team_lead: (document.getElementById('form-team-lead')?.value || '').trim(),
+    team_logo: (document.getElementById('form-team-lead-photo')?.value || '').trim(),
+    deliverables: (document.getElementById('form-deliverables')?.value || '').trim(),
+    team_members: JSON.stringify(state.currentEditingTeamMembers || [])
+  };
+
+  const initial = state.initialEditingProjectValues;
+  const isDirty = (
+    currentValues.github !== initial.github ||
+    currentValues.youtube !== initial.youtube ||
+    currentValues.doc !== initial.doc ||
+    currentValues.linkedin !== initial.linkedin ||
+    currentValues.image !== initial.image ||
+    currentValues.team_name !== initial.team_name ||
+    currentValues.team_lead !== initial.team_lead ||
+    currentValues.team_logo !== initial.team_logo ||
+    currentValues.deliverables !== initial.deliverables ||
+    currentValues.team_members !== initial.team_members
+  );
+
+  saveBtn.disabled = !isDirty;
+  saveBtn.style.opacity = isDirty ? '1' : '0.5';
+  saveBtn.title = isDirty ? 'Save updated project details' : 'No changes detected to save';
 }
 
 function addTeamMemberChip(rawName) {
@@ -3876,12 +3923,14 @@ function addTeamMemberChip(rawName) {
   renderTeamMembersChips();
   const input = document.getElementById('form-team-members-input');
   if (input) input.value = '';
+  checkProjectFormDirty();
 }
 
 function removeTeamMemberChip(idx) {
   if (state.currentEditingTeamMembers && idx >= 0 && idx < state.currentEditingTeamMembers.length) {
     state.currentEditingTeamMembers.splice(idx, 1);
     renderTeamMembersChips();
+    checkProjectFormDirty();
   }
 }
 
@@ -3912,6 +3961,16 @@ function initTeamMembersInputListeners() {
       if (input) addTeamMemberChip(input.value);
     });
   }
+
+  // Bind dirty checking to student editable inputs
+  const editableIds = ['form-github', 'form-youtube', 'form-doc-url', 'form-linkedin', 'form-image-url', 'form-team-name', 'form-team-lead', 'form-team-lead-photo', 'form-deliverables'];
+  editableIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', () => checkProjectFormDirty());
+      el.addEventListener('change', () => checkProjectFormDirty());
+    }
+  });
 }
 
 function openProjectModalForCreate(defaultStatus = 'in_progress') {
@@ -3971,8 +4030,11 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   const saveBtn = document.getElementById('save-project-btn');
   if (saveBtn) {
     saveBtn.disabled = false;
+    saveBtn.style.opacity = '1';
+    saveBtn.title = 'Create project';
     saveBtn.innerHTML = '💾 Save Project Details';
   }
+  state.initialEditingProjectValues = null;
 
   ['preview-image-url', 'preview-github', 'preview-youtube', 'preview-doc-url', 'preview-linkedin'].forEach(id => {
     updateLinkPreviewIcon(id, '');
@@ -3981,12 +4043,7 @@ function openProjectModalForCreate(defaultStatus = 'in_progress') {
   openModal(DOM.projectModal);
 }
 
-function openProjectModalForEdit(projectInput, focusField = null) {
-  if (!projectInput) return;
-  const project = (typeof projectInput === 'object' && projectInput !== null)
-    ? (state.projects.find(p => p.id === projectInput.id) || projectInput)
-    : state.projects.find(p => p.id === Number(projectInput));
-
+function openProjectModalForEdit(project, focusField = null) {
   if (!project) return;
   if (isUserViewer() || isUserPublic()) {
     showToast('Access denied: Public Showcase Viewers have read-only permissions.', 'error');
@@ -4206,7 +4263,21 @@ function openProjectModalForEdit(projectInput, focusField = null) {
   updateLinkPreviewIcon('preview-doc-url', docVal);
   updateLinkPreviewIcon('preview-linkedin', liVal);
 
+  state.initialEditingProjectValues = {
+    github: ghVal.trim(),
+    youtube: ytVal.trim(),
+    doc: docVal.trim(),
+    linkedin: liVal.trim(),
+    image: imgVal.trim(),
+    team_name: (project.team_name || '').trim(),
+    team_lead: (project.team_lead || '').trim(),
+    team_logo: (project.team_logo_url || project.team_lead_photo || project.teamLeadPhoto || project.teamLogoUrl || '').trim(),
+    deliverables: (project.deliverables || '').trim(),
+    team_members: JSON.stringify(state.currentEditingTeamMembers || [])
+  };
+
   openModal(DOM.projectModal);
+  checkProjectFormDirty();
 
   if (focusField) {
     setTimeout(() => {
@@ -4293,21 +4364,24 @@ async function handleProjectFormSubmit(e) {
     const deliverablesVal = (document.getElementById('form-deliverables') ? document.getElementById('form-deliverables').value : (existingProject ? existingProject.deliverables : '')).trim();
 
     // Client-side URL format validations
-    if (ghVal && !ghVal.toLowerCase().includes('github.com')) {
+    const isGhValid = !ghVal || ghVal.toLowerCase().startsWith('https://github.com/') || ghVal.toLowerCase().startsWith('http://github.com/') || ghVal.toLowerCase().startsWith('github.com/');
+    if (ghVal && !isGhValid) {
       console.warn('[PROJECT-SAVE] Validation failed: Invalid GitHub URL');
-      showToast('GitHub Repository URL must be a valid link containing "github.com".', 'error');
+      showToast('GitHub Repository URL must be a valid link starting with github.com or https://github.com/.', 'error');
       const ghInput = document.getElementById('form-github');
       if (ghInput) ghInput.focus();
       return;
     }
-    if (docVal && !docVal.toLowerCase().includes('drive.google.com') && !docVal.toLowerCase().includes('docs.google.com')) {
+    const isDocValid = !docVal || docVal.toLowerCase().includes('drive.google.com') || docVal.toLowerCase().includes('docs.google.com');
+    if (docVal && !isDocValid) {
       console.warn('[PROJECT-SAVE] Validation failed: Invalid Google Drive/Docs URL');
       showToast('Technical Report must be a valid Google Drive or Google Docs link (containing "drive.google.com" or "docs.google.com").', 'error');
       const docInput = document.getElementById('form-doc-url');
       if (docInput) docInput.focus();
       return;
     }
-    if (liVal && !liVal.toLowerCase().includes('linkedin.com')) {
+    const isLiValid = !liVal || liVal.toLowerCase().includes('linkedin.com');
+    if (liVal && !isLiValid) {
       console.warn('[PROJECT-SAVE] Validation failed: Invalid LinkedIn URL');
       showToast('LinkedIn Post URL must be a valid link containing "linkedin.com".', 'error');
       const liInput = document.getElementById('form-linkedin');

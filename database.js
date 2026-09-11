@@ -114,9 +114,11 @@ function initDb() {
       )
     `);
 
-    const studentCols = ['user_id', 'phone', 'section', 'college', 'github_url', 'linkedin_url', 'bio', 'assigned_project', 'project_title', 'project_desc', 'team_members', 'guide', 'status', 'progress', 'batch'];
+    const studentCols = ['user_id', 'phone', 'section', 'college', 'github_url', 'linkedin_url', 'bio', 'assigned_project', 'project_title', 'project_desc', 'team_members', 'guide', 'status', 'progress', 'batch', 'project_id', 'team_id', 'team_code', 'team_name'];
     studentCols.forEach(col => {
-      db.run(`ALTER TABLE students ADD COLUMN ${col} ${col === 'batch' ? 'INTEGER' : 'TEXT'}`, () => {});
+      let colType = 'TEXT';
+      if (col === 'batch' || col === 'project_id' || col === 'team_id') colType = 'INTEGER';
+      db.run(`ALTER TABLE students ADD COLUMN ${col} ${colType}`, () => {});
     });
 
     // BOM Items
@@ -168,12 +170,30 @@ function initDb() {
         auth_provider TEXT DEFAULT 'email',
         reset_token TEXT,
         reset_token_expires DATETIME,
+        project_id INTEGER,
+        team_id INTEGER,
+        team_code TEXT,
+        team_name TEXT,
+        roll_no TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    db.run(`ALTER TABLE auth_users ADD COLUMN name TEXT`, () => {});
-    db.run(`ALTER TABLE auth_users ADD COLUMN role TEXT DEFAULT 'student'`, () => {});
+    const authCols = [
+      { name: 'name', type: 'TEXT' },
+      { name: 'role', type: "TEXT DEFAULT 'student'" },
+      { name: 'project_id', type: 'INTEGER' },
+      { name: 'team_id', type: 'INTEGER' },
+      { name: 'team_code', type: 'TEXT' },
+      { name: 'team_name', type: 'TEXT' },
+      { name: 'roll_no', type: 'TEXT' }
+    ];
+    authCols.forEach(col => {
+      db.run(`ALTER TABLE auth_users ADD COLUMN ${col.name} ${col.type}`, () => {});
+    });
+
+    // Run one-time backfill linking students & auth_users to their assigned projects
+    backfillStudentTeamLinks();
 
     // Domains Table
     db.run(`
@@ -786,9 +806,77 @@ function seedDefaultAccounts() {
   });
 }
 
-// Call seedDefaultAccounts on DB init
+function backfillStudentTeamLinks() {
+  db.all('SELECT id, project_code, title, team_name, team_lead, team_members FROM projects', [], (err, projects) => {
+    if (err || !Array.isArray(projects)) return;
+
+    projects.forEach(p => {
+      // 1. Update students matching this project
+      const matchSql = `
+        UPDATE students SET
+          project_id = ?,
+          team_id = ?,
+          team_code = ?,
+          team_name = COALESCE(team_name, ?)
+        WHERE (
+          assigned_project = ? OR
+          assigned_project = ? OR
+          project_title = ? OR
+          project_title = ? OR
+          (assigned_project IS NOT NULL AND assigned_project != '' AND LOWER(assigned_project) = LOWER(?)) OR
+          (project_title IS NOT NULL AND project_title != '' AND LOWER(project_title) = LOWER(?))
+        )
+      `;
+      db.run(matchSql, [p.id, p.id, p.project_code, p.team_name, p.project_code, p.title, p.title, p.project_code, p.project_code, p.title]);
+    });
+
+    // 2. Link students to auth_users by email and user_id
+    db.all('SELECT id, user_id, email, name, roll_no, project_id, team_id, team_code, team_name FROM students WHERE project_id IS NOT NULL', [], (err2, students) => {
+      if (err2 || !Array.isArray(students)) return;
+
+      students.forEach(st => {
+        if (st.email || st.user_id) {
+          const userSql = `
+            UPDATE auth_users SET
+              project_id = ?,
+              team_id = ?,
+              team_code = ?,
+              team_name = COALESCE(team_name, ?),
+              roll_no = COALESCE(roll_no, ?)
+            WHERE (
+              (email IS NOT NULL AND LOWER(email) = LOWER(?)) OR
+              (id = ?)
+            )
+          `;
+          db.run(userSql, [st.project_id, st.project_id, st.team_code, st.team_name, st.roll_no, st.email, st.user_id || -1]);
+        }
+      });
+    });
+
+    // 3. For any team lead listed on project, link their auth_user account if email matches
+    projects.forEach(p => {
+      if (p.team_lead) {
+        db.run(`
+          UPDATE auth_users SET
+            project_id = ?,
+            team_id = ?,
+            team_code = ?,
+            team_name = COALESCE(team_name, ?)
+          WHERE (
+            LOWER(name) = LOWER(?) OR
+            LOWER(email) LIKE ?
+          ) AND (project_id IS NULL OR project_id = 0)
+        `, [p.id, p.id, p.project_code, p.team_name, p.team_lead.trim(), `%${p.team_lead.toLowerCase().replace(/\s+/g, '')}%`]);
+      }
+    });
+  });
+}
+
+// Call seedDefaultAccounts and backfill on DB init
 db.serialize(() => {
   seedDefaultAccounts();
+  backfillStudentTeamLinks();
 });
 
-module.exports = { db, initDb, seedDefaultAdminUsers: seedDefaultAccounts, seedDefaultAccounts };
+module.exports = { db, initDb, backfillStudentTeamLinks, seedDefaultAdminUsers: seedDefaultAccounts, seedDefaultAccounts };
+

@@ -140,6 +140,24 @@ function resolveProjectBatch(key) {
   return null;
 }
 
+function isValidGitHubUrl(url) {
+  if (!url || !String(url).trim()) return true;
+  const s = String(url).trim().toLowerCase();
+  return s.startsWith('https://github.com/') || s.startsWith('http://github.com/') || s.startsWith('https://www.github.com/') || s.startsWith('http://www.github.com/') || s.startsWith('github.com/');
+}
+
+function isValidDriveDocsUrl(url) {
+  if (!url || !String(url).trim()) return true;
+  const s = String(url).trim().toLowerCase();
+  return s.includes('drive.google.com') || s.includes('docs.google.com');
+}
+
+function isValidLinkedInUrl(url) {
+  if (!url || !String(url).trim()) return true;
+  const s = String(url).trim().toLowerCase();
+  return s.includes('linkedin.com');
+}
+
 function logAuditEvent({ email, role, team_name, ip_address, method, event_type, status, details }) {
   const cleanEmail = (email || '').toLowerCase().trim();
   const userRole = role || 'student';
@@ -193,7 +211,7 @@ app.get('/login', (req, res) => {
 
 // 1. SIGNUP (Email + Password with student profile or viewer creation)
 app.post('/api/auth/signup', (req, res) => {
-  const { email, password, name, roll_no, phone, department, year, section, project_title, team_members, guide } = req.body;
+  const { email, password, name, roll_no, phone, department, year, section, project_id, team_code, project_title, team_members, guide } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
@@ -267,64 +285,105 @@ app.post('/api/auth/signup', (req, res) => {
       });
     }
 
-    // Create student profile automatically if student ID / roll_no provided or student role
-    const studentRoll = roll_no || `REG-${Date.now().toString().slice(-6)}`;
-    const studentSql = `
-      INSERT INTO students (
-        user_id, name, roll_no, email, phone, department, year, section,
-        assigned_project, project_title, team_members, guide, status, progress
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    // Resolve assigned project
+    const projQuery = `
+      SELECT * FROM projects 
+      WHERE (id = ? OR project_code = ? OR title = ? OR (title IS NOT NULL AND LOWER(title) = LOWER(?)))
+      LIMIT 1
     `;
+    db.get(projQuery, [project_id || -1, team_code || '', project_title || '', project_title || ''], (errP, matchedProject) => {
+      const resolvedProjectId = matchedProject ? matchedProject.id : (project_id ? Number(project_id) : null);
+      const resolvedTeamCode = matchedProject ? matchedProject.project_code : (team_code || null);
+      const resolvedTeamName = matchedProject ? (matchedProject.team_name || matchedProject.title) : (project_title || null);
+      const studentRoll = roll_no || `REG-${Date.now().toString().slice(-6)}`;
 
-    const studentParams = [
-      userId, displayName, studentRoll, cleanEmail, phone || '', department || 'IGRID Lab',
-      year || '1st Year', section || 'A', project_title || '', project_title || '',
-      team_members || '', guide || '', 'Active', 0
-    ];
+      // Update auth_users row with project info
+      db.run(`
+        UPDATE auth_users SET
+          project_id = ?,
+          team_id = ?,
+          team_code = ?,
+          team_name = ?,
+          roll_no = ?
+        WHERE id = ?
+      `, [resolvedProjectId, resolvedProjectId, resolvedTeamCode, resolvedTeamName, studentRoll, userId], () => {});
 
-    db.run(studentSql, studentParams, function(err2) {
-      if (err2) {
-        console.error('Error creating student record during signup:', err2.message);
-      }
-      const newStudentId = (this && this.lastID) ? this.lastID : null;
+      // Create or update student profile
+      const studentSql = `
+        INSERT INTO students (
+          user_id, name, roll_no, email, phone, department, year, section,
+          assigned_project, project_title, team_members, guide, status, progress,
+          project_id, team_id, team_code, team_name
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
 
-      db.get('SELECT id FROM students WHERE user_id = ? OR email = ?', [userId, cleanEmail], (err3, stRow) => {
-        const studentId = stRow ? stRow.id : newStudentId;
+      const studentParams = [
+        userId, displayName, studentRoll, cleanEmail, phone || '', department || 'IGRID Lab',
+        year || '1st Year', section || 'A', resolvedTeamCode || project_title || '', matchedProject ? matchedProject.title : (project_title || ''),
+        team_members || '', guide || '', 'Active', 0,
+        resolvedProjectId, resolvedProjectId, resolvedTeamCode, resolvedTeamName
+      ];
 
-        const token = jwt.sign({
-          id: userId,
-          email: cleanEmail,
-          name: displayName,
-          role: role,
-          student_id: studentId
-        }, JWT_SECRET, { expiresIn: '7d' });
+      db.run(studentSql, studentParams, function(err2) {
+        if (err2) {
+          console.error('Error creating student record during signup:', err2.message);
+        }
+        const newStudentId = (this && this.lastID) ? this.lastID : null;
 
-        logAuditEvent({
-          email: cleanEmail,
-          role: role,
-          team_name: project_title || (stRow ? stRow.team_name : 'Student Innovator'),
-          ip_address: getClientIp(req),
-          method: 'Registration',
-          event_type: 'SIGNUP',
-          status: 'SUCCESS',
-          details: `${role} Registration`
-        });
-        logAuditEvent({
-          email: cleanEmail,
-          role: role,
-          team_name: project_title || (stRow ? stRow.team_name : 'Student Innovator'),
-          ip_address: getClientIp(req),
-          method: 'Account First Login',
-          event_type: 'LOGIN',
-          status: 'SUCCESS',
-          details: 'Initial Session'
-        });
+        db.get('SELECT id FROM students WHERE user_id = ? OR email = ?', [userId, cleanEmail], (err3, stRow) => {
+          const studentId = stRow ? stRow.id : newStudentId;
 
-        res.status(201).json({
-          message: 'Account created successfully',
-          token,
-          user: { id: userId, email: cleanEmail, name: displayName, role, student_id: studentId }
+          const token = jwt.sign({
+            id: userId,
+            email: cleanEmail,
+            name: displayName,
+            role: role,
+            student_id: studentId,
+            project_id: resolvedProjectId,
+            team_id: resolvedProjectId,
+            teamId: resolvedProjectId,
+            team_code: resolvedTeamCode,
+            team_name: resolvedTeamName
+          }, JWT_SECRET, { expiresIn: '7d' });
+
+          logAuditEvent({
+            email: cleanEmail,
+            role: role,
+            team_name: resolvedTeamName || project_title || 'Student Innovator',
+            ip_address: getClientIp(req),
+            method: 'Registration',
+            event_type: 'SIGNUP',
+            status: 'SUCCESS',
+            details: `${role} Registration`
+          });
+          logAuditEvent({
+            email: cleanEmail,
+            role: role,
+            team_name: resolvedTeamName || project_title || 'Student Innovator',
+            ip_address: getClientIp(req),
+            method: 'Account First Login',
+            event_type: 'LOGIN',
+            status: 'SUCCESS',
+            details: 'Initial Session'
+          });
+
+          res.status(201).json({
+            message: 'Account created successfully',
+            token,
+            user: {
+              id: userId,
+              email: cleanEmail,
+              name: displayName,
+              role,
+              student_id: studentId,
+              project_id: resolvedProjectId,
+              team_id: resolvedProjectId,
+              teamId: resolvedProjectId,
+              team_code: resolvedTeamCode,
+              team_name: resolvedTeamName
+            }
+          });
         });
       });
     });
@@ -375,34 +434,48 @@ app.post('/api/auth/login', (req, res) => {
 
     const userRole = user.role || (cleanEmail === ADMIN_EMAIL ? 'admin' : 'student');
 
-    // Find student record if any
-    db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR LOWER(name) = ?', [user.id, cleanEmail, (user.name || '').toLowerCase().trim()], (err2, student) => {
-      const studentId = student ? student.id : null;
-      const assignedProject = student ? student.assigned_project : null;
-      const projectTitle = student ? student.project_title : null;
-      const teamName = student ? (student.team_name || assignedProject || projectTitle) : null;
-      const batch = student ? student.batch : null;
+    // Query user with joined students and projects to get reliable project_id / teamId
+    const query = `
+      SELECT u.*, 
+             s.id as student_id,
+             COALESCE(u.project_id, u.team_id, s.project_id, s.team_id, p.id) as resolved_project_id,
+             COALESCE(u.team_code, s.team_code, s.assigned_project, p.project_code) as resolved_team_code,
+             COALESCE(u.team_name, s.team_name, p.team_name, p.title) as resolved_team_name
+      FROM auth_users u
+      LEFT JOIN students s ON (s.user_id = u.id OR (s.email IS NOT NULL AND LOWER(s.email) = ?))
+      LEFT JOIN projects p ON (
+        (u.project_id IS NOT NULL AND p.id = u.project_id) OR
+        (s.project_id IS NOT NULL AND p.id = s.project_id) OR
+        (s.assigned_project IS NOT NULL AND (p.project_code = s.assigned_project OR p.title = s.assigned_project)) OR
+        (u.team_code IS NOT NULL AND p.project_code = u.team_code)
+      )
+      WHERE u.id = ? OR LOWER(u.email) = ?
+    `;
 
-      if (student && student.id && (!student.user_id || student.user_id !== user.id)) {
-        db.run('UPDATE students SET user_id = ? WHERE id = ?', [user.id, student.id], () => {});
-      }
+    db.get(query, [cleanEmail, user.id, cleanEmail], (err2, fullUser) => {
+      const u = fullUser || user;
+      const studentId = u.student_id || null;
+      const projectId = u.resolved_project_id ? Number(u.resolved_project_id) : (u.project_id ? Number(u.project_id) : null);
+      const teamCode = u.resolved_team_code || u.team_code || null;
+      const teamName = u.resolved_team_name || u.team_name || null;
 
       const token = jwt.sign({
-        id: user.id,
-        email: user.email,
-        name: user.name || user.email.split('@')[0],
+        id: u.id,
+        email: u.email,
+        name: u.name || u.email.split('@')[0],
         role: userRole,
         student_id: studentId,
-        assigned_project: assignedProject,
-        project_title: projectTitle,
-        team_name: teamName,
-        batch: batch
+        project_id: projectId,
+        team_id: projectId,
+        teamId: projectId,
+        team_code: teamCode,
+        team_name: teamName
       }, JWT_SECRET, { expiresIn: '7d' });
 
       logAuditEvent({
-        email: user.email,
+        email: u.email,
         role: userRole,
-        team_name: student ? (student.team_name || student.assigned_project || student.project_title) : (userRole === 'admin' ? 'IGRID Lab Admin Core' : (userRole === 'viewer' ? 'Public Viewer' : 'N/A')),
+        team_name: teamName || (userRole === 'admin' ? 'IGRID Lab Admin Core' : (userRole === 'viewer' ? 'Public Viewer' : 'N/A')),
         ip_address: getClientIp(req),
         method: req.body.auth_provider === 'google' ? 'Google OAuth' : 'Email / Password',
         event_type: 'LOGIN',
@@ -413,19 +486,16 @@ app.post('/api/auth/login', (req, res) => {
         message: 'Login successful',
         token,
         user: {
-          id: user.id,
-          email: user.email,
-          name: user.name || user.email.split('@')[0],
+          id: u.id,
+          email: u.email,
+          name: u.name || u.email.split('@')[0],
           role: userRole,
           student_id: studentId,
-          assigned_project: assignedProject,
-          project_title: projectTitle,
-          team_name: teamName,
-          batch: batch,
-          roll_no: student ? student.roll_no : null,
-          phone: student ? student.phone : null,
-          department: student ? student.department : null,
-          year: student ? student.year : null
+          project_id: projectId,
+          team_id: projectId,
+          teamId: projectId,
+          team_code: teamCode,
+          team_name: teamName
         }
       });
     });
@@ -725,35 +795,49 @@ app.post('/api/auth/reset-password', (req, res) => {
 
 // 6. GET CURRENT SESSION
 app.get('/api/auth/session', requireAuth, (req, res) => {
-  const userRole = (req.user && req.user.role) ? req.user.role.toLowerCase() : '';
-  const cleanEmail = (req.user && req.user.email) ? req.user.email.toLowerCase().trim() : '';
-  const userName = (req.user && req.user.name) ? req.user.name.toLowerCase().trim() : '';
+  const userId = req.user ? req.user.id : -1;
+  const userEmail = (req.user && req.user.email ? req.user.email : '').toLowerCase().trim();
 
-  if (userRole === 'admin' || userRole === 'viewer') {
-    return res.json({ user: req.user });
-  }
+  const query = `
+    SELECT u.*, 
+           s.id as student_id,
+           COALESCE(u.project_id, u.team_id, s.project_id, s.team_id, p.id) as resolved_project_id,
+           COALESCE(u.team_code, s.team_code, s.assigned_project, p.project_code) as resolved_team_code,
+           COALESCE(u.team_name, s.team_name, p.team_name, p.title) as resolved_team_name
+    FROM auth_users u
+    LEFT JOIN students s ON (s.user_id = u.id OR (s.email IS NOT NULL AND LOWER(s.email) = ?))
+    LEFT JOIN projects p ON (
+      (u.project_id IS NOT NULL AND p.id = u.project_id) OR
+      (s.project_id IS NOT NULL AND p.id = s.project_id) OR
+      (s.assigned_project IS NOT NULL AND (p.project_code = s.assigned_project OR p.title = s.assigned_project)) OR
+      (u.team_code IS NOT NULL AND p.project_code = u.team_code)
+    )
+    WHERE u.id = ? OR LOWER(u.email) = ?
+  `;
 
-  db.get('SELECT * FROM students WHERE user_id = ? OR LOWER(email) = ? OR LOWER(name) = ?', [req.user.id || -1, cleanEmail, userName], (err, student) => {
-    if (student) {
-      if (req.user.id && (!student.user_id || student.user_id !== req.user.id)) {
-        db.run('UPDATE students SET user_id = ? WHERE id = ?', [req.user.id, student.id], () => {});
-      }
-      return res.json({
-        user: {
-          ...req.user,
-          student_id: student.id,
-          assigned_project: student.assigned_project,
-          project_title: student.project_title,
-          team_name: student.team_name,
-          batch: student.batch,
-          roll_no: student.roll_no,
-          phone: student.phone,
-          department: student.department,
-          year: student.year
-        }
-      });
+  db.get(query, [userEmail, userId, userEmail], (err, user) => {
+    if (err || !user) {
+      return res.json({ user: req.user });
     }
-    res.json({ user: req.user });
+
+    const projectId = user.resolved_project_id ? Number(user.resolved_project_id) : (user.project_id ? Number(user.project_id) : null);
+    const teamCode = user.resolved_team_code || user.team_code || null;
+    const teamName = user.resolved_team_name || user.team_name || null;
+
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name || req.user.name,
+        role: user.role || req.user.role,
+        student_id: user.student_id || req.user.student_id,
+        project_id: projectId,
+        team_id: projectId,
+        teamId: projectId,
+        team_code: teamCode,
+        team_name: teamName
+      }
+    });
   });
 });
 
@@ -1177,13 +1261,13 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
           : project.team_members;
 
         // URL validation checks
-        if (github_repo && String(github_repo).trim() && !String(github_repo).toLowerCase().includes('github.com')) {
-          return res.status(400).json({ error: 'GitHub repository URL must be a valid link containing "github.com".' });
+        if (github_repo && !isValidGitHubUrl(github_repo)) {
+          return res.status(400).json({ error: 'GitHub repository URL must be a valid link starting with github.com or https://github.com/.' });
         }
-        if (doc_url && String(doc_url).trim() && !String(doc_url).toLowerCase().includes('drive.google.com') && !String(doc_url).toLowerCase().includes('docs.google.com')) {
+        if (doc_url && !isValidDriveDocsUrl(doc_url)) {
           return res.status(400).json({ error: 'Technical Report must be a valid Google Drive or Google Docs link (containing "drive.google.com" or "docs.google.com").' });
         }
-        if (linkedin_url && String(linkedin_url).trim() && !String(linkedin_url).toLowerCase().includes('linkedin.com')) {
+        if (linkedin_url && !isValidLinkedInUrl(linkedin_url)) {
           return res.status(400).json({ error: 'LinkedIn Post URL must be a valid link containing "linkedin.com".' });
         }
 
